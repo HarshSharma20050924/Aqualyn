@@ -104,6 +104,38 @@ export default function SecuritySettings() {
         </div>
       </div>
 
+      <h3 className="font-headline font-bold text-lg text-on-surface px-2 mt-8 flex items-center gap-2">
+        <Smartphone className="w-5 h-5 text-indigo-500" />
+        Privacy Settings
+      </h3>
+      <div className="glass-card rounded-[2rem] overflow-hidden border border-white/40 shadow-sm">
+        <div className="p-5 space-y-4">
+          <label className="text-sm font-bold text-on-surface">Who can call me into a chat (@username)?</label>
+          <div className="flex gap-2">
+            {(['everyone', 'mutual', 'no_one'] as const).map(option => (
+              <button 
+                key={option}
+                onClick={() => {
+                  // In a real app we would update the backend
+                  addToast(`Inivitation settings set to ${option}`, 'success');
+                }}
+                className={`flex-1 py-3 rounded-xl border font-bold text-xs capitalize transition-all ${
+                  'everyone' === option // Defaulting for mock
+                    ? 'bg-secondary text-white border-secondary' 
+                    : 'bg-white/40 text-on-surface-variant border-white/20 hover:bg-white/60'
+                }`}
+              >
+                {option.replace('_', ' ')}
+              </button>
+            ))}
+          </div>
+          <p className="text-[10px] text-on-surface-variant px-1 font-medium leading-relaxed">
+            When someone mentions your @username in a 1-to-1 chat, you'll receive an invitation to join. 
+            Joining turns the chat into a temporary group without showing previous history.
+          </p>
+        </div>
+      </div>
+
       <AnimatePresence>
         {isPinModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">

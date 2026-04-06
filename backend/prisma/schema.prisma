@@ -1,0 +1,132 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(uuid())
+  firebaseUid   String    @unique
+  username      String?   @unique
+  email         String?   @unique
+  phone         String?   @unique
+  showPhoneTo   String    @default("everyone")
+  searchByPhone Boolean   @default(true)
+  displayName   String?
+  avatar        String?
+  largeAvatar   String?
+  bio           String?
+  role          String?
+  dob           DateTime?
+  showBirthday  Boolean   @default(true)
+  isPrivate     Boolean   @default(false)
+  invitationSettings String @default("everyone") // everyone, mutual, no_one
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  lastLogin     DateTime?
+  
+  // Relations
+  followers        UserFollows[] @relation("following")
+  following        UserFollows[] @relation("followers")
+  sentFollowReqs   FollowRequest[] @relation("sentFollowRequests")
+  receivedFollowReqs FollowRequest[] @relation("receivedFollowRequests")
+  chatParticipants ChatParticipant[]
+  messages         Message[]
+  notifications    Notification[] @relation("userNotifications")
+  actions          Notification[] @relation("actorActions")
+}
+
+model UserFollows {
+  followerId    String
+  followingId   String
+
+  follower      User      @relation("followers", fields: [followerId], references: [id])
+  following     User      @relation("following", fields: [followingId], references: [id])
+
+  @@id([followerId, followingId])
+}
+
+model FollowRequest {
+  id          String   @id @default(uuid())
+  senderId    String
+  receiverId  String
+  status      String   @default("pending") // pending, accepted, rejected
+  createdAt   DateTime @default(now())
+
+  sender      User     @relation("sentFollowRequests", fields: [senderId], references: [id])
+  receiver    User     @relation("receivedFollowRequests", fields: [receiverId], references: [id])
+
+  @@unique([senderId, receiverId])
+}
+
+model Notification {
+  id          String   @id @default(uuid())
+  userId      String   // The person receiving the notification
+  actorId     String   // The person who triggered the notification
+  type        String   // follow, follow_request, message, like, etc.
+  targetId    String?  // Optional: ID of the post, chat, or story involved
+  text        String?  // Optional: notification message content
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  user        User     @relation("userNotifications", fields: [userId], references: [id])
+  actor       User     @relation("actorActions", fields: [actorId], references: [id])
+}
+
+model Chat {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  name               String?
+  isGroup            Boolean  @default(false)
+  isSecret           Boolean  @default(false)
+  selfDestructTimer  Int?     @default(0)
+  isTempGroup        Boolean  @default(false)
+  originalChatId     String?
+  deletedFor         Json?    @default("[]") // Array of user IDs who deleted this chat
+  
+  participants ChatParticipant[]
+  messages     Message[]
+}
+
+model ChatParticipant {
+  id        String   @id @default(uuid())
+  chatId    String
+  userId    String
+  joinedAt  DateTime @default(now())
+  
+  chat      Chat     @relation(fields: [chatId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@unique([chatId, userId])
+}
+
+model Message {
+  id        String   @id @default(uuid())
+  chatId    String
+  senderId  String
+  text      String? 
+  imageUrl  String? 
+  videoUrl  String?
+  fileUrl   String?
+  audioUrl  String?
+  document  Json?    // { url, name, size }
+  location  Json?    // { lat, lng, address }
+  contact   Json?    // { name, phone, avatar }
+  payment   Json?    // { amount, currency, status }
+  schedule  Json?    // { title, time, location }
+  wallet    Json?    // { asset, amount, address, type }
+  replyToId String?
+  status    String   @default("sent") // sent, delivered, seen
+  isEdited  Boolean  @default(false)
+  isRead    Boolean  @default(false)
+  reactions Json?    @default("{}")
+  deletedFor Json?   @default("[]")
+  createdAt DateTime @default(now())
+  
+  chat      Chat     @relation(fields: [chatId], references: [id])
+  sender    User     @relation(fields: [senderId], references: [id])
+}

@@ -55,29 +55,31 @@ export default function NotificationsScreen({ onBack }: { onBack: () => void }) 
           </div>
         ) : (
           notifications.map((notification) => (
-            <div key={notification.id} className={`flex items-start gap-4 p-4 rounded-2xl transition-colors ${notification.read ? 'bg-transparent' : 'bg-primary-container/30'}`}>
+            <div key={notification.id} className={`flex items-start gap-4 p-4 rounded-2xl transition-colors ${notification.isRead ? 'bg-transparent' : 'bg-primary-container/30'}`}>
               <div className="relative">
-                <img src={notification.sourceUserAvatar} alt={notification.sourceUserName} className="w-12 h-12 rounded-full object-cover" />
+                <img src={notification.actor?.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${notification.actor?.displayName}`} alt={notification.actor?.displayName} className="w-12 h-12 rounded-full object-cover" />
                 <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-surface rounded-full flex items-center justify-center shadow-sm">
                   {getIcon(notification.type)}
                 </div>
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-on-surface">
-                  <span className="font-bold">{notification.sourceUserName}</span> {getMessage(notification)}
+                  <span className="font-bold">{notification.actor?.displayName || notification.actor?.username}</span> {notification.text || getMessage(notification)}
                 </p>
-                <span className="text-xs text-on-surface-variant mt-1 block">{notification.timestamp}</span>
+                <div className="text-xs text-on-surface-variant mt-1 block">
+                    {new Date(notification.createdAt).toLocaleDateString()} {new Date(notification.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </div>
                 
                 {notification.type === 'follow_request' && (
                   <div className="flex gap-2 mt-3">
                     <button 
-                      onClick={() => acceptFollowRequest(notification.sourceUserId)}
+                      onClick={() => acceptFollowRequest(notification.actorId)}
                       className="flex-1 py-1.5 bg-primary text-on-primary rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors"
                     >
                       Confirm
                     </button>
                     <button 
-                      onClick={() => rejectFollowRequest(notification.sourceUserId)}
+                      onClick={() => rejectFollowRequest(notification.actorId)}
                       className="flex-1 py-1.5 bg-surface-container-highest text-on-surface rounded-lg text-sm font-semibold hover:bg-surface-container-highest/80 transition-colors"
                     >
                       Delete

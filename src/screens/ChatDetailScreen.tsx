@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, Video, Phone, MoreVertical, Plus, Smile, Mic, CheckCheck, Users, X, Clock, Lock, Search, Download, Trash2, Edit2, Share2, UserPlus } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
+import { auth } from '../config/firebase';
 import { Message } from '../types';
 import MediaAttachmentPicker from '../components/chat/MediaAttachmentPicker';
 import AudioRecorderUI from '../components/chat/AudioRecorderUI';
@@ -14,16 +15,17 @@ import SecretChatInfoScreen from './SecretChatInfoScreen';
 import ShareContactModal from '../components/chat/ShareContactModal';
 
 export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () => void, onNavigate: (s: string) => void }) {
-  const { messages, sendMessage, editMessage, deleteMessage, currentUser, chats, activeChatId, addToast, setActiveChatId, setActiveContactId, contacts, globalUsers, followUser } = useAppContext();
+  const { messages, setMessages, sendMessage, editMessage, deleteMessage, currentUser, chats, activeChatId, addToast, setActiveChatId, setActiveContactId, contacts, globalUsers, followUser, typingUsers, setTyping, markAsRead } = useAppContext();
   const [text, setText] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
   
   const [isAttachmentPickerOpen, setIsAttachmentPickerOpen] = useState(false);
   const [isRecordingAudio, setIsRecordingAudio] = useState(false);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
-  const [isTyping, setIsTyping] = useState(false);
+  const typingInThisChat = typingUsers[activeChatId || ''] || [];
   const [showSchedulePicker, setShowSchedulePicker] = useState(false);
   const [showHeaderMenu, setShowHeaderMenu] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -42,6 +44,8 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
   const chat = chats.find(c => c.id === activeChatId);
   const chatMessages = activeChatId ? (messages[activeChatId] || []) : [];
 
+  if (!chat) return null;
+
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTo({
@@ -51,17 +55,41 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
     }
   }, [chatMessages]);
 
-  // Mock friend typing logic
   useEffect(() => {
-    // Randomly simulate friend typing for demonstration purposes
-    const interval = setInterval(() => {
-      if (Math.random() > 0.8) {
-        setIsTyping(true);
-        setTimeout(() => setIsTyping(false), 3000);
-      }
-    }, 10000);
-    return () => clearInterval(interval);
-  }, [activeChatId]);
+    if (activeChatId) {
+      markAsRead(activeChatId);
+    }
+  }, [activeChatId, chatMessages.length]);
+
+  // Fetch messages if they don't exist for this chat
+  useEffect(() => {
+    if (activeChatId && (!messages[activeChatId] || messages[activeChatId].length === 0)) {
+        const fetchHistory = async () => {
+            try {
+                const idToken = await (auth.currentUser ? auth.currentUser.getIdToken() : localStorage.getItem('mock_auth_token'));
+                const res = await fetch(`http://localhost:5000/api/chats/${activeChatId}/messages`, {
+                    headers: { 'Authorization': `Bearer ${idToken}` }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    setMessages(prev => ({ ...prev, [activeChatId]: data }));
+                }
+            } catch (e) {
+                console.error("Failed to fetch history:", e);
+            }
+        };
+        fetchHistory();
+    }
+  }, [activeChatId, messages, setMessages]);
+
+  useEffect(() => {
+    if (!activeChatId) return;
+    if (text.length > 0) {
+      setTyping(activeChatId, true);
+    } else {
+      setTyping(activeChatId, false);
+    }
+  }, [text, activeChatId, setTyping]);
 
   if (!chat) return null;
 
@@ -83,7 +111,12 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
     
     setText('');
     setReplyingTo(null);
-    setIsTyping(false);
+    if (activeChatId) setTyping(activeChatId, false);
+
+    // Force scroll to bottom
+    setTimeout(() => {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
   };
 
   const handleEdit = (msg: Message) => {
@@ -94,35 +127,87 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
 
   const handleScheduleMessage = () => {
     if (!text.trim() || !activeChatId) return;
-    addToast('Message scheduled for later', 'success');
+    sendMessage(activeChatId, text, { 
+      schedule: { title: 'Reminder: ' + text, time: 'Tomorrow at 9:00 AM' },
+      replyToId: replyingTo?.id 
+    });
+    addToast('Message scheduled', 'success');
     setText('');
+    setReplyingTo(null);
     setShowSchedulePicker(false);
   };
 
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const imageInputRef = React.useRef<HTMLInputElement>(null);
+
   const handleAttachmentSelect = (type: string) => {
-    if (type === 'camera') {
-      setIsCameraOpen(true);
-    } else if (type === 'document') {
-      sendMessage(activeChatId, '', { document: { url: '#', name: 'Project_Proposal.pdf', size: '2.4 MB' }, replyToId: replyingTo?.id });
-      setReplyingTo(null);
-      addToast('Document sent', 'success');
-    } else if (type === 'location') {
-      sendMessage(activeChatId, '', { location: { lat: 37.7749, lng: -122.4194, address: 'Current Location' }, replyToId: replyingTo?.id });
-      setReplyingTo(null);
-      addToast('Location sent', 'success');
-    } else if (type === 'photo') {
-      sendMessage(activeChatId, '', { imageUrl: 'https://images.unsplash.com/photo-1682687220742-aba13b6e50ba?auto=format&fit=crop&q=80&w=800&h=600', replyToId: replyingTo?.id });
-      setReplyingTo(null);
-      addToast('Photo sent', 'success');
-    } else if (type === 'wallet') {
-      sendMessage(activeChatId, '', { payment: { amount: 50.00, currency: '$', status: 'completed' }, replyToId: replyingTo?.id });
-      setReplyingTo(null);
-      addToast('Money sent', 'success');
-    } else if (type === 'schedule') {
-      setShowSchedulePicker(true);
-    } else {
-      addToast(`Selected ${type} attachment (Mock)`, 'info');
+    switch(type) {
+      case 'camera':
+        setIsCameraOpen(true);
+        break;
+      case 'document':
+        fileInputRef.current?.click();
+        break;
+      case 'photo':
+        imageInputRef.current?.click();
+        break;
+      case 'location':
+        if ("geolocation" in navigator) {
+          navigator.geolocation.getCurrentPosition((position) => {
+            sendMessage(activeChatId as string, '', { 
+              location: { 
+                lat: position.coords.latitude, 
+                lng: position.coords.longitude, 
+                address: 'Current Location' 
+              },
+              replyToId: replyingTo?.id 
+            });
+            setReplyingTo(null);
+            addToast('Location sent', 'success');
+          }, (err) => {
+            addToast('Could not get location', 'error');
+          });
+        }
+        break;
+      case 'wallet':
+        sendMessage(activeChatId as string, '', { 
+          wallet: { asset: 'ETH', amount: 0.05, address: '0x71C...3a42', type: 'request' },
+          replyToId: replyingTo?.id 
+        });
+        setReplyingTo(null);
+        addToast('Wallet request sent', 'success');
+        break;
+      case 'schedule':
+        setShowSchedulePicker(true);
+        break;
+      case 'contact':
+        setIsShareContactOpen(true);
+        break;
+      default:
+        addToast(`Feature coming soon`, 'info');
     }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'file') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string;
+      if (type === 'image') {
+        sendMessage(activeChatId as string, '', { imageUrl: dataUrl, replyToId: replyingTo?.id });
+        addToast('Photo sent', 'success');
+      } else {
+        sendMessage(activeChatId as string, '', { 
+          document: { url: dataUrl, name: file.name, size: (file.size / 1024 / 1024).toFixed(2) + ' MB' },
+          replyToId: replyingTo?.id 
+        });
+        addToast('Document sent', 'success');
+      }
+      setReplyingTo(null);
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleAudioStop = (audioUrl?: string) => {
@@ -212,7 +297,8 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
               if (chat.isGroup) setIsGroupInfoOpen(true);
               else if (chat.isSecret) setIsSecretInfoOpen(true);
               else {
-                setActiveContactId(chat.id);
+                const targetId = chat.participantIds?.find(id => id !== currentUser?.id) || chat.id;
+                setActiveContactId(targetId);
                 onNavigate('contact-profile');
               }
             }}>
@@ -302,31 +388,32 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
         </div>
         
         <div className="space-y-6 flex flex-col justify-end">
-          {filteredMessages.map(msg => {
-            const isMe = msg.senderId === currentUser?.id;
-            const replyMsg = msg.replyToId ? chatMessages.find(m => m.id === msg.replyToId) : undefined;
-            return (
-              <MessageBubble 
-                key={msg.id} 
-                msg={msg} 
-                isMe={isMe} 
-                onReply={setReplyingTo} 
-                onEdit={handleEdit}
-                replyMessage={replyMsg} 
-                onMediaClick={handleMediaClick}
-                isSecret={chat.isSecret}
-              />
-            );
-          })}
+          {filteredMessages.map((msg, i) => (
+            <MessageBubble 
+              key={msg.id} 
+              msg={msg} 
+              isMe={msg.senderId === currentUser?.id} 
+              onReply={setReplyingTo}
+              onEdit={handleEdit}
+              replyMessage={msg.replyToId ? chatMessages.find(m => m.id === msg.replyToId) : undefined}
+              onMediaClick={handleMediaClick}
+              isSecret={chat.isSecret}
+            />
+          ))}
+          <div ref={bottomRef} className="h-4 w-full" />
 
-          {isTyping && (
+          {typingInThisChat.length > 0 && (
             <div className="flex items-center gap-2 text-on-surface-variant text-sm p-4 animate-pulse">
               <div className="flex gap-1">
                 <span className="w-1.5 h-1.5 bg-secondary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
                 <span className="w-1.5 h-1.5 bg-secondary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
                 <span className="w-1.5 h-1.5 bg-secondary rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
               </div>
-              <span className="font-medium">{chat.name} is typing...</span>
+              <span className="font-medium">
+                {typingInThisChat.length === 1 
+                  ? `${typingInThisChat[0]} is typing...` 
+                  : `${typingInThisChat.length} people are typing...`}
+              </span>
             </div>
           )}
         </div>
@@ -529,6 +616,21 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
             addToast('Contact shared', 'success');
           }
         }}
+      />
+
+      <input 
+        type="file" 
+        ref={fileInputRef} 
+        style={{ display: 'none' }} 
+        onChange={(e) => handleFileChange(e, 'file')}
+        accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
+      />
+      <input 
+        type="file" 
+        ref={imageInputRef} 
+        style={{ display: 'none' }} 
+        onChange={(e) => handleFileChange(e, 'image')}
+        accept="image/*"
       />
 
       <div className="fixed top-20 right-[-10%] w-[40%] h-[40%] bg-primary-container/10 blur-[100px] rounded-full pointer-events-none -z-10"></div>

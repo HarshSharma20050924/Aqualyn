@@ -40,6 +40,30 @@ export default function App() {
       document.documentElement.classList.remove('dark');
     }
   }, [theme, aquaIntensity]);
+  
+  const { currentUser, isLoading } = useAppContext();
+  
+  useEffect(() => {
+    if (!isLoading) {
+      if (currentUser && currentScreen === 'login') {
+        setCurrentScreen('chats');
+      } else if (!currentUser && currentScreen !== 'login') {
+        setCurrentScreen('login');
+      }
+    }
+  }, [currentUser, isLoading]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-surface flex flex-col items-center justify-center">
+         <div className="w-24 h-24 relative">
+            <div className="absolute inset-0 border-4 border-secondary/20 rounded-full"></div>
+            <div className="absolute inset-0 border-4 border-secondary border-t-transparent rounded-full animate-spin"></div>
+         </div>
+         <h1 className="mt-8 text-2xl font-black font-headline text-secondary tracking-tighter">AQUALYN</h1>
+      </div>
+    );
+  }
 
   return (
     <div className={`min-h-screen bg-surface text-on-surface font-body selection:bg-secondary-container/30 overflow-x-hidden bubble-${theme.bubbleStyle}`}>
@@ -57,7 +81,7 @@ export default function App() {
             {currentScreen === 'settings' && <SettingsScreen key="settings" onBack={() => setCurrentScreen('profile')} onNavigate={setCurrentScreen} />}
             {currentScreen === 'contacts' && <ContactsScreen key="contacts" onNavigate={setCurrentScreen} />}
             {currentScreen === 'edit-profile' && <EditProfileScreen key="edit-profile" onBack={() => setCurrentScreen('profile')} />}
-            {currentScreen === 'contact-profile' && <ContactProfileScreen key="contact-profile" onBack={() => setCurrentScreen('contacts')} onNavigate={setCurrentScreen} />}
+            {currentScreen === 'contact-profile' && <ContactProfileScreen key="contact-profile" onBack={() => setCurrentScreen('chats')} onNavigate={setCurrentScreen} />}
             {currentScreen === 'stories' && <StoriesScreen key="stories" onBack={() => setCurrentScreen('chats')} onNavigate={setCurrentScreen} />}
             {currentScreen === 'notifications' && <NotificationsScreen key="notifications" onBack={() => setCurrentScreen('chats')} />}
           </AnimatePresence>

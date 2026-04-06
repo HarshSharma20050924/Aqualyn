@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Play, Pause, FileText, Download, MapPin, CheckCheck, Reply, Copy, Trash2, Smile, Timer, Edit2, Wallet } from 'lucide-react';
+import { Play, Pause, FileText, Download, MapPin, CheckCheck, Reply, Copy, Trash2, Smile, Timer, Edit2, Wallet, ArrowRight } from 'lucide-react';
 import { Message } from '../../types';
 import { useAppContext } from '../../context/AppContext';
 
@@ -15,11 +15,23 @@ interface MessageBubbleProps {
 }
 
 export default function MessageBubble({ msg, isMe, onReply, onEdit, replyMessage, onMediaClick, isSecret }: MessageBubbleProps) {
-  const { deleteMessage, addReaction, currentUser, addToast } = useAppContext();
+  const { deleteMessage, addReaction, currentUser, addToast, chats } = useAppContext();
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioProgress, setAudioProgress] = useState(0);
   const pressTimer = useRef<NodeJS.Timeout | null>(null);
+
+  const activeChat = chats.find(c => c.id === msg.chatId);
+  const otherParticipantName = activeChat?.name || 'User';
+
+  const handleDragEnd = (_: any, info: any) => {
+    if (Math.abs(info.offset.x) > 100) {
+      onReply(msg);
+      if (window.navigator && window.navigator.vibrate) {
+        window.navigator.vibrate(20);
+      }
+    }
+  };
 
   const handleTouchStart = () => {
     pressTimer.current = setTimeout(() => {
@@ -98,8 +110,17 @@ export default function MessageBubble({ msg, isMe, onReply, onEdit, replyMessage
                   </button>
                 ))}
               </div>
-              <button onClick={() => { onReply(msg); setShowContextMenu(false); }} className="flex items-center gap-3 px-3 py-2 hover:bg-white/10 rounded-xl text-sm font-medium text-on-surface transition-colors">
+              <button 
+                onClick={() => { onReply(msg); setShowContextMenu(false); }} 
+                className="flex items-center gap-3 px-3 py-2 hover:bg-white/10 rounded-xl text-sm font-medium text-on-surface transition-colors"
+              >
                 <Reply className="w-4 h-4" /> Reply
+              </button>
+              <button 
+                onClick={() => { addToast('Forwarding message...', 'info'); setShowContextMenu(false); }} 
+                className="flex items-center gap-3 px-3 py-2 hover:bg-white/10 rounded-xl text-sm font-medium text-on-surface transition-colors"
+              >
+                <ArrowRight className="w-4 h-4" /> Forward
               </button>
               {isMe && msg.text && onEdit && (
                 <button onClick={() => { onEdit(msg); setShowContextMenu(false); }} className="flex items-center gap-3 px-3 py-2 hover:bg-white/10 rounded-xl text-sm font-medium text-on-surface transition-colors">
@@ -111,12 +132,22 @@ export default function MessageBubble({ msg, isMe, onReply, onEdit, replyMessage
                   <Copy className="w-4 h-4" /> Copy
                 </button>
               )}
-              <button onClick={() => handleDelete(false)} className="flex items-center gap-3 px-3 py-2 hover:bg-red-500/20 text-red-500 rounded-xl text-sm font-medium transition-colors">
+              <div className="h-px bg-white/10 my-1" />
+              <button 
+                onClick={() => { deleteMessage(msg.chatId, msg.id, 'me'); setShowContextMenu(false); }} 
+                className="flex items-center gap-3 px-3 py-2 hover:bg-red-500/10 text-red-500 rounded-xl text-sm font-medium transition-colors"
+              >
                 <Trash2 className="w-4 h-4" /> Delete for me
               </button>
               {isMe && (
-                <button onClick={() => handleDelete(true)} className="flex items-center gap-3 px-3 py-2 hover:bg-red-500/20 text-red-500 rounded-xl text-sm font-medium transition-colors">
-                  <Trash2 className="w-4 h-4" /> Delete for everyone
+                <button 
+                    onClick={() => { deleteMessage(msg.chatId, msg.id, 'everyone'); setShowContextMenu(false); }} 
+                    className="flex flex-col gap-0.5 px-3 py-2 hover:bg-red-500/10 text-red-500 rounded-xl transition-colors text-left"
+                >
+                    <div className="flex items-center gap-3 text-sm font-bold">
+                        <Trash2 className="w-4 h-4" /> Delete for everyone
+                    </div>
+                    <span className="text-[10px] opacity-70 ml-7">and {otherParticipantName}</span>
                 </button>
               )}
             </motion.div>
@@ -124,14 +155,18 @@ export default function MessageBubble({ msg, isMe, onReply, onEdit, replyMessage
         )}
       </AnimatePresence>
 
-      <div 
+      <motion.div 
+        drag="x"
+        dragConstraints={{ left: 0, right: 0 }}
+        dragElastic={0.4}
+        onDragEnd={handleDragEnd}
         onMouseDown={handleTouchStart}
         onMouseUp={handleTouchEnd}
         onMouseLeave={handleTouchEnd}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
         onContextMenu={(e) => { e.preventDefault(); setShowContextMenu(true); }}
-        className={`chat-bubble ${isMe ? 'glass-sent rounded-tr-none' : 'glass-received rounded-tl-none'} rounded-2xl p-1 shadow-sm relative cursor-pointer group`}
+        className={`chat-bubble ${isMe ? 'glass-sent rounded-tr-none' : 'glass-received rounded-tl-none'} rounded-2xl p-1 shadow-sm relative cursor-pointer group active:scale-[0.98] transition-transform`}
       >
         {/* Reply Block */}
         {replyMessage && (
@@ -203,16 +238,65 @@ export default function MessageBubble({ msg, isMe, onReply, onEdit, replyMessage
             </div>
           )}
 
-          {/* Payment Content */}
-          {msg.payment && (
-            <div className={`flex items-center gap-3 p-3 rounded-xl mb-1 ${isMe ? 'bg-white/10' : 'bg-black/5'}`}>
-              <div className={`p-2 rounded-full ${isMe ? 'bg-white/20' : 'bg-green-500/20 text-green-600'}`}>
-                <Wallet className="w-6 h-6" />
+          {/* Payment/Wallet Content */}
+          {(msg.payment || msg.wallet) && (
+            <div className={`p-3 rounded-2xl mb-1 shadow-inner ${isMe ? 'bg-black/10 border border-white/5' : 'bg-white/40 border border-secondary/10'}`}>
+              <div className="flex items-center gap-3">
+                <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 shadow-lg ${
+                  msg.payment ? 'bg-green-500 text-white' : 'bg-secondary text-white'
+                }`}>
+                  <Wallet className="w-6 h-6" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-sm font-medium opacity-70">{msg.payment?.currency || (msg.wallet?.type === 'request' ? 'Requesting' : 'Sending')}</span>
+                    <span className="text-xl font-black tracking-tight">{msg.payment?.amount.toFixed(2) || msg.wallet?.amount}</span>
+                    <span className="text-xs font-bold opacity-60 ml-0.5">{msg.wallet?.asset}</span>
+                  </div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest opacity-50 truncate">
+                    {msg.wallet?.address ? `To: ${msg.wallet.address}` : (msg.payment?.status || 'Pending')}
+                  </p>
+                </div>
               </div>
-              <div className="flex-1 min-w-0 pr-4">
-                <p className="font-bold text-lg leading-tight">{msg.payment.currency} {msg.payment.amount.toFixed(2)}</p>
-                <p className="text-xs opacity-80 capitalize">{msg.payment.status}</p>
+              {msg.wallet?.type === 'request' && !isMe && (
+                <button className="w-full mt-3 py-2 bg-secondary text-white rounded-xl text-xs font-bold shadow-md active:scale-95 transition-transform">
+                  Pay Now
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Schedule Content */}
+          {msg.schedule && (
+            <div className={`flex flex-col p-3 rounded-2xl mb-1 border ${isMe ? 'bg-amber-500/10 border-amber-500/20' : 'bg-amber-500/5 border-amber-500/20'}`}>
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-600">
+                  <Timer className="w-6 h-6" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-sm text-amber-700 dark:text-amber-400 truncate">{msg.schedule.title}</p>
+                  <p className="text-[10px] font-medium opacity-70">{msg.schedule.time}</p>
+                </div>
               </div>
+              <button className="text-[10px] font-bold text-amber-600 hover:underline text-left">
+                Add to Calendar
+              </button>
+            </div>
+          )}
+
+          {/* Contact Content */}
+          {msg.contact && (
+            <div className={`flex items-center gap-3 p-3 rounded-2xl mb-1 border ${isMe ? 'bg-blue-500/10 border-blue-500/20' : 'bg-blue-500/5 border-blue-500/20'}`}>
+              <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-white/50 shadow-sm">
+                <img src={msg.contact.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${msg.contact.name}`} alt="" className="w-full h-full object-cover" />
+              </div>
+              <div className="flex-1 min-w-0 mr-4">
+                <p className="font-bold text-sm truncate">{msg.contact.name}</p>
+                <p className="text-[10px] opacity-70">{msg.contact.phone}</p>
+              </div>
+              <button className="text-xs font-bold text-blue-500 hover:text-blue-600">
+                Message
+              </button>
             </div>
           )}
 
@@ -233,13 +317,23 @@ export default function MessageBubble({ msg, isMe, onReply, onEdit, replyMessage
             ))}
           </div>
         )}
-      </div>
+      </motion.div>
 
       <div className={`flex items-center gap-1 ${isMe ? 'mr-1' : 'ml-1'} ${msg.reactions && Object.keys(msg.reactions).length > 0 ? 'mt-3' : ''}`}>
         {isSecret && <Timer className="w-3 h-3 text-green-500" />}
         {msg.isEdited && <span className="text-[10px] text-on-surface-variant italic mr-1">edited</span>}
         <span className="text-[10px] text-on-surface-variant">{msg.timestamp}</span>
-        {isMe && <CheckCheck className="w-[14px] h-[14px] text-primary" />}
+        {isMe && (
+          <div className="flex items-center">
+            {msg.status === 'sent' ? (
+              <CheckCheck className="w-[14px] h-[14px] text-on-surface-variant/40" style={{ clipPath: 'inset(0 50% 0 0)' }} />
+            ) : msg.status === 'delivered' ? (
+              <CheckCheck className="w-[14px] h-[14px] text-on-surface-variant/40" />
+            ) : (
+              <CheckCheck className="w-[14px] h-[14px] text-secondary" />
+            )}
+          </div>
+        )}
       </div>
     </motion.div>
   );

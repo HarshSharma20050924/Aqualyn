@@ -7,7 +7,7 @@ export default function BottomNav({ currentScreen, onNavigate }: { currentScreen
     { id: 'contacts', icon: Users, label: 'Contacts' },
     { id: 'stories', icon: CircleDashed, label: 'Stories' },
     { id: 'notifications', icon: Bell, label: 'Activity' },
-    { id: 'settings', icon: SettingsIcon, label: 'Settings' }
+    { id: 'profile', icon: Users, label: 'Profile' }
   ];
 
   return (

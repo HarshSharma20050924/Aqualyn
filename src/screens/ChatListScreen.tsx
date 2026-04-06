@@ -1,15 +1,18 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, Pin, Users, CheckCheck, Mic, UserPlus, Lock, Pen, Bot, Globe, MoreVertical, Download, Moon, Sun, Trash2, CheckSquare, Archive, Volume2, VolumeX, Eye, EyeOff, FolderPlus, Eraser, ChevronRight } from 'lucide-react';
+import { Search, Pin, Users, CheckCheck, Mic, UserPlus, Lock, Pen, Bot, Globe, MoreVertical, Download, Moon, Sun, Trash2, CheckSquare, Archive, Volume2, VolumeX, Eye, EyeOff, FolderPlus, Eraser, ChevronRight, X } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import NewChatModal from '../components/chat/NewChatModal';
 import NewFolderModal from '../components/modals/NewFolderModal';
+import { ChatPeekPreview } from '../components/chat/ChatPeekPreview';
+import DeleteChatDialog from '../components/chat/DeleteChatDialog';
 
 export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string) => void }) {
-  const { currentUser, chats, setActiveChatId, messages, isLoading, folders, archiveChat, pinChat, muteChat, deleteChat, clearHistory, markAsRead, addChatToFolder, addToast, archiveLockPin, theme, setTheme, globalUsers, followUser, startChatWithContact, setActiveContactId } = useAppContext();
+  const { currentUser, chats, setActiveChatId, messages, isLoading, folders, archiveChat, pinChat, muteChat, deleteChat, clearHistory, markAsRead, addChatToFolder, addToast, archiveLockPin, theme, setTheme, globalUsers, setGlobalUsers, followUser, startChatWithContact, setActiveContactId } = useAppContext();
   const [activeTab, setActiveTab] = useState<string>('all');
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [globalSearchResults, setGlobalSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showHeaderMenu, setShowHeaderMenu] = useState(false);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -21,6 +24,32 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
   const [isArchivePinModalOpen, setIsArchivePinModalOpen] = useState(false);
   const [archivePinValue, setArchivePinValue] = useState('');
   const [isNewFolderModalOpen, setIsNewFolderModalOpen] = useState(false);
+  const [peekChatId, setPeekChatId] = useState<string | null>(null);
+  const [chatToDelete, setChatToDelete] = useState<string | null>(null);
+  const peekTimer = React.useRef<NodeJS.Timeout | null>(null);
+
+
+  React.useEffect(() => {
+    if (searchQuery && isSearching) {
+      const timer = setTimeout(() => {
+        fetch(`http://localhost:5000/api/users/search?q=${encodeURIComponent(searchQuery)}`)
+          .then(res => res.json())
+          .then(data => {
+            setGlobalSearchResults(data);
+            // Merge into AppContext globalUsers so ContactProfileScreen can find them
+            setGlobalUsers(prev => {
+              const existingIds = new Set(prev.map(u => u.id));
+              const newUsers = data.filter((u: any) => !existingIds.has(u.id));
+              return [...prev, ...newUsers];
+            });
+          })
+          .catch(e => console.error(e));
+      }, 300); // debounce 300ms
+      return () => clearTimeout(timer);
+    } else {
+      setGlobalSearchResults([]);
+    }
+  }, [searchQuery, isSearching]);
 
   const handleChatClick = (id: string) => {
     if (isSelectionMode) {
@@ -249,18 +278,33 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
               <button 
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`px-5 py-1.5 rounded-full font-semibold text-sm whitespace-nowrap transition-all capitalize ${
+                className={`flex items-center px-5 py-1.5 rounded-full font-semibold text-sm whitespace-nowrap transition-all capitalize ${
                   activeTab === tab 
                     ? 'bg-secondary text-white shadow-md' 
-                    : 'bg-white/40 text-on-surface-variant hover:bg-white/60 border border-white/20'
+                    : 'bg-white/40 text-on-surface-variant hover:bg-white/60 border border-white/20 shadow-sm'
                 }`}
               >
                 {tab}
-                {tab === 'unread' && chats.filter(c => c.unreadCount && c.unreadCount > 0).length > 0 && (
-                  <span className="ml-2 bg-white text-secondary text-[10px] px-1.5 py-0.5 rounded-full">
-                    {chats.filter(c => c.unreadCount && c.unreadCount > 0).length}
-                  </span>
-                )}
+                {(() => {
+                  const count = chats.filter(c => {
+                    if (tab === 'all') return c.unreadCount > 0;
+                    if (tab === 'groups') return c.isGroup && c.unreadCount > 0;
+                    if (tab === 'personal') return !c.isGroup && c.unreadCount > 0;
+                    if (tab === 'unread') return c.unreadCount > 0;
+                    return false;
+                  }).length;
+                  
+                  if (count > 0) {
+                    return (
+                      <span className={`ml-2 min-w-[18px] h-[18px] flex items-center justify-center text-[10px] rounded-full font-black ${
+                        activeTab === tab ? 'bg-white text-secondary' : 'bg-secondary text-white'
+                      }`}>
+                        {count > 9 ? '9+' : count}
+                      </span>
+                    );
+                  }
+                  return null;
+                })()}
               </button>
             ))}
             <button 
@@ -278,15 +322,16 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
           <div className="space-y-2">
             {[1, 2, 3, 4, 5].map(i => <SkeletonChat key={i} />)}
           </div>
-        ) : filteredChats.length === 0 ? (
-          <div className="text-center mt-20 opacity-60">
-            <p className="text-on-surface-variant font-medium">
-              {activeTab === 'all' ? 'No chats yet.' : `No ${activeTab} chats.`}
-            </p>
-            {activeTab === 'all' && <p className="text-sm mt-2">Go to Contacts to start a conversation.</p>}
-          </div>
         ) : (
           <>
+            {filteredChats.length === 0 && !searchQuery && (
+              <div className="text-center mt-20 opacity-60">
+                <p className="text-on-surface-variant font-medium">
+                  {activeTab === 'all' ? 'No chats yet.' : `No ${activeTab} chats.`}
+                </p>
+                {activeTab === 'all' && <p className="text-sm mt-2">Go to Contacts to start a conversation.</p>}
+              </div>
+            )}
             {searchQuery && (
               <div className="mb-6">
                 <div className="flex items-center gap-2 px-2 mb-4 text-on-surface-variant">
@@ -296,13 +341,8 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
                 
                 {/* User Search Results */}
                 <div className="space-y-3 mb-6">
-                  {globalUsers
-                    .filter(u => 
-                      u.id !== currentUser?.id && 
-                      (u.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                       u.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                       u.phone?.includes(searchQuery))
-                    )
+                  {globalSearchResults
+                    .filter(u => u.id !== currentUser?.id)
                     .map(user => {
                       const isFollowing = currentUser?.following?.includes(user.id);
                       const isRequested = user.followRequests?.includes(currentUser?.id || '');
@@ -323,10 +363,10 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1">
-                              <h3 className="font-headline font-bold text-on-surface truncate">{user.name}</h3>
+                              <h3 className="font-headline font-bold text-on-surface truncate">{user.displayName || user.name || 'User'}</h3>
                               {user.isPrivate && <Lock className="w-3 h-3 text-on-surface-variant" />}
                             </div>
-                            <p className="text-sm text-on-surface-variant truncate">@{user.username}</p>
+                            <p className="text-sm text-on-surface-variant truncate">@{user.username || 'user'}</p>
                           </div>
                           <div className="flex items-center gap-2">
                             {isFollowing ? (
@@ -406,7 +446,35 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
                             </div>
                           ) : (
                             <>
-                              <div className="w-14 h-14 rounded-2xl overflow-hidden shadow-lg">
+                              <div 
+                                className="w-14 h-14 rounded-2xl overflow-hidden shadow-lg cursor-pointer"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const tid = chat.participantIds?.find(id => id !== currentUser?.id) || chat.id;
+                                  setActiveContactId(tid);
+                                  onNavigate('contact-profile');
+                                }}
+                                onMouseDown={(e) => {
+                                  e.stopPropagation();
+                                  peekTimer.current = setTimeout(() => {
+                                    setPeekChatId(chat.id);
+                                    if (window.navigator?.vibrate) window.navigator.vibrate(10);
+                                  }, 400);
+                                }}
+                                onMouseUp={() => {
+                                  if (peekTimer.current) clearTimeout(peekTimer.current);
+                                }}
+                                onTouchStart={(e) => {
+                                  e.stopPropagation();
+                                  peekTimer.current = setTimeout(() => {
+                                    setPeekChatId(chat.id);
+                                    if (window.navigator?.vibrate) window.navigator.vibrate(10);
+                                  }, 400);
+                                }}
+                                onTouchEnd={() => {
+                                  if (peekTimer.current) clearTimeout(peekTimer.current);
+                                }}
+                              >
                                 <img src={chat.avatar} alt={chat.name} className="w-full h-full object-cover" />
                               </div>
                               <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-secondary-fixed rounded-full border-2 border-white aqua-glow"></div>
@@ -425,8 +493,10 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
                         </div>
                         <div className="flex flex-col items-end gap-2">
                           {chat.unreadCount ? (
-                            <div className="liquid-gradient w-5 h-5 rounded-full flex items-center justify-center text-[10px] text-white font-bold">{chat.unreadCount}</div>
-                          ) : lastMsg?.isRead ? (
+                            <div className="liquid-gradient w-5 h-5 rounded-full flex items-center justify-center text-[10px] text-white font-bold">
+                              {chat.unreadCount > 9 ? '9+' : chat.unreadCount}
+                            </div>
+                          ) : lastMsg?.status === 'seen' ? (
                             <CheckCheck className="text-on-surface-variant w-4 h-4" />
                           ) : null}
                         </div>
@@ -461,7 +531,29 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
                             <UserPlus className="w-6 h-6" />
                           </div>
                         ) : (
-                          <div className={`w-14 h-14 rounded-full overflow-hidden ${chat.id === 'c3' ? 'grayscale opacity-80' : ''}`}>
+                          <div 
+                            className={`w-14 h-14 rounded-full overflow-hidden ${chat.id === 'c3' ? 'grayscale opacity-80' : ''}`}
+                            onMouseDown={(e) => {
+                              e.stopPropagation();
+                              peekTimer.current = setTimeout(() => {
+                                setPeekChatId(chat.id);
+                                if (window.navigator?.vibrate) window.navigator.vibrate(10);
+                              }, 400);
+                            }}
+                            onMouseUp={() => {
+                              if (peekTimer.current) clearTimeout(peekTimer.current);
+                            }}
+                            onTouchStart={(e) => {
+                              e.stopPropagation();
+                              peekTimer.current = setTimeout(() => {
+                                setPeekChatId(chat.id);
+                                if (window.navigator?.vibrate) window.navigator.vibrate(10);
+                              }, 400);
+                            }}
+                            onTouchEnd={() => {
+                              if (peekTimer.current) clearTimeout(peekTimer.current);
+                            }}
+                          >
                             <img src={chat.avatar} alt={chat.name} className="w-full h-full object-cover" />
                           </div>
                         )}
@@ -475,7 +567,16 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
                           </div>
                           <p className="text-sm text-on-surface-variant truncate">{lastMsg?.text || chat.lastMessage || (chat.isVoice ? 'Sent a voice message' : 'No messages')}</p>
                         </div>
-                        <div className="flex flex-col items-end">
+                        <div className="flex flex-col items-end gap-2">
+                          {chat.unreadCount ? (
+                            <div className="liquid-gradient w-5 h-5 rounded-full flex items-center justify-center text-[10px] text-white font-bold">
+                              {chat.unreadCount > 9 ? '9+' : chat.unreadCount}
+                            </div>
+                          ) : lastMsg?.status === 'seen' ? (
+                            <CheckCheck className="text-secondary w-4 h-4" />
+                          ) : (
+                            <CheckCheck className="text-on-surface-variant/40 w-4 h-4" />
+                          )}
                           {chat.isVoice && <Mic className="text-on-surface-variant w-4 h-4" />}
                         </div>
                       </div>
@@ -601,9 +702,7 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
                 {chats.find(c => c.id === contextMenuChatId)?.unreadCount ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />} 
                 {chats.find(c => c.id === contextMenuChatId)?.unreadCount ? 'Mark as read' : 'Mark as unread'}
               </button>
-              <button onClick={() => handleContextAction(() => deleteChat(contextMenuChatId!))} className="flex items-center gap-3 px-3 py-2 hover:bg-white/10 rounded-xl text-sm font-medium text-red-500 transition-colors">
-                <Trash2 className="w-4 h-4" /> Delete Chat
-              </button>
+
               
               <div className="relative">
                 <button 
@@ -642,7 +741,11 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
               <button onClick={() => handleContextAction(() => clearHistory(contextMenuChatId))} className="flex items-center gap-3 px-3 py-2 hover:bg-white/10 rounded-xl text-sm font-medium text-on-surface transition-colors">
                 <Eraser className="w-4 h-4" /> Clear history
               </button>
-              <button onClick={() => handleContextAction(() => deleteChat(contextMenuChatId))} className="flex items-center gap-3 px-3 py-2 hover:bg-white/10 rounded-xl text-sm font-medium text-red-500 transition-colors">
+              <button onClick={() => {
+                setChatToDelete(contextMenuChatId);
+                setShowFolderSubmenu(false);
+                setContextMenuChatId(null);
+              }} className="flex items-center gap-3 px-3 py-2 hover:bg-white/10 rounded-xl text-sm font-medium text-red-500 transition-colors">
                 <Trash2 className="w-4 h-4" /> Delete chat
               </button>
             </motion.div>
@@ -654,6 +757,42 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
         isOpen={isNewFolderModalOpen}
         onClose={() => setIsNewFolderModalOpen(false)}
       />
+
+      <AnimatePresence>
+        {peekChatId && (
+          <ChatPeekPreview 
+            chat={chats.find(c => c.id === peekChatId)!}
+            messages={messages[peekChatId] || []}
+            currentUser={currentUser}
+            onClose={() => setPeekChatId(null)}
+            onOpenChat={() => {
+              setActiveChatId(peekChatId);
+              setPeekChatId(null);
+              onNavigate('chat-detail');
+            }}
+            onArchive={() => archiveChat(peekChatId)}
+            onPin={() => pinChat(peekChatId)}
+            onMute={() => muteChat(peekChatId)}
+            onDelete={() => {
+              setChatToDelete(peekChatId);
+              setPeekChatId(null);
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      <DeleteChatDialog 
+        isOpen={!!chatToDelete}
+        chatName={chats.find(c => c.id === chatToDelete)?.name || 'this user'}
+        onConfirm={(forEveryone) => {
+          if (chatToDelete) {
+            deleteChat(chatToDelete, forEveryone ? 'everyone' : 'me');
+            setChatToDelete(null);
+          }
+        }}
+        onCancel={() => setChatToDelete(null)}
+      />
+
     </motion.div>
   );
 }

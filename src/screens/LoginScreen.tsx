@@ -13,7 +13,13 @@ const COUNTRIES = [
 
 import GlassyDatePicker from '../components/GlassyDatePicker';
 
+import { auth, googleProvider, setupRecaptcha } from '../config/firebase';
+import { signInWithPhoneNumber, signInWithPopup, ConfirmationResult, signInWithEmailLink, sendSignInLinkToEmail, isSignInWithEmailLink } from 'firebase/auth';
+import { User } from '../types';
+import { useAppContext } from '../context/AppContext';
+
 export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
+  const { setCurrentUser } = useAppContext() || { setCurrentUser: () => {} };
   const [step, setStep] = useState<'intro' | 'phone' | 'email' | 'otp' | 'profile'>('intro');
   
   // Auth States
@@ -22,6 +28,8 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
   const [selectedCountry, setSelectedCountry] = useState(COUNTRIES[0]);
   const [isCountryDropdownOpen, setIsCountryDropdownOpen] = useState(false);
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
+  const [isEmailMock, setIsEmailMock] = useState(false);
   
   // OTP Timer
   const [resendTimer, setResendTimer] = useState(30);
@@ -31,6 +39,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
   const [displayName, setDisplayName] = useState('');
   const [dob, setDob] = useState('');
   const [showBirthday, setShowBirthday] = useState(true);
+  const [phoneInput, setPhoneInput] = useState('');
 
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -54,17 +63,29 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
     return () => clearInterval(interval);
   }, [step, resendTimer]);
 
-  const handleSendOtp = () => {
-    setStep('otp');
-    setResendTimer(30);
-    setCanResend(false);
-    setOtp(['', '', '', '', '', '']);
+  const handleSendOtp = async () => {
+    try {
+      if (step === 'phone') {
+        const fullPhone = `${selectedCountry.code}${phoneNumber}`;
+        const appVerifier = setupRecaptcha('recaptcha-container');
+        const confirmation = await signInWithPhoneNumber(auth, fullPhone, appVerifier);
+        setConfirmationResult(confirmation);
+        setIsEmailMock(false);
+      } else {
+        // Email mock login
+        setIsEmailMock(true);
+      }
+      setStep('otp');
+      setResendTimer(30);
+      setCanResend(false);
+      setOtp(['', '', '', '', '', '']);
+    } catch (error: any) {
+      alert(error.message);
+    }
   };
 
   const handleResendOtp = () => {
-    setResendTimer(30);
-    setCanResend(false);
-    // Logic to resend OTP goes here
+    handleSendOtp();
   };
 
   const handleOtpChange = (index: number, value: string) => {
@@ -79,13 +100,95 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
     }
   };
 
-  const handleVerifyOtp = () => {
-    setStep('profile');
+  const handleVerifyOtp = async () => {
+    const code = otp.join('');
+    try {
+      if (isEmailMock) {
+        if (code === '123456') {
+          setStep('profile');
+        } else {
+          alert('Invalid Mock OTP. Use 123456');
+        }
+      } else if (confirmationResult) {
+        await confirmationResult.confirm(code);
+        setStep('profile');
+      }
+    } catch (error: any) {
+      alert("Invalid OTP: " + error.message);
+    }
+  };
+
+  const syncProfileWithBackend = async (data: any) => {
+    try {
+      // Clear the logged-out flag so session persists on next reload
+      localStorage.removeItem('aqualyn_logged_out');
+      let idToken = '';
+      if (isEmailMock) {
+        idToken = `MOCK_TOKEN_${email}`;
+        localStorage.setItem('mock_auth_token', idToken);
+      } else {
+        idToken = await auth.currentUser?.getIdToken() || '';
+        localStorage.removeItem('mock_auth_token'); // Clear it if using real auth
+      }
+      
+      const res = await fetch('http://localhost:5000/api/auth/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify(data)
+      });
+      if (!res.ok) throw new Error('Failed to sync profile');
+      const resData = await res.json();
+      setCurrentUser(resData.user);
+      onLogin(); 
+    } catch (error) {
+      console.error(error);
+      alert('Failed to sync with server');
+    }
   };
 
   const handleCompleteSetup = () => {
     if (displayName.trim()) {
-      onLogin();
+      syncProfileWithBackend({ displayName, dob, showBirthday, phone: phoneInput });
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      const user = result.user;
+      
+      // Auto-sync to check if profile is complete
+      const idToken = await user.getIdToken();
+      const res = await fetch('http://localhost:5000/api/auth/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify({}) // Initial sync
+      });
+      
+      if (res.ok) {
+        const resData = await res.json();
+        setCurrentUser(resData.user);
+        // Clear logged-out flag
+        localStorage.removeItem('aqualyn_logged_out');
+        
+        // If user already has a dob, they have completed setup
+        if (resData.user.dob) {
+           onLogin();
+        } else {
+           if (user.displayName) setDisplayName(user.displayName);
+           setStep('profile');
+        }
+      } else {
+        throw new Error('Failed to sync with backend');
+      }
+    } catch (error: any) {
+      alert(error.message);
     }
   };
 
@@ -226,7 +329,10 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
                   <div className="flex-grow border-t border-white/20"></div>
                 </div>
 
-                <button className="w-full h-14 glass-card bg-white/40 border border-white/40 text-on-surface font-headline font-bold rounded-2xl hover:bg-white/60 active:scale-[0.98] transition-all flex items-center justify-center gap-3 shadow-sm">
+                <button 
+                  onClick={handleGoogleSignIn}
+                  className="w-full h-14 glass-card bg-white/40 border border-white/40 text-on-surface font-headline font-bold rounded-2xl hover:bg-white/60 active:scale-[0.98] transition-all flex items-center justify-center gap-3 shadow-sm"
+                >
                   <GoogleIcon />
                   Continue with Google
                 </button>
@@ -238,6 +344,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
                   {step === 'phone' ? 'Use email instead' : 'Use phone number instead'}
                 </button>
               </div>
+              <div id="recaptcha-container"></div>
             </motion.div>
           )}
 

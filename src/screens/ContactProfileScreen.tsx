@@ -2,27 +2,71 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { ArrowLeft, MessageCircle, Phone, Video, Info, Bell, Ban, Trash2, Lock, ShieldCheck, UserPlus, UserCheck, Clock, Grid, PlayCircle } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
+import { auth } from '../config/firebase';
 
 export default function ContactProfileScreen({ onBack, onNavigate }: { onBack: () => void, onNavigate: (s: string) => void }) {
-  const { contacts, activeContactId, startChatWithContact, addToast, chats, setChats, currentUser, blockContact, reportContact, muteChat, followUser, unfollowUser, posts, globalUsers } = useAppContext();
+  const { contacts, activeContactId, startChatWithContact, addToast, chats, setChats, currentUser, blockContact, reportContact, muteChat, followUser, unfollowUser, posts, globalUsers, setGlobalUsers } = useAppContext();
   const [requestSent, setRequestSent] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState<'posts' | 'highlights'>('posts');
   
+  // Look in globalUsers first (from search results), then contacts
   const contact = globalUsers.find(c => c.id === activeContactId) || contacts.find(c => c.id === activeContactId);
-  const chat = chats.find(c => c.id === activeContactId);
+  const chat = chats.find(c => c.id === activeContactId || c.participantIds?.includes(activeContactId || ''));
   const isBlocked = currentUser?.blockedUsers?.includes(activeContactId || '');
-  const isFollowing = currentUser?.following?.includes(activeContactId || '');
-  const isRequested = contact?.followRequests?.includes(currentUser?.id || '');
   
-  if (!contact) return null;
+  // Follow/request state - check in globalUsers (most updated) and currentUser
+  const isFollowing = currentUser?.following?.includes(activeContactId || '');
+  const isRequested = contact?.receivedFollowReqs?.some((r: any) => r.senderId === currentUser?.id);
+
+  // Fetch user if missing
+  React.useEffect(() => {
+    if (activeContactId && !globalUsers.find(u => u.id === activeContactId) && !contacts.find(u => u.id === activeContactId)) {
+      const fetchUser = async () => {
+        try {
+          const idToken = await auth.currentUser?.getIdToken();
+          const res = await fetch(`http://localhost:5000/api/user/profile/${activeContactId}`, {
+            headers: { 'Authorization': `Bearer ${idToken}` }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setGlobalUsers(prev => [...prev, data]);
+          }
+        } catch (e) {
+          console.error("Failed to fetch contact:", e);
+        }
+      };
+      fetchUser();
+    }
+  }, [activeContactId, globalUsers, contacts, setGlobalUsers]);
+  
+  if (!contact) {
+    return (
+      <div className="min-h-screen bg-surface flex flex-col items-center justify-center gap-4">
+        <div className="w-20 h-20 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant">
+          <UserPlus className="w-10 h-10" />
+        </div>
+        <p className="text-on-surface-variant font-medium">User not found</p>
+        <button onClick={onBack} className="px-6 py-3 bg-secondary text-white rounded-2xl font-bold">Go Back</button>
+      </div>
+    );
+  }
+
+  // Use displayName (from DB) falling back to name
+  const displayName = contact.displayName || contact.name || 'User';
+  const username = contact.username || displayName.toLowerCase().replace(/\s+/g, '_');
+  const avatarUrl = contact.avatar;
 
   const userPosts = posts.filter(p => p.userId === contact.id);
   const isPrivate = contact.isPrivate && !isFollowing;
 
   const handleMessage = () => {
     startChatWithContact(contact.id);
-    onNavigate('chat-detail');
+    // Use a small timeout to let the context state update flush before navigating
+    setTimeout(() => {
+        onNavigate('chat-detail');
+    }, 50);
   };
+
 
   const handleMute = () => {
     if (activeContactId) {
@@ -54,7 +98,7 @@ export default function ContactProfileScreen({ onBack, onNavigate }: { onBack: (
       } else {
         setChats(prev => [...prev, {
           id: contact.id,
-          name: contact.name,
+          name: contact.displayName || contact.name || 'User',
           avatar: contact.avatar,
           isSecret: true,
           selfDestructTimer: 60,
@@ -81,7 +125,13 @@ export default function ContactProfileScreen({ onBack, onNavigate }: { onBack: (
       <main className="pt-24 px-4 max-w-2xl mx-auto space-y-6">
         <div className="flex flex-col items-center text-center space-y-4">
           <div className="w-32 h-32 rounded-full border-4 border-white shadow-xl overflow-hidden relative">
-            <img src={contact.avatar} alt={contact.name} className="w-full h-full object-cover" />
+            {avatarUrl ? (
+              <img src={avatarUrl} alt={displayName} className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full bg-gradient-to-br from-secondary to-primary flex items-center justify-center text-white text-4xl font-bold">
+                {displayName.charAt(0).toUpperCase()}
+              </div>
+            )}
             {contact.isPrivate && (
               <div className="absolute bottom-0 right-0 bg-white p-1.5 rounded-full shadow-md">
                 <Lock className="w-4 h-4 text-on-surface-variant" />
@@ -89,8 +139,9 @@ export default function ContactProfileScreen({ onBack, onNavigate }: { onBack: (
             )}
           </div>
           <div>
-            <h2 className="text-3xl font-extrabold font-headline text-on-surface">{contact.name}</h2>
-            <p className="text-on-surface-variant font-medium">@{contact.username || contact.name.toLowerCase().replace(' ', '')}</p>
+            <h2 className="text-3xl font-extrabold font-headline text-on-surface">{displayName}</h2>
+            <p className="text-on-surface-variant font-medium">@{username}</p>
+            {contact.bio && <p className="text-sm text-on-surface-variant mt-1 max-w-xs">{contact.bio}</p>}
           </div>
           
           <div className="flex items-center gap-6 py-2">
@@ -108,6 +159,7 @@ export default function ContactProfileScreen({ onBack, onNavigate }: { onBack: (
             </div>
           </div>
 
+          {/* Action Buttons — Instagram-style */}
           <div className="flex gap-3 w-full max-w-sm pt-2">
             {isFollowing ? (
               <>
@@ -127,19 +179,31 @@ export default function ContactProfileScreen({ onBack, onNavigate }: { onBack: (
               </>
             ) : isRequested ? (
               <button 
-                className="w-full py-3 rounded-2xl bg-surface-container text-on-surface-variant font-bold border border-white/40 flex items-center justify-center gap-2"
+                className="flex-1 py-3 rounded-2xl bg-surface-container text-on-surface-variant font-bold border border-white/40 flex items-center justify-center gap-2"
               >
                 <Clock className="w-5 h-5" />
                 Requested
               </button>
             ) : (
-              <button 
-                onClick={() => followUser(contact.id)}
-                className="w-full py-3 rounded-2xl liquid-gradient text-white font-bold shadow-lg shadow-primary/20 active:scale-95 transition-all flex items-center justify-center gap-2"
-              >
-                <UserPlus className="w-5 h-5" />
-                Follow
-              </button>
+              <>
+                {/* Public accounts: can message without following */}
+                {!contact.isPrivate && (
+                  <button 
+                    onClick={handleMessage}
+                    className="flex-1 py-3 rounded-2xl bg-white/60 border border-white/40 text-on-surface font-bold active:scale-95 transition-all flex items-center justify-center gap-2"
+                  >
+                    <MessageCircle className="w-5 h-5" />
+                    Message
+                  </button>
+                )}
+                <button 
+                  onClick={() => followUser(contact.id)}
+                  className="flex-1 py-3 rounded-2xl liquid-gradient text-white font-bold shadow-lg shadow-primary/20 active:scale-95 transition-all flex items-center justify-center gap-2"
+                >
+                  <UserPlus className="w-5 h-5" />
+                  {contact.isPrivate ? 'Request' : 'Follow'}
+                </button>
+              </>
             )}
           </div>
         </div>

@@ -1,0 +1,17 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: aqualyn-db
+    restart: always
+    environment:
+      POSTGRES_USER: aqualyn_user
+      POSTGRES_PASSWORD: aqualyn_password
+      POSTGRES_DB: aqualyn_db
+    ports:
+      - '5433:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:

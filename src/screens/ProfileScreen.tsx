@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Pen, Plus, Heart, MessageCircle, Camera, Grid, Bookmark, Folder, MoreVertical } from 'lucide-react';
+import { Pen, Plus, Heart, MessageCircle, Camera, Grid, Bookmark, Folder, MoreVertical, Settings as SettingsIcon } from 'lucide-react';
 import { Post, Collection } from '../types';
 import { useAppContext } from '../context/AppContext';
 import StoryCreator from '../components/stories/StoryCreator';
@@ -16,7 +16,16 @@ export default function ProfileScreen({ onNavigate }: { onNavigate: (s: string) 
   const [isNewCollectionModalOpen, setIsNewCollectionModalOpen] = useState(false);
   const [newCollectionName, setNewCollectionName] = useState('');
 
-  if (!currentUser) return null;
+  if (!currentUser) {
+    return (
+      <div className="bg-surface min-h-screen flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 border-4 border-secondary border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-on-surface-variant font-bold">Loading Profile...</p>
+        </div>
+      </div>
+    );
+  }
 
   const myPosts = posts.filter(p => p.userId === currentUser.id && !p.isArchived);
   const savedPosts = posts.filter(p => currentUser.savedPostIds?.includes(p.id));
@@ -35,6 +44,9 @@ export default function ProfileScreen({ onNavigate }: { onNavigate: (s: string) 
           <span className="text-2xl font-black bg-gradient-to-br from-cyan-600 to-blue-500 bg-clip-text text-transparent font-headline tracking-tight">Aqualyn</span>
         </div>
         <div className="flex items-center gap-4">
+          <button onClick={() => onNavigate('settings')} className="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center hover:bg-secondary/20 transition-colors">
+            <SettingsIcon className="w-5 h-5 text-on-surface" />
+          </button>
           <div className="w-10 h-10 rounded-full border-2 border-secondary-fixed aqua-glow overflow-hidden">
             <img src={currentUser.avatar} alt="Profile" className="w-full h-full object-cover" />
           </div>
@@ -45,7 +57,7 @@ export default function ProfileScreen({ onNavigate }: { onNavigate: (s: string) 
         <section className="relative flex flex-col md:flex-row items-center md:items-end gap-8">
           <div className="relative group">
             <div className="w-40 h-40 md:w-48 md:h-48 rounded-full border-[6px] border-white aqua-glow overflow-hidden bg-surface-container shadow-xl">
-              <img src={currentUser.largeAvatar} alt="Large Profile" className="w-full h-full object-cover" />
+              <img src={currentUser.largeAvatar || currentUser.avatar} alt="Large Profile" className="w-full h-full object-cover" />
             </div>
             <button onClick={() => onNavigate('edit-profile')} className="absolute bottom-2 right-2 bg-secondary text-on-secondary w-10 h-10 rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform active:scale-90">
               <Pen className="w-5 h-5 fill-on-secondary" />
@@ -53,10 +65,10 @@ export default function ProfileScreen({ onNavigate }: { onNavigate: (s: string) 
           </div>
           <div className="flex-1 text-center md:text-left space-y-4">
             <div className="space-y-1">
-              <h1 className="text-4xl font-extrabold font-headline tracking-tight text-on-surface">{currentUser.name}</h1>
-              <p className="text-on-surface-variant font-bold">@{currentUser.username}</p>
+              <h1 className="text-4xl font-extrabold font-headline tracking-tight text-on-surface">{currentUser.displayName || currentUser.name}</h1>
+              <p className="text-on-surface-variant font-bold">@{currentUser.username || currentUser.id}</p>
             </div>
-            <p className="text-on-surface/80 max-w-md leading-relaxed">{currentUser.bio}</p>
+            <p className="text-on-surface/80 max-w-md leading-relaxed">{currentUser.bio || 'Welcome to Aqualyn!'}</p>
             <div className="flex flex-wrap justify-center md:justify-start gap-3 pt-2">
               <button onClick={() => onNavigate('edit-profile')} className="px-8 py-3 rounded-full bg-gradient-to-br from-secondary to-primary-container text-on-primary-container font-bold text-sm shadow-lg hover:brightness-110 active:scale-95 transition-all border-t border-white/20">
                 Edit Profile

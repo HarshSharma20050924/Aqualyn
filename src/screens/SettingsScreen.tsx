@@ -9,7 +9,7 @@ import StorageSettings from '../components/settings/StorageSettings';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 
 export default function SettingsScreen({ onBack, onNavigate }: { onBack: () => void, onNavigate?: (s: string) => void }) {
-  const { currentUser, addToast, folders, setFolders, createFolder, deleteFolder, theme, setTheme } = useAppContext();
+  const { currentUser, addToast, folders, setFolders, createFolder, deleteFolder, theme, setTheme, logout } = useAppContext();
   const [subView, setSubView] = useState<string | null>(null);
   const [newFolderName, setNewFolderName] = useState('');
   const [showCreateFolder, setShowCreateFolder] = useState(false);
@@ -17,8 +17,9 @@ export default function SettingsScreen({ onBack, onNavigate }: { onBack: () => v
 
   if (!currentUser) return null;
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setShowLogoutConfirm(false);
+    await logout();
     addToast('Logged out successfully', 'success');
     if (onNavigate) onNavigate('login');
   };

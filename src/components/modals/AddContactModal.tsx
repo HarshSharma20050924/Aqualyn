@@ -9,13 +9,18 @@ interface AddContactModalProps {
 }
 
 export default function AddContactModal({ isOpen, onClose }: AddContactModalProps) {
-  const { addContact } = useAppContext();
+  const { addContact, currentUser } = useAppContext();
   const [newContactName, setNewContactName] = useState('');
   const [newContactPhone, setNewContactPhone] = useState('');
 
   const handleAddContact = () => {
     if (newContactName.trim() && newContactPhone.trim()) {
-      addContact(newContactName, newContactPhone);
+      addContact(
+        newContactName, 
+        newContactPhone, 
+        `local_${Date.now()}`, 
+        `https://api.dicebear.com/7.x/initials/svg?seed=${newContactName}`
+      );
       setNewContactName('');
       setNewContactPhone('');
       onClose();
@@ -53,7 +58,6 @@ export default function AddContactModal({ isOpen, onClose }: AddContactModalProp
 
             {/* Content */}
             <div className="flex-1 overflow-y-auto p-6 flex flex-col items-center">
-              {/* Avatar Placeholder */}
               <div className="w-24 h-24 rounded-full bg-secondary/20 flex items-center justify-center text-secondary mb-8 shadow-inner border border-secondary/30">
                 <UserPlus className="w-10 h-10" />
               </div>

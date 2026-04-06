@@ -24,7 +24,8 @@ export interface Collection {
 
 export interface User {
   id: string;
-  name: string;
+  name?: string;
+  displayName?: string;
   username: string;
   role: string;
   email: string;
@@ -34,10 +35,14 @@ export interface User {
   isPrivate?: boolean;
   followers?: string[];
   following?: string[];
-  followRequests?: string[];
+  sentFollowReqs?: any[];
+  receivedFollowReqs?: any[];
+  followRequests?: any[]; // Keep for legacy screens
   blockedUsers?: string[];
   reportedUsers?: string[];
   phone?: string;
+  showPhoneTo?: 'everyone' | 'followers' | 'close_friends' | 'no_one';
+  searchByPhone?: boolean;
   savedPostIds?: string[];
   collections?: Collection[];
   closeFriends?: string[];
@@ -45,6 +50,7 @@ export interface User {
     hideStoryFrom?: string[];
     allowReplies?: 'everyone' | 'following' | 'off';
   };
+  invitationSettings?: 'everyone' | 'mutual' | 'no_one';
 }
 
 export interface Story {
@@ -66,14 +72,13 @@ export interface Story {
 export interface Notification {
   id: string;
   userId: string;
-  type: 'like' | 'comment' | 'follow' | 'follow_request' | 'story_like';
-  sourceUserId: string;
-  sourceUserName: string;
-  sourceUserAvatar: string;
-  targetId?: string; // postId, storyId, etc.
+  actorId: string;
+  type: string;
+  targetId?: string;
   text?: string;
-  timestamp: string;
-  read: boolean;
+  isRead: boolean;
+  createdAt: string;
+  actor?: Partial<User>;
 }
 
 export interface Message {
@@ -84,15 +89,20 @@ export interface Message {
   imageUrl?: string;
   audioUrl?: string;
   videoUrl?: string;
+  fileUrl?: string;
   document?: { url: string; name: string; size: string };
   location?: { lat: number; lng: number; address: string };
   contact?: { name: string; phone: string; avatar?: string };
+  payment?: { amount: number; currency: string; status: string };
+  schedule?: { title: string; time: string; location?: string };
+  wallet?: { asset: string; amount: number; address: string; type: 'send' | 'request' };
   replyToId?: string;
   reactions?: Record<string, string[]>;
   timestamp: string;
   isRead: boolean;
   isEdited?: boolean;
-  payment?: { amount: number; currency: string; status: 'completed' | 'pending' };
+  status?: 'sent' | 'delivered' | 'seen';
+  deletedFor?: string[];
 }
 
 export interface Chat {
@@ -114,6 +124,8 @@ export interface Chat {
   description?: string;
   adminOnly?: boolean;
   disappearingMessages?: boolean;
+  isTempGroup?: boolean;
+  originalChatId?: string;
 }
 
 export interface Folder {

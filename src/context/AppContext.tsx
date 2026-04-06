@@ -1,5 +1,7 @@
-import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect, useRef } from 'react';
 import { User, Chat, Message, Folder, ThemeSettings, Post, Collection } from '../types';
+import { io, Socket } from 'socket.io-client';
+import { auth } from '../config/firebase';
 
 export type ToastType = 'success' | 'error' | 'info';
 export interface Toast {
@@ -14,15 +16,19 @@ interface AppContextType {
   chats: Chat[];
   setChats: React.Dispatch<React.SetStateAction<Chat[]>>;
   messages: Record<string, Message[]>;
+  setMessages: React.Dispatch<React.SetStateAction<Record<string, Message[]>>>;
   contacts: User[];
   sendMessage: (chatId: string, text: string, options?: Partial<Message>) => void;
   editMessage: (chatId: string, messageId: string, newText: string) => void;
-  deleteMessage: (chatId: string, messageId: string) => void;
+  deleteMessage: (chatId: string, messageId: string, scope?: 'me' | 'everyone') => void;
   addReaction: (chatId: string, messageId: string, emoji: string) => void;
   activeChatId: string | null;
   setActiveChatId: (id: string | null) => void;
   activeContactId: string | null;
   setActiveContactId: (id: string | null) => void;
+  typingUsers: Record<string, string[]>;
+  setTyping: (chatId: string, isTyping: boolean) => void;
+  logout: () => void;
   toasts: Toast[];
   addToast: (message: string, type: ToastType) => void;
   removeToast: (id: string) => void;
@@ -40,7 +46,7 @@ interface AppContextType {
   archiveChat: (chatId: string) => void;
   pinChat: (chatId: string) => void;
   muteChat: (chatId: string) => void;
-  deleteChat: (chatId: string) => void;
+  deleteChat: (chatId: string, scope?: 'me' | 'everyone') => void;
   clearHistory: (chatId: string) => void;
   blockContact: (contactId: string) => void;
   reportContact: (contactId: string) => void;
@@ -55,7 +61,7 @@ interface AppContextType {
   setStories: React.Dispatch<React.SetStateAction<Story[]>>;
   addStory: (story: Partial<Story>) => void;
   addStoryComment: (storyId: string, text: string) => void;
-  addContact: (name: string, phone: string) => void;
+  addContact: (name: string, phone: string, id: string, avatar?: string) => void;
   startChatWithContact: (contactId: string) => void;
   createGroupChat: (name: string, members: string[], options?: { description?: string; adminOnly?: boolean; disappearingMessages?: boolean }) => void;
   posts: Post[];
@@ -70,6 +76,7 @@ interface AppContextType {
   notifications: Notification[];
   setNotifications: React.Dispatch<React.SetStateAction<Notification[]>>;
   globalUsers: User[];
+  setGlobalUsers: React.Dispatch<React.SetStateAction<User[]>>;
   archivePost: (postId: string) => void;
   pinPost: (postId: string) => void;
   savePost: (postId: string) => void;
@@ -82,7 +89,7 @@ interface AppContextType {
 export interface Notification {
   id: string;
   userId: string;
-  type: 'like' | 'comment' | 'follow' | 'follow_request' | 'story_like';
+  type: 'like' | 'comment' | 'follow' | 'follow_request' | 'story_like' | 'chat_invitation';
   sourceUserId: string;
   sourceUserName: string;
   sourceUserAvatar: string;
@@ -120,169 +127,287 @@ export interface StoryComment {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-const defaultUser: User = {
-  id: 'u1',
-  name: 'Alex Rivero',
-  username: 'alexrivero',
-  role: 'Product Designer & Digital Nomad',
-  email: 'alex.rivero@aqualyn.io',
-  bio: 'Exploring the intersection of liquid UI and human connection. Building the future of Aqualyn from somewhere near the ocean. 🌊',
-  avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200&h=200',
-  largeAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=800&h=800',
-  following: ['u2'],
-  followers: ['u3'],
-  phone: '+1 555 123 4567'
-};
+const defaultUser: User | null = null;
 
-const initialChats: Chat[] = [
-  {
-    id: 'c1',
-    name: 'Design Team',
-    isGroup: true,
-    avatar: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&q=80&w=200&h=200',
-    lastMessage: 'Check out the new location!',
-    lastMessageTime: '10:42 AM',
-    unreadCount: 3,
-    isPinned: true
-  },
-  {
-    id: 'u2',
-    name: 'Sarah Jenkins',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=200&h=200',
-    lastMessage: 'Sent a voice message',
-    lastMessageTime: 'Yesterday',
-    isVoice: true
-  },
-  {
-    id: 'u3',
-    name: 'Marcus Chen',
-    isSecret: true,
-    selfDestructTimer: 60,
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=200&h=200',
-    lastMessage: 'This message will self-destruct',
-    lastMessageTime: 'Monday',
-  }
-];
+const initialChats: Chat[] = [];
 
-const initialMessages: Record<string, Message[]> = {
-  'c1': [
-    {
-      id: 'm1',
-      chatId: 'c1',
-      senderId: 'u2',
-      text: 'Hey everyone, check out this new design file!',
-      document: { url: '#', name: 'Q3_Design_System.fig', size: '4.2 MB' },
-      timestamp: '10:30 AM',
-      isRead: true,
-      reactions: { '👍': ['u1', 'u3'] }
-    },
-    {
-      id: 'm2',
-      chatId: 'c1',
-      senderId: 'u1',
-      text: 'Looks great! Where are we meeting to discuss this?',
-      replyToId: 'm1',
-      timestamp: '10:35 AM',
-      isRead: true
-    },
-    {
-      id: 'm3',
-      chatId: 'c1',
-      senderId: 'u3',
-      text: 'I found a great coffee shop for our meeting.',
-      location: { lat: 37.7749, lng: -122.4194, address: 'Blue Bottle Coffee, 115 Sansome St' },
-      timestamp: '10:40 AM',
-      isRead: true
-    },
-    {
-      id: 'm4',
-      chatId: 'c1',
-      senderId: 'u2',
-      audioUrl: 'mock-audio',
-      timestamp: '10:42 AM',
-      isRead: false
-    }
-  ],
-  'u3': [
-    {
-      id: 'm5',
-      chatId: 'u3',
-      senderId: 'u3',
-      text: 'This is a secret chat. Messages are end-to-end encrypted and cannot be forwarded.',
-      timestamp: '10:00 AM',
-      isRead: true
-    }
-  ]
-};
+const initialMessages: Record<string, Message[]> = {};
 
-const initialContacts: User[] = [
-  {
-    id: 'u2',
-    name: 'Sarah Jenkins',
-    username: 'sarahj',
-    role: 'Frontend Developer',
-    email: 'sarah@aqualyn.io',
-    bio: 'Coding the future.',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=200&h=200',
-    largeAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=800&h=800',
-    phone: '+1 555 987 6543',
-    isPrivate: true,
-    followers: ['u1']
-  },
-  {
-    id: 'u3',
-    name: 'Marcus Chen',
-    username: 'marcusc',
-    role: 'Product Manager',
-    email: 'marcus@aqualyn.io',
-    bio: 'Organizing chaos.',
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=200&h=200',
-    largeAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=800&h=800',
-    phone: '+1 555 444 3333',
-    following: ['u1']
-  }
-];
+const initialContacts: User[] = [];
 
-const globalUsers: User[] = [
-  ...initialContacts,
-  {
-    id: 'u4',
-    name: 'Elena Rodriguez',
-    username: 'elenar',
-    role: 'UX Researcher',
-    email: 'elena@aqualyn.io',
-    bio: 'Understanding users.',
-    avatar: 'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?auto=format&fit=crop&q=80&w=200&h=200',
-    largeAvatar: 'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?auto=format&fit=crop&q=80&w=800&h=800',
-    phone: '+1 555 111 2222',
-    isPrivate: true
-  },
-  {
-    id: 'u5',
-    name: 'David Kim',
-    username: 'davidk',
-    role: 'Backend Engineer',
-    email: 'david@aqualyn.io',
-    bio: 'Scaling systems.',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200&h=200',
-    largeAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=800&h=800',
-    phone: '+1 555 999 8888'
-  }
-];
+// globalUsers is now managed as state inside AppProvider
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [currentUser, setCurrentUser] = useState<User | null>(defaultUser);
   const [chats, setChats] = useState<Chat[]>(initialChats);
   const [messages, setMessages] = useState<Record<string, Message[]>>(initialMessages);
   const [contacts, setContacts] = useState<User[]>(initialContacts);
+  const [globalUsers, setGlobalUsers] = useState<User[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [activeContactId, setActiveContactId] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [folders, setFolders] = useState<Folder[]>([
-    { id: 'f1', name: 'Work', chatIds: ['c1'] },
-    { id: 'f2', name: 'Personal', chatIds: ['u2', 'u3'] }
-  ]);
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const [typingUsers, setTypingUsers] = useState<Record<string, string[]>>({});
+  const activeChatIdRef = useRef<string | null>(null);
+  const currentUserRef = useRef<User | null>(null);
+
+  useEffect(() => {
+    activeChatIdRef.current = activeChatId;
+    currentUserRef.current = currentUser;
+  }, [activeChatId, currentUser]);
+
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged(async (user: any) => {
+        const mockToken = localStorage.getItem('mock_auth_token');
+        const hasLoggedOut = localStorage.getItem('aqualyn_logged_out') === 'true';
+
+        // If user explicitly logged out, do NOT auto-restore the session
+        if (hasLoggedOut) {
+            if (user) {
+                // Force Firebase to sign out too so state is clean
+                await auth.signOut();
+            }
+            setCurrentUser(null);
+            setIsLoading(false);
+            return;
+        }
+
+        if (user || mockToken) {
+            try {
+                const idToken = user ? await user.getIdToken() : mockToken;
+                const res = await fetch('http://localhost:5000/api/auth/sync', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${idToken}`
+                    },
+                    body: JSON.stringify({})
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    
+                    // Map database structure to frontend expectations
+                    const mappedUser = {
+                        ...data.user,
+                        following: data.user.following?.map((f: any) => f.followingId) || [],
+                        followers: data.user.followers?.map((f: any) => f.followerId) || [],
+                        sentFollowReqs: data.user.sentFollowReqs || [],
+                        receivedFollowReqs: data.user.receivedFollowReqs || [],
+                    };
+                    
+                    setCurrentUser(mappedUser);
+
+                    // Fetch initial notifications
+                    const nRes = await fetch('http://localhost:5000/api/user/notifications', {
+                        headers: { 'Authorization': `Bearer ${idToken}` }
+                    });
+                    if (nRes.ok) {
+                        const nData = await nRes.json();
+                        if (Array.isArray(nData)) setNotifications(nData);
+                    }
+
+                    // Fetch initial chats
+                    const cRes = await fetch('http://localhost:5000/api/chats', {
+                        headers: { 'Authorization': `Bearer ${idToken}` }
+                    });
+                    if (cRes.ok) {
+                        const cData = await cRes.json();
+                        if (Array.isArray(cData)) setChats(cData);
+                    }
+                }
+            } catch (e) {
+                console.error("Auth sync error:", e);
+            }
+        } else {
+            setCurrentUser(null);
+        }
+        setIsLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (currentUser) {
+      const newSocket = io('http://localhost:5000');
+      
+      newSocket.on('connect', () => {
+         console.log('Socket Connected');
+         newSocket.emit('join', currentUser.id);
+      });
+
+      newSocket.on('receive_message', (msg: Message) => {
+         // Update messages
+         setMessages(prev => ({
+            ...prev,
+            [msg.chatId]: [...(prev[msg.chatId] || []), msg]
+         }));
+
+         // Update or add chat
+         setChats(prev => {
+            const chatIdx = prev.findIndex(c => c.id === msg.chatId);
+            if (chatIdx !== -1) {
+               const chat = { ...prev[chatIdx] };
+               chat.lastMessage = msg.text;
+               chat.lastMessageTime = msg.timestamp || 'Just now';
+               chat.unreadCount = (chat.unreadCount || 0) + (activeChatIdRef.current === msg.chatId ? 0 : 1);
+               
+               const otherChats = prev.filter(c => c.id !== msg.chatId);
+               return [chat, ...otherChats];
+            } else {
+               // Add new chat
+               const newChat: Chat = {
+                  id: msg.chatId,
+                  name: (msg as any).sender?.displayName || (msg as any).sender?.username || 'User', 
+                  avatar: (msg as any).sender?.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${msg.senderId}`,
+                  lastMessage: msg.text,
+                  lastMessageTime: msg.timestamp || 'Just now',
+                  unreadCount: 1,
+                  isGroup: false,
+                  participantIds: [currentUserRef.current?.id as string, msg.senderId].filter(Boolean)
+               };
+               
+               // Also ensure the user is in globalUsers so we can view their profile
+               setGlobalUsers(gu => {
+                  if (gu.some(u => u.id === msg.senderId)) return gu;
+                  const newUser: User = {
+                     id: msg.senderId,
+                     name: (msg as any).sender?.displayName || (msg as any).sender?.username || 'User',
+                     displayName: (msg as any).sender?.displayName,
+                     username: (msg as any).sender?.username,
+                     avatar: (msg as any).sender?.avatar,
+                     role: 'Aqualyn User',
+                     email: '',
+                     bio: 'Hey there! I am using Aqualyn.',
+                     largeAvatar: (msg as any).sender?.avatar,
+                  };
+                  return [...gu, newUser];
+               });
+
+               return [newChat, ...prev];
+            }
+         });
+      });
+      newSocket.on('message_sent_ack', (msg: Message) => {
+         // Replace temp message or just update chat
+         setMessages(prev => {
+            const list = prev[msg.chatId] || [];
+            let idx = -1;
+            for (let i = list.length - 1; i >= 0; i--) {
+               if (list[i].id.startsWith('temp-')) {
+                  idx = i;
+                  break;
+               }
+            }
+            if (idx !== -1) {
+              const newList = [...list];
+              newList[idx] = msg;
+              return { ...prev, [msg.chatId]: newList };
+            }
+            return { ...prev, [msg.chatId]: [...list, msg] };
+         });
+         setChats(prev => prev.map(c => c.id === msg.chatId ? {
+            ...c,
+            lastMessage: msg.text,
+            lastMessageTime: msg.timestamp
+         } : c));
+      });
+      newSocket.on('user_typing', (data: { chatId: string, userId: string, userName: string, isTyping: boolean }) => {
+         setTypingUsers(prev => {
+            const current = prev[data.chatId] || [];
+            if (data.isTyping) {
+               if (!current.includes(data.userName)) return { ...prev, [data.chatId]: [...current, data.userName] };
+            } else {
+               return { ...prev, [data.chatId]: current.filter(u => u !== data.userName) };
+            }
+            return prev;
+         });
+      });
+      newSocket.on('new_notification', (notif: Notification) => {
+          setNotifications(prev => [notif, ...prev]);
+          addToast(notif.text || 'New activity in your profile', 'info');
+      });
+      newSocket.on('message_edited', ({ chatId, messageId, newText }) => {
+         setMessages(prev => {
+            const list = prev[chatId] || [];
+            return {
+               ...prev,
+               [chatId]: list.map(m => m.id === messageId ? { ...m, text: newText, isEdited: true } : m)
+            };
+         });
+      });
+
+      newSocket.on('message_reacted', ({ chatId, messageId, emoji, userId }) => {
+         setMessages(prev => {
+            const list = prev[chatId] || [];
+            return {
+               ...prev,
+               [chatId]: list.map(m => {
+                  if (m.id === messageId) {
+                     const reactions = { ...(m.reactions || {}) };
+                     const userReactions = reactions[emoji] || [];
+                     if (!userReactions.includes(userId)) {
+                        reactions[emoji] = [...userReactions, userId];
+                     }
+                     return { ...m, reactions };
+                  }
+                  return m;
+               })
+            };
+         });
+      });
+
+      newSocket.on('message_deleted', ({ chatId, messageId }) => {
+          setMessages(prev => ({
+             ...prev,
+             [chatId]: (prev[chatId] || []).filter(m => m.id !== messageId)
+          }));
+       });
+       
+       newSocket.on('chat_invitation', (data: { chatId: string, inviterName: string, inviterId: string }) => {
+          addToast(`${data.inviterName} invited you to join a chat!`, 'info');
+          setNotifications(prev => [{
+            id: `inv-${Date.now()}`,
+            userId: currentUser.id,
+            sourceUserId: data.inviterId,
+            sourceUserName: data.inviterName,
+            sourceUserAvatar: `https://api.dicebear.com/7.x/initials/svg?seed=${data.inviterName}`,
+            type: 'chat_invitation',
+            targetId: data.chatId,
+            text: `${data.inviterName} invited you to a chat. Join to create a temporary group.`,
+            read: false,
+            timestamp: 'Just now'
+          }, ...prev]);
+       });
+
+       newSocket.on('messages_seen', ({ chatId, userId }) => {
+          setMessages(prev => {
+             const list = prev[chatId] || [];
+             return {
+                ...prev,
+                [chatId]: list.map(m => m.senderId !== userId ? { ...m, status: 'seen' } : m)
+             };
+          });
+       });
+
+       newSocket.on('chat_joined', (newGroupChat: Chat) => {
+          setChats(prev => [newGroupChat, ...prev]);
+          addToast('Joined temporary group chat', 'success');
+       });
+
+       newSocket.on('chat_deleted', ({ chatId }: { chatId: string }) => {
+          setChats(prev => prev.filter(c => c.id !== chatId));
+          if (activeChatId === chatId) setActiveChatId(null);
+       });
+
+       setSocket(newSocket);
+      return () => {
+         newSocket.close();
+         setSocket(null);
+      };
+    }
+  }, [currentUser]);
+  const [folders, setFolders] = useState<Folder[]>([]);
   const [theme, setTheme] = useState<ThemeSettings>({
     mode: 'light',
     accentColor: '#0891b2',
@@ -293,64 +418,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [appLockPin, setAppLockPin] = useState<string | null>(null);
   const [archiveLockPin, setArchiveLockPin] = useState<string | null>(null);
   const [isAppLocked, setIsAppLocked] = useState(false);
-  const [posts, setPosts] = useState<Post[]>([
-    {
-      id: 'p1',
-      userId: 'u1',
-      userName: 'Me',
-      userAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Me',
-      imageUrl: 'https://images.unsplash.com/photo-1558655146-d09347e92766?auto=format&fit=crop&q=80&w=600&h=600',
-      caption: 'Exploring the deep blue! 🌊 #Aqualyn #Underwater',
-      likes: ['u2', 'u3'],
-      comments: [
-        { id: 'c1', userId: 'u2', userName: 'Sarah Jenkins', userAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=200&h=200', text: 'Wow, this looks amazing!', timestamp: '1h ago' }
-      ],
-      timestamp: '2h ago'
-    },
-    {
-      id: 'p2',
-      userId: 'u1',
-      userName: 'Me',
-      userAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Me',
-      imageUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=600&h=600',
-      caption: 'City lights and quiet nights. 🌃',
-      likes: ['u3'],
-      comments: [],
-      timestamp: 'Yesterday'
-    }
-  ]);
+  const [posts, setPosts] = useState<Post[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [stories, setStories] = useState<Story[]>([
-    {
-      id: 's1',
-      userId: 'u2',
-      userName: 'Sarah Jenkins',
-      userAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=200&h=200',
-      mediaUrl: 'https://images.unsplash.com/photo-1558655146-d09347e92766?auto=format&fit=crop&q=80&w=600&h=900',
-      mediaType: 'image',
-      timestamp: '2h ago',
-      expiresAt: '22h left',
-      views: 124,
-      reactions: { '❤️': 12, '🔥': 8 }
-    },
-    {
-      id: 's2',
-      userId: 'u3',
-      userName: 'Marcus Chen',
-      userAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=200&h=200',
-      mediaUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=600&h=900',
-      mediaType: 'image',
-      timestamp: '5h ago',
-      expiresAt: '19h left',
-      views: 89,
-      reactions: { '😮': 4 }
-    }
-  ]);
+  const [stories, setStories] = useState<Story[]>([]);
 
   const addStory = (story: Partial<Story>) => {
     const newStory: Story = {
       id: `s${Date.now()}`,
-      userId: currentUser?.id || 'u1',
+      userId: currentUser?.id,
       userName: currentUser?.name || 'Me',
       userAvatar: currentUser?.avatar || '',
       mediaUrl: story.mediaUrl || '',
@@ -370,41 +445,49 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // In a real app, we'd add this to a separate state or backend
   };
 
-  const addContact = (name: string, phone: string) => {
+  const addContact = (name: string, phone: string, id: string, avatar?: string) => {
+    // Check if contact already exists
+    if (contacts.find(c => c.id === id)) {
+        addToast('Contact already added', 'error');
+        return;
+    }
     const newContact: User = {
-      id: `u${Date.now()}`,
+      id,
       name,
+      displayName: name,
       username: name.toLowerCase().replace(/\s+/g, '_'),
-      role: phone, // using role to store phone for now
+      role: 'Aqualyn User', 
       phone,
       email: '',
       bio: 'Hey there! I am using Aqualyn.',
-      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${name}`,
-      largeAvatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${name}`
+      avatar: avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${name}`,
+      largeAvatar: avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${name}`
     };
     setContacts(prev => [...prev, newContact]);
-    addToast('Contact added successfully!', 'success');
+    addToast('Added to contacts!', 'success');
   };
 
   const startChatWithContact = (contactId: string) => {
-    // Find if a 1-on-1 chat already exists with this contact
-    const existingChat = chats.find(c => !c.isGroup && c.id === contactId);
+    if (!currentUser) return;
+    
+    const combinedId = [currentUser.id, contactId].sort().join('_');
+    const existingChat = chats.find(c => c.id === combinedId);
     
     if (existingChat) {
       setActiveChatId(existingChat.id);
     } else {
-      const contact = contacts.find(c => c.id === contactId);
+      const contact = contacts.find(c => c.id === contactId) || globalUsers.find(c => c.id === contactId);
       if (!contact) return;
       
       const newChat: Chat = {
-        id: contact.id, // Use contact ID as chat ID for 1-on-1 for simplicity
-        name: contact.name,
+        id: combinedId,
+        name: contact.displayName || contact.name || 'User',
         avatar: contact.avatar,
         lastMessage: '',
         lastMessageTime: 'Just now',
         unreadCount: 0,
         isGroup: false,
-        participantIds: [currentUser?.id || 'u1', contact.id]
+        participantIds: [currentUser.id, contact.id]
       };
       
       setChats(prev => [newChat, ...prev]);
@@ -464,9 +547,39 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setChats(prev => prev.map(c => c.id === chatId ? { ...c, isMuted: !c.isMuted } : c));
   };
 
-  const deleteChat = (chatId: string) => {
+  const deleteMessage = (chatId: string, messageId: string, scope: 'me' | 'everyone' = 'everyone') => {
+    if (!socket) return;
+    const chat = chats.find(c => c.id === chatId);
+    const receiverId = chat?.participantIds?.find(id => id !== currentUser?.id) || chatId;
+
+    if (scope === 'me') {
+        socket.emit('delete_message_for_me', { messageId, userId: currentUser?.id });
+        setMessages(prev => ({
+            ...prev,
+            [chatId]: (prev[chatId] || []).filter(m => m.id !== messageId)
+        }));
+    } else {
+        socket.emit('delete_message_for_everyone', { chatId, messageId, receiverId });
+        setMessages(prev => ({
+            ...prev,
+            [chatId]: (prev[chatId] || []).filter(m => m.id !== messageId)
+        }));
+    }
+  };
+
+  const deleteChat = (chatId: string, scope: 'me' | 'everyone' = 'me') => {
+    if (!socket) return;
+    if (scope === 'me') {
+        socket.emit('delete_chat_for_me', { chatId, userId: currentUser?.id });
+        addToast('Chat deleted for you', 'success');
+    } else {
+        const chat = chats.find(c => c.id === chatId);
+        const receiverId = chat?.participantIds?.find(id => id !== currentUser?.id);
+        socket.emit('delete_chat_for_everyone', { chatId, receiverId });
+        addToast('Chat deleted for everyone', 'success');
+    }
     setChats(prev => prev.filter(c => c.id !== chatId));
-    addToast('Chat deleted', 'info');
+    if (activeChatId === chatId) setActiveChatId(null);
   };
 
   const clearHistory = (chatId: string) => {
@@ -493,6 +606,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const markAsRead = (chatId: string) => {
     setChats(prev => prev.map(c => c.id === chatId ? { ...c, unreadCount: 0 } : c));
+    if (socket) {
+        socket.emit('mark_as_read', { chatId, userId: currentUser?.id });
+    }
   };
 
   const createFolder = (name: string, chatIds: string[] = []) => {
@@ -553,9 +669,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     const newMessage: Message = {
-      id: Date.now().toString(),
+      id: `temp-${Date.now()}`,
       chatId,
-      senderId: currentUser?.id || 'u1',
+      senderId: currentUser?.id as string,
       text,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       isRead: false,
@@ -566,6 +682,80 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...prev,
       [chatId]: [...(prev[chatId] || []), newMessage]
     }));
+
+    // Optimistically update chat list too
+    setChats(prev => prev.map(c => c.id === chatId ? {
+       ...c, 
+       lastMessage: text, 
+       lastMessageTime: newMessage.timestamp 
+    } : c));
+
+    if (socket) {
+       socket.emit('send_message', {
+           chatId,
+           senderId: currentUser?.id,
+           receiverId: chat?.participantIds?.find(id => id !== currentUser?.id) || chatId,
+           text,
+            imageUrl: options?.imageUrl,
+            videoUrl: options?.videoUrl,
+            fileUrl: options?.fileUrl,
+            audioUrl: options?.audioUrl,
+            document: options?.document,
+            location: options?.location,
+            contact: options?.contact,
+            payment: options?.payment,
+            replyToId: options?.replyToId
+        });
+        // also stop typing on send
+        socket.emit('typing', { chatId, userId: currentUser?.id, userName: currentUser?.displayName || currentUser?.username, isTyping: false });
+
+        // Scan for @username invitations in 1-on-1 chats
+        if (!chat?.isGroup) {
+          const mentionMatch = text.match(/@(\w+)/);
+          if (mentionMatch) {
+            const username = mentionMatch[1];
+            // Check if user exists (we'd ideally search globalUsers)
+            const target = globalUsers.find(u => u.username === username);
+            if (target) {
+              // Mutual follow check for privacy (as requested)
+              const isMutual = currentUser.following?.includes(target.id) && target.followers?.includes(currentUser.id);
+              if (target.invitationSettings === 'no_one') {
+                addToast(`${target.name} has disabled invitations`, 'error');
+              } else if (target.invitationSettings === 'mutual' && !isMutual) {
+                addToast(`You can only invite mutual followers`, 'error');
+              } else {
+                socket.emit('invite_to_chat', { chatId, targetUserId: target.id, inviterId: currentUser.id });
+                addToast(`Invitation sent to @${username}`, 'success');
+              }
+            }
+          }
+        }
+    } else {
+       addToast('Connecting to socket...', 'info');
+    }
+  };
+
+  const setTyping = (chatId: string, isTyping: boolean) => {
+    if (!socket) return;
+    const chat = chats.find(c => c.id === chatId);
+    const receiverId = chat?.participantIds?.find(id => id !== currentUser?.id) || chatId;
+    socket.emit('typing', { 
+      chatId, 
+      userId: currentUser?.id, 
+      userName: currentUser?.displayName || currentUser?.username || 'User', 
+      isTyping,
+      receiverId
+    });
+  };
+
+  const logout = async () => {
+    // Set the flag BEFORE signing out to block onAuthStateChanged from re-logging in
+    localStorage.setItem('aqualyn_logged_out', 'true');
+    localStorage.removeItem('mock_auth_token');
+    await auth.signOut();
+    setCurrentUser(null);
+    setChats([]);
+    setMessages({});
   };
 
   const editMessage = (chatId: string, messageId: string, newText: string) => {
@@ -573,14 +763,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...prev,
       [chatId]: prev[chatId]?.map(m => m.id === messageId ? { ...m, text: newText, isEdited: true } : m) || []
     }));
+    
+    if (socket) {
+      const chat = chats.find(c => c.id === chatId);
+      const receiverId = chat?.participantIds?.find(id => id !== currentUser?.id) || chatId;
+      socket.emit('edit_message', { chatId, messageId, newText, receiverId });
+    }
   };
 
-  const deleteMessage = (chatId: string, messageId: string) => {
-    setMessages(prev => ({
-      ...prev,
-      [chatId]: prev[chatId]?.filter(m => m.id !== messageId) || []
-    }));
-  };
+
 
   const addReaction = (chatId: string, messageId: string, emoji: string) => {
     setMessages(prev => {
@@ -589,7 +780,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (msg.id === messageId) {
           const reactions = { ...(msg.reactions || {}) };
           const userReactions = reactions[emoji] || [];
-          const userId = currentUser?.id || 'u1';
+          const userId = currentUser?.id as string;
           
           if (userReactions.includes(userId)) {
             reactions[emoji] = userReactions.filter(id => id !== userId);
@@ -686,62 +877,61 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }));
   };
 
-  const followUser = (userId: string) => {
+  const followUser = async (userId: string) => {
     if (!currentUser) return;
-    const targetUser = globalUsers.find(c => c.id === userId);
-    if (!targetUser) return;
-
-    if (targetUser.isPrivate) {
-      // Send follow request
-      setContacts(prev => prev.map(c => {
-        if (c.id === userId) {
-          return { ...c, followRequests: [...(c.followRequests || []), currentUser.id] };
+    try {
+      const idToken = await auth.currentUser?.getIdToken();
+      const res = await fetch('http://localhost:5000/api/user/follow', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify({ targetUserId: userId })
+      });
+      
+      const data = await res.json();
+      if (res.ok) {
+        if (data.status === 'requested') {
+           // Update local state for immediate feedback
+           setGlobalUsers(prev => prev.map(u => 
+             u.id === userId ? { ...u, receivedFollowReqs: [...(u.receivedFollowReqs || []), { id: 'temp', senderId: currentUser.id, status: 'pending' }] } : u
+           ));
+           addToast('Follow request sent', 'success');
+        } else {
+           // Direct follow - update currentUser follow list
+           setCurrentUser({ ...currentUser, following: [...(currentUser.following || []), userId] });
+           addToast('Started following', 'success');
         }
-        return c;
-      }));
-      setNotifications(n => [{
-        id: `n${Date.now()}`,
-        userId: userId,
-        type: 'follow_request',
-        sourceUserId: currentUser.id,
-        sourceUserName: currentUser.name,
-        sourceUserAvatar: currentUser.avatar,
-        timestamp: 'Just now',
-        read: false
-      }, ...n]);
-      addToast('Follow request sent', 'success');
-    } else {
-      // Direct follow
-      setCurrentUser({ ...currentUser, following: [...(currentUser.following || []), userId] });
-      setContacts(prev => prev.map(c => {
-        if (c.id === userId) {
-          return { ...c, followers: [...(c.followers || []), currentUser.id] };
-        }
-        return c;
-      }));
-      setNotifications(n => [{
-        id: `n${Date.now()}`,
-        userId: userId,
-        type: 'follow',
-        sourceUserId: currentUser.id,
-        sourceUserName: currentUser.name,
-        sourceUserAvatar: currentUser.avatar,
-        timestamp: 'Just now',
-        read: false
-      }, ...n]);
-      addToast(`You are now following ${targetUser.name}`, 'success');
+      }
+    } catch (e) {
+      console.error(e);
+      addToast('Failed to follow user', 'error');
     }
   };
 
-  const unfollowUser = (userId: string) => {
+  const unfollowUser = async (userId: string) => {
     if (!currentUser) return;
-    setCurrentUser({ ...currentUser, following: (currentUser.following || []).filter(id => id !== userId) });
-    setContacts(prev => prev.map(c => {
-      if (c.id === userId) {
-        return { ...c, followers: (c.followers || []).filter(id => id !== currentUser.id) };
+    try {
+      const idToken = await auth.currentUser?.getIdToken();
+      const res = await fetch('http://localhost:5000/api/user/unfollow', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify({ targetUserId: userId })
+      });
+      if (res.ok) {
+        setCurrentUser({ 
+          ...currentUser, 
+          following: (currentUser.following || []).filter((id: string) => id !== userId) 
+        });
+        addToast('Unfollowed', 'info');
       }
-      return c;
-    }));
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const acceptFollowRequest = (userId: string) => {
@@ -836,15 +1026,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   return (
     <AppContext.Provider value={{ 
-      currentUser, setCurrentUser, chats, setChats, messages, contacts, sendMessage, editMessage, deleteMessage, addReaction,
+      currentUser, setCurrentUser, chats, setChats, messages, setMessages, contacts, sendMessage, editMessage, deleteMessage, addReaction,
       activeChatId, setActiveChatId, activeContactId, setActiveContactId,
       toasts, addToast, removeToast, isLoading, setIsLoading,
       folders, setFolders, createFolder, deleteFolder, addChatToFolder, theme, setTheme,
       aquaIntensity, setAquaIntensity,
       archiveChat, pinChat, muteChat, deleteChat, clearHistory, blockContact, reportContact, markAsRead,
       appLockPin, setAppLockPin, archiveLockPin, setArchiveLockPin, isAppLocked, setIsAppLocked,
-      stories, setStories, addStory, addStoryComment, addContact, startChatWithContact, createGroupChat,
-      posts, setPosts, addPost, likePost, commentPost, followUser, unfollowUser, acceptFollowRequest, rejectFollowRequest, notifications, setNotifications, globalUsers,
+      stories, setStories, addStory, addStoryComment, typingUsers, setTyping, logout, addContact, startChatWithContact, createGroupChat,
+      posts, setPosts, addPost, likePost, commentPost, followUser, unfollowUser, acceptFollowRequest, rejectFollowRequest, notifications, setNotifications, globalUsers, setGlobalUsers,
       archivePost, pinPost, savePost, createCollection, addPostToCollection, updateStorySettings, toggleCloseFriend
     }}>
       {children}
