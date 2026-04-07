@@ -4,6 +4,8 @@
   "webDir": "dist",
   "bundledWebRuntime": false,
   "server": {
-    "androidScheme": "https"
+    "androidScheme": "https",
+    "allowNavigation": ["3.122.179.214:5000", "ngrok-url.io"],
+    "cleartext": true
   }
 }

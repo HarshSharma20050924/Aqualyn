@@ -66,37 +66,46 @@ export const loginOrRegister = async (req: Request, res: Response) => {
                     largeAvatar: avatar || defaultAvatar,
                     dob: dob ? new Date(dob) : null,
                     lastLogin: new Date(),
+                    settings: {}
                 },
             });
             return res.status(201).json({ message: 'User registered successfully', user });
         } else {
-            // Login flow
-            user = await (prisma as any).user.update({
+            // 🟢 IDENTITY GUARD (Non-Destructive Login)
+            // We only update fields if they are EMPTY in the DB or specifically requested.
+            // Never overwrite a set username with null or random data from provider.
+            const updatedUser = await (prisma as any).user.update({
                 where: { firebaseUid: uid },
                 data: {
                     lastLogin: new Date(),
-                    ...(inputUsername && { username: inputUsername }),
-                    ...(displayName && { displayName }),
-                    ...(avatar && { avatar, largeAvatar: avatar }),
+                    // 🔒 LOCK: Only update username if the local one is STILL null
+                    ...((!user.username && inputUsername) && { username: inputUsername }),
+                    // 🔒 LOCK: Only update displayName if local is empty/placeholder
+                    ...((!user.displayName || user.displayName === 'User') && displayName && { displayName }),
+                    // 🔒 LOCK: Only sync avatar if local is a default/placeholder
+                    ...((!user.avatar || user.avatar.includes('dicebear')) && avatar && { avatar, largeAvatar: avatar }),
+                    
                     ...(dob && { dob: new Date(dob) }),
-                    ...(req.body.phone && { phone: req.body.phone }),
-                    ...(req.body.showPhoneTo && { showPhoneTo: req.body.showPhoneTo }),
-                    ...('searchByPhone' in req.body && { searchByPhone: req.body.searchByPhone }),
+                    ...(req.body.phone && !user.phone && { phone: req.body.phone }),
                     ...(req.body.bio !== undefined && { bio: req.body.bio }),
                 },
             });
-            // Just in case it was missing
-        // Final fetch with relations
-        const userWithRelations = await (prisma as any).user.findUnique({
-            where: { id: user.id },
-            include: { 
-                following: true, 
-                followers: true,
-                sentFollowReqs: true,
-                receivedFollowReqs: true
+
+            // Final fetch with optimized relations (Count only what is needed)
+            const userSummary = await (prisma as any).user.findUnique({
+                where: { id: updatedUser.id },
+            select: { 
+                id: true, username: true, displayName: true,
+                avatar: true, largeAvatar: true, bio: true, 
+                email: true, phone: true, dob: true,
+                isPrivate: true, searchByPhone: true,
+                showPhoneTo: true, lastLogin: true,
+                _count: {
+                    select: { followers: true, following: true }
+                }
             },
         });
-        return res.status(200).json({ message: 'User updated successfully', user: userWithRelations });
+        return res.status(200).json({ message: 'User updated successfully', user: userSummary });
         }
     } catch (error) {
         console.error('Login/Register error:', error);
@@ -109,11 +118,15 @@ export const getProfile = async (req: Request, res: Response) => {
         const decodedToken = (req as any).user;
         const user = await (prisma as any).user.findUnique({
             where: { firebaseUid: decodedToken.uid },
-            include: { 
-                following: true, 
-                followers: true,
-                sentFollowReqs: true,
-                receivedFollowReqs: true
+            select: { 
+                id: true, username: true, displayName: true,
+                avatar: true, largeAvatar: true, bio: true, 
+                email: true, phone: true, dob: true,
+                isPrivate: true, searchByPhone: true,
+                showPhoneTo: true, lastLogin: true,
+                _count: {
+                    select: { followers: true, following: true, receivedFollowReqs: true }
+                }
             },
         });
 

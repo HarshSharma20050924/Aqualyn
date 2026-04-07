@@ -1,0 +1,49 @@
+services:
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: aqualyn-production-api
+    restart: always
+    ports:
+      - "5000:5000"
+    environment:
+      - DATABASE_URL=postgresql://aqualyn_user:aqualyn_password@postgres:5432/aqualyn_db?schema=public
+      - REDIS_URL=redis://redis:6379
+      - NODE_ENV=production
+      # - FIREBASE_ADMIN_ENV=... (Add your production Firebase JSON string here)
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - aqualyn-net
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: aqualyn-production-db
+    restart: always
+    environment:
+      POSTGRES_USER: aqualyn_user
+      POSTGRES_PASSWORD: aqualyn_password
+      POSTGRES_DB: aqualyn_db
+    volumes:
+      - postgres_prod_data:/var/lib/postgresql/data
+    networks:
+      - aqualyn-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: aqualyn-production-redis
+    restart: always
+    volumes:
+      - redis_prod_data:/data
+    networks:
+      - aqualyn-net
+
+volumes:
+  postgres_prod_data:
+  redis_prod_data:
+
+networks:
+  aqualyn-net:
+    driver: bridge

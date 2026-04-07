@@ -22,7 +22,14 @@ export const verifyFirebaseToken = async (req: Request, res: Response, next: Nex
     
     try {
         const decodedToken = await admin.auth().verifyIdToken(token);
-        // Bind the uid to the request (so we can use it in the controller)
+        
+        // 1. Check Global Revocation (Distributed-ready)
+        const isRevoked = await (require('../services/AuthService')).AuthService.isRevoked(token);
+        if (isRevoked) {
+            return res.status(401).json({ error: 'Unauthorized: Session revoked' });
+        }
+
+        // 2. Bind the uid to the request (so we can use it in the controller)
         (req as any).user = decodedToken;
         next();
     } catch (error) {

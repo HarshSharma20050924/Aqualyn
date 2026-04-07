@@ -10,54 +10,57 @@ router.use(verifyFirebaseToken);
 router.get('/', async (req: any, res: any) => {
     try {
         const user = await (prisma as any).user.findUnique({
-            where: { firebaseUid: req.user.uid }
+            where: { firebaseUid: req.user.uid },
+            select: { id: true }
         });
         if (!user) return res.status(404).json({ error: 'User not found' });
 
         const chats = await (prisma as any).chat.findMany({
             where: {
-                participants: {
-                    some: { userId: user.id }
-                }
+                participants: { some: { userId: user.id } }
             },
-            include: {
+            select: {
+                id: true, name: true, isGroup: true, isSecret: true,
+                avatar: true, deletedFor: true, updatedAt: true,
+                selfDestructTimer: true,
                 participants: {
-                    include: {
+                    select: {
+                        userId: true,
                         user: {
-                            select: {
-                                id: true,
-                                username: true,
-                                displayName: true,
-                                avatar: true
-                            }
+                            select: { id: true, username: true, displayName: true, avatar: true }
                         }
                     }
                 },
                 messages: {
                     orderBy: { createdAt: 'desc' },
-                    take: 1
+                    take: 1,
+                    select: { text: true, createdAt: true }
                 }
             },
             orderBy: { updatedAt: 'desc' }
         });
 
-        // Filter out chats deleted oleh user
+        // Optimization: Fetch all unread counts in one single query (Avoid N+1)
+        const unreadCounts = await (prisma as any).message.groupBy({
+            by: ['chatId'],
+            where: {
+                chatId: { in: chats.map((c: any) => c.id) },
+                isRead: false,
+                senderId: { not: user.id }
+            },
+            _count: { id: true }
+        });
+
+        const countsMap = new Map(unreadCounts.map((item: any) => [item.chatId, item._count.id]));
+
+        // Filter and Map
         const activeChats = chats.filter((c: any) => {
             const deletedFor = c.deletedFor as any || [];
             return !deletedFor.includes(user.id);
         });
 
-        // Map it to frontend expectations
-        const mappedChats = await Promise.all(activeChats.map(async (c: any) => {
+        const mappedChats = activeChats.map((c: any) => {
             const otherParticipant = c.participants.find((p: any) => p.userId !== user.id);
-            const unreadCount = await (prisma as any).message.count({
-                where: {
-                    chatId: c.id,
-                    isRead: false,
-                    senderId: { not: user.id }
-                }
-            });
-
             return {
                 id: c.id,
                 name: c.name || otherParticipant?.user.displayName || otherParticipant?.user.username || 'User',
@@ -68,15 +71,15 @@ router.get('/', async (req: any, res: any) => {
                     : 'Recent',
                 isGroup: c.isGroup,
                 isSecret: c.isSecret,
-                unreadCount,
+                unreadCount: countsMap.get(c.id) || 0,
                 selfDestructTimer: c.selfDestructTimer,
                 participantIds: c.participants.map((p: any) => p.userId)
             };
-        }));
+        });
 
         res.json(mappedChats);
     } catch (e) {
-        console.error(e);
+        console.error('[ChatRoutes] Failed to fetch chats:', e);
         res.status(500).json({ error: 'Failed to fetch chats' });
     }
 });
@@ -86,14 +89,24 @@ router.get('/:chatId/messages', async (req: any, res: any) => {
     try {
         const { chatId } = req.params;
         const user = await (prisma as any).user.findUnique({
-            where: { firebaseUid: req.user.uid }
+            where: { firebaseUid: req.user.uid },
+            select: { id: true }
         });
         if (!user) return res.status(404).json({ error: 'User not found' });
 
         const messages = await (prisma as any).message.findMany({
             where: { chatId },
             orderBy: { createdAt: 'asc' },
-            take: 100
+            take: 100,
+            select: {
+                id: true, chatId: true, senderId: true, text: true, 
+                imageUrl: true, videoUrl: true, fileUrl: true, 
+                audioUrl: true, document: true, location: true,
+                contact: true, payment: true, schedule: true,
+                wallet: true, replyToId: true, status: true,
+                isEdited: true, isRead: true, reactions: true,
+                deletedFor: true, createdAt: true
+            }
         });
         
         // Filter out deleted messages and Map Prisma messages to frontend type
@@ -109,6 +122,7 @@ router.get('/:chatId/messages', async (req: any, res: any) => {
 
         res.json(mappedMsgs);
     } catch (e) {
+        console.error('[ChatRoutes] Failed to fetch messages:', e);
         res.status(500).json({ error: 'Failed to fetch messages' });
     }
 });

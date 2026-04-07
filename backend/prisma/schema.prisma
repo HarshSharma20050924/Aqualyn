@@ -23,6 +23,7 @@ model User {
   dob           DateTime?
   showBirthday  Boolean   @default(true)
   isPrivate     Boolean   @default(false)
+  settings      Json      @default("{}") // Store theme, notification prefs, privacy toggles
   invitationSettings String @default("everyone") // everyone, mutual, no_one
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -33,10 +34,22 @@ model User {
   following        UserFollows[] @relation("followers")
   sentFollowReqs   FollowRequest[] @relation("sentFollowRequests")
   receivedFollowReqs FollowRequest[] @relation("receivedFollowRequests")
+  
+  posts       Post[]
+  stories     Story[]
+  likes       Like[]
+  comments    Comment[]
+  
   chatParticipants ChatParticipant[]
   messages         Message[]
   notifications    Notification[] @relation("userNotifications")
   actions          Notification[] @relation("actorActions")
+  
+  activities       Activity[]     @relation("userActivity")
+  actorActivities  Activity[]     @relation("actorActivity")
+
+  @@index([firebaseUid])
+  @@index([username])
 }
 
 model UserFollows {
@@ -76,57 +89,151 @@ model Notification {
   actor       User     @relation("actorActions", fields: [actorId], references: [id])
 }
 
+enum GroupRole {
+  MEMBER
+  ADMIN
+  OWNER
+}
+
 model Chat {
-  id        String   @id @default(uuid())
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  name               String?
-  isGroup            Boolean  @default(false)
-  isSecret           Boolean  @default(false)
-  selfDestructTimer  Int?     @default(0)
-  isTempGroup        Boolean  @default(false)
-  originalChatId     String?
-  deletedFor         Json?    @default("[]") // Array of user IDs who deleted this chat
-  
-  participants ChatParticipant[]
-  messages     Message[]
+  id                String            @id @default(uuid())
+  name              String?
+  avatar            String?
+  description       String?
+  isGroup           Boolean           @default(false)
+  isSecret          Boolean           @default(false)
+  selfDestructTimer Int?
+  inviteToken       String?           @unique
+  settings          Json              @default("{}") // e.g {"canMessage": "everyone", "restricted": false}
+  deletedFor        String[]          @default([])
+  updatedAt         DateTime          @updatedAt
+  createdAt         DateTime          @default(now())
+
+  participants      ChatParticipant[]
+  messages          Message[]
 }
 
 model ChatParticipant {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   chatId    String
   userId    String
-  joinedAt  DateTime @default(now())
-  
-  chat      Chat     @relation(fields: [chatId], references: [id])
-  user      User     @relation(fields: [userId], references: [id])
+  role      GroupRole @default(MEMBER)
+  joinedAt  DateTime  @default(now())
+
+  chat      Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([chatId, userId])
 }
 
 model Message {
-  id        String   @id @default(uuid())
-  chatId    String
-  senderId  String
-  text      String? 
-  imageUrl  String? 
-  videoUrl  String?
-  fileUrl   String?
-  audioUrl  String?
-  document  Json?    // { url, name, size }
-  location  Json?    // { lat, lng, address }
-  contact   Json?    // { name, phone, avatar }
-  payment   Json?    // { amount, currency, status }
-  schedule  Json?    // { title, time, location }
-  wallet    Json?    // { asset, amount, address, type }
-  replyToId String?
-  status    String   @default("sent") // sent, delivered, seen
-  isEdited  Boolean  @default(false)
-  isRead    Boolean  @default(false)
-  reactions Json?    @default("{}")
-  deletedFor Json?   @default("[]")
-  createdAt DateTime @default(now())
+  id          String   @id @default(uuid())
+  chatId      String
+  senderId    String
+  text        String?
+  imageUrl    String?
+  videoUrl    String?
+  fileUrl     String?
+  audioUrl    String?
+  document    Json?
+  location    Json?
+  contact     Json?
+  payment     Json?
+  schedule    Json?
+  wallet      Json?
+  gifUrl      String?  // High-definition GIF support
+  sharedPostId String? // ID of the shared post
+  sharedStoryId String? // ID of the shared story
+  isForwarded Boolean  @default(false)
+  isHD        Boolean  @default(false) // Whether to server original or compressed
+  fileName    String?
+  fileSize    Int?     // In bytes
+  mimeType    String?
+  replyToId   String?
+  status      String   @default("sent") // sent, delivered, seen
+  isEdited    Boolean  @default(false)
+  isRead      Boolean  @default(false)
+  reactions   Json?    @default("{}")
+  deletedFor  Json?    @default("[]")
+  createdAt   DateTime @default(now())
   
   chat      Chat     @relation(fields: [chatId], references: [id])
   sender    User     @relation(fields: [senderId], references: [id])
+
+  @@index([chatId, createdAt])
+  @@index([senderId, createdAt])
+}
+
+model Post {
+  id        String   @id @default(uuid())
+  authorId  String
+  content   String?
+  mediaUrl  String?
+  mediaType String?  // 'image', 'video'
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  author    User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  likes     Like[]
+  comments  Comment[]
+
+  @@index([authorId, createdAt(sort: Desc)])
+}
+
+model Story {
+  id        String   @id @default(uuid())
+  userId    String
+  mediaUrl  String
+  mediaType String   // 'image', 'video'
+  content   String?
+  reactions Json     @default("{}") // e.g {"❤️": ["user1"]}
+  hiddenFrom String[] @default([]) // Array of User IDs
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+model Like {
+  id        String   @id @default(uuid())
+  userId    String
+  postId    String
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@index([postId])
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  userId    String
+  postId    String
+  content   String
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId, createdAt])
+}
+
+model Activity {
+  id        String   @id @default(uuid())
+  userId    String   // Recipient
+  actorId   String   // Performer
+  type      String   // 'LIKE', 'COMMENT', 'FOLLOW', 'MENTION'
+  postId    String?
+  storyId   String?
+  text      String?  // Context
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user      User     @relation("userActivity", fields: [userId], references: [id], onDelete: Cascade)
+  actor     User     @relation("actorActivity", fields: [actorId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
 }
