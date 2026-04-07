@@ -11,7 +11,8 @@ services:
       - DATABASE_URL=postgresql://aqualyn_user:aqualyn_password@postgres:5432/aqualyn_db?schema=public
       - REDIS_URL=redis://redis:6379
       - NODE_ENV=production
-      # - FIREBASE_ADMIN_ENV=... (Add your production Firebase JSON string here)
+      - PORT=5000
+      - FIREBASE_SERVICE_ACCOUNT=${FIREBASE_SERVICE_ACCOUNT}
     depends_on:
       - postgres
       - redis
