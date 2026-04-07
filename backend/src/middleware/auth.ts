@@ -8,6 +8,7 @@ export const verifyFirebaseToken = async (req: Request, res: Response, next: Nex
     }
 
     const token = authHeader.split('Bearer ')[1];
+    console.log(`[Auth] Inbound Token: ${token?.substring(0, 15)}...`);
     
     // DEVELOPMENT MOCK BYPASS
     if (token.startsWith('MOCK_TOKEN_')) {
@@ -32,8 +33,8 @@ export const verifyFirebaseToken = async (req: Request, res: Response, next: Nex
         // 2. Bind the uid to the request (so we can use it in the controller)
         (req as any).user = decodedToken;
         next();
-    } catch (error) {
-        console.error('Firebase token verification failed:', error);
-        return res.status(401).json({ error: 'Unauthorized: Token verification failed' });
+    } catch (error: any) {
+        console.error('[Auth] Firebase token verification failed:', error.message || error);
+        return res.status(401).json({ error: 'Unauthorized: Token verification failed', details: error.message });
     }
 };

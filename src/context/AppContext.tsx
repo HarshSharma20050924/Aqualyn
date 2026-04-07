@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, ReactNode, useEffect, useRe
 import { User, Chat, Message, Folder, ThemeSettings, Post, Collection } from '../types';
 import { io, Socket } from 'socket.io-client';
 import { auth } from '../config/firebase';
+import { API_BASE_URL, ENDPOINTS } from '../config/api';
 
 export type ToastType = 'success' | 'error' | 'info';
 export interface Toast {
@@ -176,7 +177,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (user || mockToken) {
             try {
                 const idToken = user ? await user.getIdToken() : mockToken;
-                const res = await fetch('http://localhost:5000/api/auth/sync', {
+                const res = await fetch(ENDPOINTS.AUTH_SYNC, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -199,7 +200,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                     setCurrentUser(mappedUser);
 
                     // Fetch initial notifications
-                    const nRes = await fetch('http://localhost:5000/api/user/notifications', {
+                    const nRes = await fetch(ENDPOINTS.NOTIFICATIONS, {
                         headers: { 'Authorization': `Bearer ${idToken}` }
                     });
                     if (nRes.ok) {
@@ -208,7 +209,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                     }
 
                     // Fetch initial chats
-                    const cRes = await fetch('http://localhost:5000/api/chats', {
+                    const cRes = await fetch(ENDPOINTS.CHATS, {
                         headers: { 'Authorization': `Bearer ${idToken}` }
                     });
                     if (cRes.ok) {
@@ -229,7 +230,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (currentUser) {
-      const newSocket = io('http://localhost:5000');
+      const newSocket = io(API_BASE_URL);
       
       newSocket.on('connect', () => {
          console.log('Socket Connected');

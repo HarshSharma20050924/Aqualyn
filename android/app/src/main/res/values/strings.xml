@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Aqualyn</string>
+    <string name="title_activity_main">Aqualyn</string>
+    <string name="package_name">app.aqualyn.social</string>
+    <string name="custom_url_scheme">app.aqualyn.social</string>
+</resources>

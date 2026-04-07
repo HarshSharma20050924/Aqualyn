@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { ArrowLeft, MessageCircle, Phone, Video, Info, Bell, Ban, Trash2, Lock, ShieldCheck, UserPlus, UserCheck, Clock, Grid, PlayCircle } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { auth } from '../config/firebase';
+import { ENDPOINTS } from '../config/api';
 
 export default function ContactProfileScreen({ onBack, onNavigate }: { onBack: () => void, onNavigate: (s: string) => void }) {
   const { contacts, activeContactId, startChatWithContact, addToast, chats, setChats, currentUser, blockContact, reportContact, muteChat, followUser, unfollowUser, posts, globalUsers, setGlobalUsers } = useAppContext();
@@ -24,7 +25,7 @@ export default function ContactProfileScreen({ onBack, onNavigate }: { onBack: (
       const fetchUser = async () => {
         try {
           const idToken = await auth.currentUser?.getIdToken();
-          const res = await fetch(`http://localhost:5000/api/user/profile/${activeContactId}`, {
+          const res = await fetch(ENDPOINTS.USER_PROFILE(activeContactId), {
             headers: { 'Authorization': `Bearer ${idToken}` }
           });
           if (res.ok) {

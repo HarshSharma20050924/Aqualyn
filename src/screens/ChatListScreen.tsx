@@ -4,6 +4,7 @@ import { Search, Pin, Users, CheckCheck, Mic, UserPlus, Lock, Pen, Bot, Globe, M
 import { useAppContext } from '../context/AppContext';
 import NewChatModal from '../components/chat/NewChatModal';
 import NewFolderModal from '../components/modals/NewFolderModal';
+import { ENDPOINTS } from '../config/api';
 import { ChatPeekPreview } from '../components/chat/ChatPeekPreview';
 import DeleteChatDialog from '../components/chat/DeleteChatDialog';
 
@@ -32,7 +33,7 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
   React.useEffect(() => {
     if (searchQuery && isSearching) {
       const timer = setTimeout(() => {
-        fetch(`http://localhost:5000/api/users/search?q=${encodeURIComponent(searchQuery)}`)
+        fetch(ENDPOINTS.USER_SEARCH(searchQuery))
           .then(res => res.json())
           .then(data => {
             setGlobalSearchResults(data);

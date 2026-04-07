@@ -17,6 +17,7 @@ import { auth, googleProvider, setupRecaptcha } from '../config/firebase';
 import { signInWithPhoneNumber, signInWithPopup, ConfirmationResult, signInWithEmailLink, sendSignInLinkToEmail, isSignInWithEmailLink } from 'firebase/auth';
 import { User } from '../types';
 import { useAppContext } from '../context/AppContext';
+import { ENDPOINTS } from '../config/api';
 
 export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
   const { setCurrentUser } = useAppContext() || { setCurrentUser: () => {} };
@@ -131,7 +132,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
         localStorage.removeItem('mock_auth_token'); // Clear it if using real auth
       }
       
-      const res = await fetch('http://localhost:5000/api/auth/sync', {
+      const res = await fetch(ENDPOINTS.AUTH_SYNC, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -162,7 +163,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
       
       // Auto-sync to check if profile is complete
       const idToken = await user.getIdToken();
-      const res = await fetch('http://localhost:5000/api/auth/sync', {
+      const res = await fetch(ENDPOINTS.AUTH_SYNC, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

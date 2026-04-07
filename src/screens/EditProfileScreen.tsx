@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, Save, Camera, ChevronDown } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
+import { ENDPOINTS } from '../config/api';
 
 export default function EditProfileScreen({ onBack }: { onBack: () => void }) {
   const { currentUser, setCurrentUser, addToast } = useAppContext();
@@ -46,7 +47,7 @@ export default function EditProfileScreen({ onBack }: { onBack: () => void }) {
     try {
       const { auth } = await import('../config/firebase');
       const idToken = await auth.currentUser?.getIdToken();
-      const res = await fetch('http://localhost:5000/api/auth/sync', {
+      const res = await fetch(ENDPOINTS.AUTH_SYNC, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

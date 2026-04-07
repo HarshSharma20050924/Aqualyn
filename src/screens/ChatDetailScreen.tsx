@@ -4,6 +4,7 @@ import { ArrowLeft, Video, Phone, MoreVertical, Plus, Smile, Mic, CheckCheck, Us
 import { useAppContext } from '../context/AppContext';
 import { auth } from '../config/firebase';
 import { Message } from '../types';
+import { ENDPOINTS } from '../config/api';
 import MediaAttachmentPicker from '../components/chat/MediaAttachmentPicker';
 import AudioRecorderUI from '../components/chat/AudioRecorderUI';
 import CameraUI from '../components/chat/CameraUI';
@@ -67,7 +68,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
         const fetchHistory = async () => {
             try {
                 const idToken = await (auth.currentUser ? auth.currentUser.getIdToken() : localStorage.getItem('mock_auth_token'));
-                const res = await fetch(`http://localhost:5000/api/chats/${activeChatId}/messages`, {
+                const res = await fetch(ENDPOINTS.CHAT_MESSAGES(activeChatId), {
                     headers: { 'Authorization': `Bearer ${idToken}` }
                 });
                 if (res.ok) {
