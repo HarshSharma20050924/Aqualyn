@@ -132,12 +132,22 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
         localStorage.setItem('mock_auth_token', idToken);
         localStorage.setItem('mock_auth_active', 'true');
       } else {
-        idToken = await auth.currentUser?.getIdToken() || '';
+        // RETRY LOOP: Firebase state can take a few ms to populate currentUser
+        let retries = 5;
+        while (retries > 0) {
+          idToken = await auth.currentUser?.getIdToken() || '';
+          if (idToken) break;
+          await new Promise(r => setTimeout(r, 400));
+          retries--;
+        }
         localStorage.removeItem('mock_auth_token');
         localStorage.removeItem('mock_auth_active');
       }
       
       if (!idToken) throw new Error('Client Error: No Identity Token found. Please log in again.');
+      
+      // DEBUG: Show what URL and Token we are hitting
+      alert(`Connecting to: ${ENDPOINTS.AUTH_SYNC}\nToken: ${idToken.substring(0, 20)}...`);
       
       const res = await fetch(ENDPOINTS.AUTH_SYNC, {
         method: 'POST',
@@ -149,7 +159,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
       });
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || errData.details || 'Failed to sync profile');
+        throw new Error(`Sync Error: ${res.status} | ${errData.error || errData.details || 'Unknown server error'}`);
       }
       const resData = await res.json();
       setCurrentUser(resData.user);
