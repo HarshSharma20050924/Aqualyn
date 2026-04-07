@@ -2,8 +2,10 @@ import { Request, Response, NextFunction } from 'express';
 import admin from '../config/firebaseAdmin';
 
 export const verifyFirebaseToken = async (req: Request, res: Response, next: NextFunction) => {
+    console.log(`[Auth] Inbound Request: ${req.method} ${req.path}`);
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        console.warn('[Auth] Missing or invalid Authorization header | Headers:', JSON.stringify(req.headers));
         return res.status(401).json({ error: 'Unauthorized: Missing or invalid token' });
     }
 

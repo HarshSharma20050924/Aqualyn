@@ -28,7 +28,11 @@ io.adapter(createAdapter(pubClient, subClient));
 // Initialize our clean SocketService
 SocketService.init(io);
 
-app.use(cors());
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+}));
 app.use(express.json());
 
 // Users Search API
