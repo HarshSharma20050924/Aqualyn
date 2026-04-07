@@ -3,13 +3,17 @@ import admin from '../config/firebaseAdmin';
 
 export const verifyFirebaseToken = async (req: Request, res: Response, next: NextFunction) => {
     console.log(`[Auth] Inbound Request: ${req.method} ${req.path}`);
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    
+    // CASE-INSENSITIVE HEADER SEARCH
+    const authHeader = req.headers.authorization || (req.headers as any).Authorization;
+    
+    if (!authHeader || !authHeader.toLowerCase().startsWith('bearer ')) {
         console.warn('[Auth] Missing or invalid Authorization header | Headers:', JSON.stringify(req.headers));
         return res.status(401).json({ error: 'Unauthorized: Missing or invalid token' });
     }
 
-    const token = authHeader.split('Bearer ')[1];
+    // CASE-INSENSITIVE SPLIT
+    const token = authHeader.split(/bearer /i)[1];
     console.log(`[Auth] Inbound Token: ${token?.substring(0, 15)}...`);
     
     // DEVELOPMENT MOCK BYPASS
