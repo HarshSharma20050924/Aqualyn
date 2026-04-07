@@ -30,7 +30,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
   const [isCountryDropdownOpen, setIsCountryDropdownOpen] = useState(false);
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
-  const [isEmailMock, setIsEmailMock] = useState(false);
+  const [isEmailMock, setIsEmailMock] = useState(() => localStorage.getItem('mock_auth_active') === 'true');
   
   // OTP Timer
   const [resendTimer, setResendTimer] = useState(30);
@@ -72,9 +72,12 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
         const confirmation = await signInWithPhoneNumber(auth, fullPhone, appVerifier);
         setConfirmationResult(confirmation);
         setIsEmailMock(false);
+        localStorage.removeItem('mock_auth_active');
       } else {
         // Email mock login
         setIsEmailMock(true);
+        localStorage.setItem('mock_auth_active', 'true');
+        localStorage.setItem('mock_auth_token', `MOCK_TOKEN_${email}`);
       }
       setStep('otp');
       setResendTimer(30);
@@ -125,12 +128,16 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
       localStorage.removeItem('aqualyn_logged_out');
       let idToken = '';
       if (isEmailMock) {
-        idToken = `MOCK_TOKEN_${email}`;
+        idToken = localStorage.getItem('mock_auth_token') || `MOCK_TOKEN_${email}`;
         localStorage.setItem('mock_auth_token', idToken);
+        localStorage.setItem('mock_auth_active', 'true');
       } else {
         idToken = await auth.currentUser?.getIdToken() || '';
-        localStorage.removeItem('mock_auth_token'); // Clear it if using real auth
+        localStorage.removeItem('mock_auth_token');
+        localStorage.removeItem('mock_auth_active');
       }
+      
+      if (!idToken) throw new Error('Client Error: No Identity Token found. Please log in again.');
       
       const res = await fetch(ENDPOINTS.AUTH_SYNC, {
         method: 'POST',
@@ -140,13 +147,16 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
         },
         body: JSON.stringify(data)
       });
-      if (!res.ok) throw new Error('Failed to sync profile');
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || errData.details || 'Failed to sync profile');
+      }
       const resData = await res.json();
       setCurrentUser(resData.user);
       onLogin(); 
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      alert('Failed to sync with server');
+      alert(`Sync Failed: ${error.message || 'Server error'}`);
     }
   };
 

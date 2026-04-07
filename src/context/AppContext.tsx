@@ -177,6 +177,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (user || mockToken) {
             try {
                 const idToken = user ? await user.getIdToken() : mockToken;
+                if (!idToken) {
+                    setIsLoading(false);
+                    return;
+                }
                 const res = await fetch(ENDPOINTS.AUTH_SYNC, {
                     method: 'POST',
                     headers: {
