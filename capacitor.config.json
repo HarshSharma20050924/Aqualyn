@@ -5,7 +5,7 @@
   "bundledWebRuntime": false,
   "server": {
     "androidScheme": "http",
-    "allowNavigation": ["3.122.179.214:5000", "ngrok-url.io"],
+    "allowNavigation": ["3.122.179.214", "ngrok-url.io"],
     "cleartext": true
   }
 }

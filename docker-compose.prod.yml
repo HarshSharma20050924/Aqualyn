@@ -6,7 +6,7 @@ services:
     container_name: aqualyn-production-api
     restart: always
     ports:
-      - "5000:5000"
+      - "80:5000"
     environment:
       - DATABASE_URL=postgresql://aqualyn_user:aqualyn_password@postgres:5432/aqualyn_db?schema=public
       - REDIS_URL=redis://redis:6379
