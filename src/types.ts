@@ -8,6 +8,7 @@ export interface Post {
   mediaUrl?: string;
   mediaType?: 'image' | 'video';
   caption: string;
+  text?: string;
   likes: string[];
   comments: { id: string; userId: string; userName: string; userAvatar: string; text: string; timestamp: string }[];
   timestamp: string;
@@ -67,6 +68,7 @@ export interface Story {
   isCloseFriends?: boolean;
   stickers?: any[];
   viewers?: string[];
+  content?: string;
 }
 
 export interface Notification {
@@ -79,6 +81,11 @@ export interface Notification {
   isRead: boolean;
   createdAt: string;
   actor?: Partial<User>;
+  // Support for older frontend code
+  sourceUserId?: string;
+  sourceUserName?: string;
+  sourceUserAvatar?: string;
+  read?: boolean;
 }
 
 export interface Message {

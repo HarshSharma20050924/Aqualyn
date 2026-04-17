@@ -8,7 +8,7 @@ import SettingsScreen from './screens/SettingsScreen';
 import ContactsScreen from './screens/ContactsScreen';
 import EditProfileScreen from './screens/EditProfileScreen';
 import ContactProfileScreen from './screens/ContactProfileScreen';
-import StoriesScreen from './screens/StoriesScreen';
+import DiscoveryScreen from './screens/DiscoveryScreen';
 import NotificationsScreen from './screens/NotificationsScreen';
 import BottomNav from './components/BottomNav';
 import ToastContainer from './components/ui/ToastContainer';
@@ -82,7 +82,7 @@ export default function App() {
             {currentScreen === 'contacts' && <ContactsScreen key="contacts" onNavigate={setCurrentScreen} />}
             {currentScreen === 'edit-profile' && <EditProfileScreen key="edit-profile" onBack={() => setCurrentScreen('profile')} />}
             {currentScreen === 'contact-profile' && <ContactProfileScreen key="contact-profile" onBack={() => setCurrentScreen('chats')} onNavigate={setCurrentScreen} />}
-            {currentScreen === 'stories' && <StoriesScreen key="stories" onBack={() => setCurrentScreen('chats')} onNavigate={setCurrentScreen} />}
+            {currentScreen === 'discovery' && <DiscoveryScreen key="discovery" onBack={() => setCurrentScreen('chats')} onNavigate={setCurrentScreen} />}
             {currentScreen === 'notifications' && <NotificationsScreen key="notifications" onBack={() => setCurrentScreen('chats')} />}
           </AnimatePresence>
           

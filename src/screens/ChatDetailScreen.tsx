@@ -16,7 +16,7 @@ import SecretChatInfoScreen from './SecretChatInfoScreen';
 import ShareContactModal from '../components/chat/ShareContactModal';
 
 export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () => void, onNavigate: (s: string) => void }) {
-  const { messages, setMessages, sendMessage, editMessage, deleteMessage, currentUser, chats, activeChatId, addToast, setActiveChatId, setActiveContactId, contacts, globalUsers, followUser, typingUsers, setTyping, markAsRead } = useAppContext();
+  const { messages, setMessages, sendMessage, editMessage, deleteMessage, currentUser, chats, activeChatId, addToast, setActiveChatId, setActiveContactId, contacts, globalUsers, followUser, typingUsers, setTyping, markAsRead, getToken } = useAppContext();
   const [text, setText] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -62,12 +62,13 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
     }
   }, [activeChatId, chatMessages.length]);
 
-  // Fetch messages if they don't exist for this chat
   useEffect(() => {
     if (activeChatId && (!messages[activeChatId] || messages[activeChatId].length === 0)) {
         const fetchHistory = async () => {
             try {
-                const idToken = await (auth.currentUser ? auth.currentUser.getIdToken() : localStorage.getItem('mock_auth_token'));
+                const idToken = await getToken();
+                if (!idToken) return;
+
                 const res = await fetch(ENDPOINTS.CHAT_MESSAGES(activeChatId), {
                     headers: { 'Authorization': `Bearer ${idToken}` }
                 });
@@ -81,7 +82,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
         };
         fetchHistory();
     }
-  }, [activeChatId, messages, setMessages]);
+  }, [activeChatId, messages, setMessages, getToken]);
 
   useEffect(() => {
     if (!activeChatId) return;
@@ -281,7 +282,8 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
               if (chat.isGroup) setIsGroupInfoOpen(true);
               else if (chat.isSecret) setIsSecretInfoOpen(true);
               else {
-                setActiveContactId(chat.id);
+                const effectiveTargetId = targetUserId || chat.participantIds?.find(id => id !== currentUser?.id) || chat.id;
+                setActiveContactId(effectiveTargetId);
                 onNavigate('contact-profile');
               }
             }}>
@@ -298,8 +300,8 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
               if (chat.isGroup) setIsGroupInfoOpen(true);
               else if (chat.isSecret) setIsSecretInfoOpen(true);
               else {
-                const targetId = chat.participantIds?.find(id => id !== currentUser?.id) || chat.id;
-                setActiveContactId(targetId);
+                const effectiveTargetId = targetUserId || chat.participantIds?.find(id => id !== currentUser?.id) || chat.id;
+                setActiveContactId(effectiveTargetId);
                 onNavigate('contact-profile');
               }
             }}>

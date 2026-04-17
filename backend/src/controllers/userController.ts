@@ -125,7 +125,7 @@ export const unfollowUser = async (req: Request, res: Response) => {
 export const handleFollowRequest = async (req: Request, res: Response) => {
     try {
         const decodedToken = (req as any).user;
-        const { requestId, action } = req.body; // action: 'accept' or 'reject'
+        const { requestId, senderId, action } = req.body; // action: 'accept' or 'reject'
 
         const currentUser = await prisma.user.findUnique({
             where: { firebaseUid: decodedToken.uid }
@@ -133,9 +133,20 @@ export const handleFollowRequest = async (req: Request, res: Response) => {
 
         if (!currentUser) return res.status(404).json({ error: 'User not found' });
 
-        const request = await (prisma as any).followRequest.findUnique({
-            where: { id: requestId }
-        });
+        let request;
+        if (requestId) {
+            request = await (prisma as any).followRequest.findUnique({
+                where: { id: requestId }
+            });
+        } else if (senderId) {
+            request = await (prisma as any).followRequest.findFirst({
+                where: { 
+                    senderId: senderId, 
+                    receiverId: currentUser.id,
+                    status: 'pending'
+                }
+            });
+        }
 
         if (!request || request.receiverId !== currentUser.id) {
             return res.status(404).json({ error: 'Follow request not found' });

@@ -8,7 +8,7 @@ import PostCreator from '../components/posts/PostCreator';
 import PostViewer from '../components/posts/PostViewer';
 
 export default function ProfileScreen({ onNavigate }: { onNavigate: (s: string) => void }) {
-  const { currentUser, posts, createCollection } = useAppContext();
+  const { currentUser, posts, createCollection, stories } = useAppContext();
   const [isCreatorOpen, setIsCreatorOpen] = useState(false);
   const [isPostCreatorOpen, setIsPostCreatorOpen] = useState(false);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
@@ -95,13 +95,18 @@ export default function ProfileScreen({ onNavigate }: { onNavigate: (s: string) 
               </div>
               <span className="font-semibold text-sm">Add Story</span>
             </div>
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="min-w-[120px] h-[180px] rounded-3xl overflow-hidden relative group cursor-pointer snap-start shadow-sm">
-                <img src={`https://images.unsplash.com/photo-1558655146-d09347e92766?auto=format&fit=crop&q=80&w=300&h=450&sig=${i}`} alt="Story" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+            {stories.filter(s => s.userId === currentUser.id).map((story) => (
+              <div key={story.id} className="min-w-[120px] h-[180px] rounded-3xl overflow-hidden relative group cursor-pointer snap-start shadow-sm">
+                <img src={story.mediaUrl} alt="Story" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
-                <span className="absolute bottom-3 left-3 text-white font-medium text-xs">2h ago</span>
+                <span className="absolute bottom-3 left-3 text-white font-medium text-xs">Recently</span>
               </div>
             ))}
+            {stories.filter(s => s.userId === currentUser.id).length === 0 && (
+              <div className="min-w-[120px] h-[180px] rounded-3xl border-2 border-dashed border-outline-variant/10 flex items-center justify-center text-on-surface-variant text-[10px] font-bold uppercase tracking-widest text-center px-4">
+                No active stories
+              </div>
+            )}
           </div>
         </section>
 

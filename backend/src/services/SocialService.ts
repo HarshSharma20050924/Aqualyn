@@ -57,6 +57,18 @@ export class SocialService {
                 author: {
                     select: { id: true, username: true, displayName: true, avatar: true }
                 },
+                likes: {
+                    select: { userId: true }
+                },
+                comments: {
+                    include: {
+                        user: {
+                            select: { id: true, username: true, displayName: true, avatar: true }
+                        }
+                    },
+                    orderBy: { createdAt: 'asc' },
+                    take: 5
+                },
                 _count: {
                     select: { likes: true, comments: true }
                 }
@@ -135,5 +147,77 @@ export class SocialService {
                 }
             }
         });
+    }
+
+    /**
+     * Like or unlike a post.
+     */
+    static async toggleLike(userId: string, postId: string) {
+        const existingLike = await (prisma as any).like.findUnique({
+            where: { userId_postId: { userId, postId } }
+        });
+
+        if (existingLike) {
+            await (prisma as any).like.delete({
+                where: { id: existingLike.id }
+            });
+            return { liked: false };
+        } else {
+            const like = await (prisma as any).like.create({
+                data: { userId, postId }
+            });
+
+            // Trigger activity notification
+            const post = await (prisma as any).post.findUnique({
+                where: { id: postId },
+                select: { authorId: true }
+            });
+            
+            if (post && post.authorId !== userId) {
+                const { ActivityService } = require('./ActivityService');
+                ActivityService.createActivity({
+                    userId: post.authorId,
+                    actorId: userId,
+                    type: 'LIKE',
+                    postId,
+                    text: 'liked your post'
+                }).catch(() => {});
+            }
+
+            return { liked: true, like };
+        }
+    }
+
+    /**
+     * Add a comment to a post.
+     */
+    static async addComment(userId: string, postId: string, content: string) {
+        const comment = await (prisma as any).comment.create({
+            data: { userId, postId, content },
+            include: {
+                user: {
+                    select: { id: true, username: true, displayName: true, avatar: true }
+                }
+            }
+        });
+
+        // Trigger activity notification
+        const post = await (prisma as any).post.findUnique({
+            where: { id: postId },
+            select: { authorId: true }
+        });
+
+        if (post && post.authorId !== userId) {
+            const { ActivityService } = require('./ActivityService');
+            ActivityService.createActivity({
+                userId: post.authorId,
+                actorId: userId,
+                type: 'COMMENT',
+                postId,
+                text: 'commented: ' + (content.length > 20 ? content.substring(0, 17) + '...' : content)
+            }).catch(() => {});
+        }
+
+        return comment;
     }
 }

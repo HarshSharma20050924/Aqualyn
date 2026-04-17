@@ -6,48 +6,68 @@ import { auth } from '../config/firebase';
 import { ENDPOINTS } from '../config/api';
 
 export default function ContactProfileScreen({ onBack, onNavigate }: { onBack: () => void, onNavigate: (s: string) => void }) {
-  const { contacts, activeContactId, startChatWithContact, addToast, chats, setChats, currentUser, blockContact, reportContact, muteChat, followUser, unfollowUser, posts, globalUsers, setGlobalUsers } = useAppContext();
+  const { contacts, activeContactId, startChatWithContact, addToast, chats, setChats, currentUser, blockContact, reportContact, muteChat, followUser, unfollowUser, posts, globalUsers, setGlobalUsers, getToken } = useAppContext();
   const [requestSent, setRequestSent] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState<'posts' | 'highlights'>('posts');
   
-  // Look in globalUsers first (from search results), then contacts
-  const contact = globalUsers.find(c => c.id === activeContactId) || contacts.find(c => c.id === activeContactId);
+  // Look in globalUsers first, then contacts, and finally currentUser (for self-profile view)
+  const contact = globalUsers.find(c => c.id === activeContactId) || 
+                  contacts.find(c => c.id === activeContactId) ||
+                  (currentUser?.id === activeContactId ? currentUser : null);
+
   const chat = chats.find(c => c.id === activeContactId || c.participantIds?.includes(activeContactId || ''));
   const isBlocked = currentUser?.blockedUsers?.includes(activeContactId || '');
   
-  // Follow/request state - check in globalUsers (most updated) and currentUser
+  // Follow/request state
   const isFollowing = currentUser?.following?.includes(activeContactId || '');
   const isRequested = contact?.receivedFollowReqs?.some((r: any) => r.senderId === currentUser?.id);
 
   // Fetch user if missing
   React.useEffect(() => {
-    if (activeContactId && !globalUsers.find(u => u.id === activeContactId) && !contacts.find(u => u.id === activeContactId)) {
+    if (activeContactId && !contact) {
       const fetchUser = async () => {
         try {
-          const idToken = await auth.currentUser?.getIdToken();
+          const idToken = await getToken();
+          if (!idToken) return;
+
           const res = await fetch(ENDPOINTS.USER_PROFILE(activeContactId), {
             headers: { 'Authorization': `Bearer ${idToken}` }
           });
+          
           if (res.ok) {
             const data = await res.json();
-            setGlobalUsers(prev => [...prev, data]);
+            setGlobalUsers(prev => {
+              if (prev.some(u => u.id === data.id)) return prev;
+              return [...prev, data];
+            });
           }
         } catch (e) {
-          console.error("Failed to fetch contact:", e);
+          console.error("[ContactProfile] Critical fetch error:", e);
         }
       };
-      fetchUser();
+      
+      const timer = setTimeout(fetchUser, 100);
+      return () => clearTimeout(timer);
     }
-  }, [activeContactId, globalUsers, contacts, setGlobalUsers]);
+  }, [activeContactId, contact, setGlobalUsers]);
   
   if (!contact) {
     return (
       <div className="min-h-screen bg-surface flex flex-col items-center justify-center gap-4">
-        <div className="w-20 h-20 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant">
-          <UserPlus className="w-10 h-10" />
-        </div>
-        <p className="text-on-surface-variant font-medium">User not found</p>
-        <button onClick={onBack} className="px-6 py-3 bg-secondary text-white rounded-2xl font-bold">Go Back</button>
+        {activeContactId ? (
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+            <p className="text-on-surface-variant font-bold tracking-widest uppercase text-xs">Fetching Identity...</p>
+          </div>
+        ) : (
+          <>
+            <div className="w-20 h-20 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant">
+              <UserPlus className="w-10 h-10" />
+            </div>
+            <p className="text-on-surface-variant font-medium">User not found</p>
+            <button onClick={onBack} className="px-6 py-3 bg-secondary text-white rounded-2xl font-bold">Go Back</button>
+          </>
+        )}
       </div>
     );
   }
@@ -221,19 +241,7 @@ export default function ContactProfileScreen({ onBack, onNavigate }: { onBack: (
           </div>
         ) : (
           <>
-            {/* Highlights Mock */}
-            <div className="flex gap-4 overflow-x-auto py-4 scrollbar-hide">
-              {[1, 2, 3].map(i => (
-                <div key={i} className="flex flex-col items-center gap-2 shrink-0">
-                  <div className="w-16 h-16 rounded-full p-0.5 border-2 border-surface-container-highest">
-                    <div className="w-full h-full rounded-full bg-surface-container flex items-center justify-center overflow-hidden">
-                      <img src={`https://picsum.photos/seed/highlight${i}/200`} className="w-full h-full object-cover" />
-                    </div>
-                  </div>
-                  <span className="text-[10px] font-bold text-on-surface-variant">Highlight {i}</span>
-                </div>
-              ))}
-            </div>
+            {/* Highlights Placeholder removed (as requested by user to remove mocks) */}
 
             {/* Tabs */}
             <div className="flex border-b border-surface-container">

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect, useRef } from 'react';
-import { User, Chat, Message, Folder, ThemeSettings, Post, Collection } from '../types';
+import { User, Chat, Message, Folder, ThemeSettings, Post, Collection, Story, Notification } from '../types';
 import { io, Socket } from 'socket.io-client';
 import { auth } from '../config/firebase';
 import { API_BASE_URL, ENDPOINTS } from '../config/api';
@@ -85,46 +85,10 @@ interface AppContextType {
   addPostToCollection: (postId: string, collectionId: string) => void;
   updateStorySettings: (settings: Partial<User['storySettings']>) => void;
   toggleCloseFriend: (userId: string) => void;
+  getToken: () => Promise<string | null>;
 }
 
-export interface Notification {
-  id: string;
-  userId: string;
-  type: 'like' | 'comment' | 'follow' | 'follow_request' | 'story_like' | 'chat_invitation';
-  sourceUserId: string;
-  sourceUserName: string;
-  sourceUserAvatar: string;
-  targetId?: string; // postId, storyId, etc.
-  text?: string;
-  timestamp: string;
-  read: boolean;
-}
 
-export interface Story {
-  id: string;
-  userId: string;
-  userName: string;
-  userAvatar: string;
-  mediaUrl: string;
-  mediaType: 'image' | 'video';
-  timestamp: string;
-  expiresAt: string;
-  views: number;
-  reactions: Record<string, number>;
-  isCloseFriends?: boolean;
-  stickers?: any[];
-  music?: { title: string; artist: string; url: string };
-}
-
-export interface StoryComment {
-  id: string;
-  storyId: string;
-  userId: string;
-  userName: string;
-  userAvatar: string;
-  text: string;
-  timestamp: string;
-}
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
@@ -158,78 +122,118 @@ export function AppProvider({ children }: { children: ReactNode }) {
     currentUserRef.current = currentUser;
   }, [activeChatId, currentUser]);
 
-  useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged(async (user: any) => {
-        const mockToken = localStorage.getItem('mock_auth_token');
-        const hasLoggedOut = localStorage.getItem('aqualyn_logged_out') === 'true';
+  // 🛡️ TOKEN MANAGEMENT: Centralized & Reliable
+  const getToken = async (): Promise<string | null> => {
+    try {
+      const user = auth.currentUser;
+      return user ? await user.getIdToken() : null;
+    } catch (e) {
+      console.error("[Auth] Token retrieval failed:", e);
+      return null;
+    }
+  };
 
-        // If user explicitly logged out, do NOT auto-restore the session
-        if (hasLoggedOut) {
-            if (user) {
-                // Force Firebase to sign out too so state is clean
-                await auth.signOut();
+  useEffect(() => {
+    let isMounted = true;
+    const unsubscribe = auth.onAuthStateChanged(async (firebaseUser: any) => {
+
+        // 1. GUEST/OUT STATE
+        if (!firebaseUser) {
+            if (isMounted) {
+                setCurrentUser(null);
+                setIsLoading(false);
             }
-            setCurrentUser(null);
-            setIsLoading(false);
             return;
         }
 
-        if (user || mockToken) {
-            try {
-                const idToken = user ? await user.getIdToken() : mockToken;
-                if (!idToken) {
-                    setIsLoading(false);
-                    return;
-                }
-                const res = await fetch(ENDPOINTS.AUTH_SYNC, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${idToken}`
-                    },
-                    body: JSON.stringify({})
-                });
-                if (res.ok) {
-                    const data = await res.json();
-                    
-                    // Map database structure to frontend expectations
-                    const mappedUser = {
-                        ...data.user,
-                        following: data.user.following?.map((f: any) => f.followingId) || [],
-                        followers: data.user.followers?.map((f: any) => f.followerId) || [],
-                        sentFollowReqs: data.user.sentFollowReqs || [],
-                        receivedFollowReqs: data.user.receivedFollowReqs || [],
-                    };
-                    
-                    setCurrentUser(mappedUser);
-
-                    // Fetch initial notifications
-                    const nRes = await fetch(ENDPOINTS.NOTIFICATIONS, {
-                        headers: { 'Authorization': `Bearer ${idToken}` }
-                    });
-                    if (nRes.ok) {
-                        const nData = await nRes.json();
-                        if (Array.isArray(nData)) setNotifications(nData);
-                    }
-
-                    // Fetch initial chats
-                    const cRes = await fetch(ENDPOINTS.CHATS, {
-                        headers: { 'Authorization': `Bearer ${idToken}` }
-                    });
-                    if (cRes.ok) {
-                        const cData = await cRes.json();
-                        if (Array.isArray(cData)) setChats(cData);
-                    }
-                }
-            } catch (e) {
-                console.error("Auth sync error:", e);
+        // 2. AUTH SYNC LOOP
+        try {
+            const idToken = await firebaseUser.getIdToken();
+            if (!idToken) {
+                if (isMounted) setIsLoading(false);
+                return;
             }
-        } else {
-            setCurrentUser(null);
+
+            const res = await fetch(ENDPOINTS.AUTH_SYNC, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${idToken}`
+                },
+                body: JSON.stringify({})
+            });
+
+            if (res.ok && isMounted) {
+                const data = await res.json();
+                const syncedUser = data.user;
+                
+                const mappedUser = {
+                    ...syncedUser,
+                    following: syncedUser.following?.map((f: any) => f.followingId) || [],
+                    followers: syncedUser.followers?.map((f: any) => f.followerId) || [],
+                };
+                
+                setCurrentUser(mappedUser);
+
+                // Parallel Bootstrapping
+                const headers = { 'Authorization': `Bearer ${idToken}` };
+                const [notifRes, chatsRes, feedRes, storyRes] = await Promise.all([
+                    fetch(ENDPOINTS.NOTIFICATIONS, { headers }),
+                    fetch(ENDPOINTS.CHATS, { headers }),
+                    fetch(ENDPOINTS.FEED, { headers }),
+                    fetch(ENDPOINTS.STORIES, { headers })
+                ]);
+
+                const mapPost = (p: any): Post => ({
+                    ...p,
+                    userName: p.author?.displayName || p.author?.username || 'User',
+                    userAvatar: p.author?.avatar,
+                    caption: p.content,
+                    likes: p.likes?.map((l: any) => l.userId) || [],
+                    comments: p.comments?.map((c: any) => ({
+                        id: c.id,
+                        userId: c.userId,
+                        userName: c.user?.displayName || c.user?.username || 'User',
+                        userAvatar: c.user?.avatar,
+                        text: c.content,
+                        timestamp: new Date(c.createdAt).toLocaleString()
+                    })) || [],
+                    timestamp: new Date(p.createdAt).toLocaleString()
+                });
+
+                if (notifRes.ok) setNotifications(await notifRes.json());
+                if (chatsRes.ok) setChats(await chatsRes.json());
+                if (feedRes.ok) {
+                    const feedData = await feedRes.json();
+                    setPosts(feedData.map(mapPost));
+                }
+                if (storyRes.ok) {
+                    const storyData = await storyRes.json();
+                    setStories(storyData.map((s: any) => ({
+                        ...s,
+                        userName: s.user?.displayName || s.user?.username || 'User',
+                        userAvatar: s.user?.avatar,
+                        timestamp: new Date(s.createdAt).toLocaleString()
+                    })));
+                }
+            } else if (isMounted) {
+                // If sync fails, don't leave user in loading limbo
+                if (res.status === 401) {
+                    await auth.signOut();
+                    setCurrentUser(null);
+                }
+            }
+        } catch (e) {
+            console.error("[Auth] Background sync failed:", e);
+        } finally {
+            if (isMounted) setIsLoading(false);
         }
-        setIsLoading(false);
     });
-    return () => unsubscribe();
+
+    return () => {
+        isMounted = false;
+        unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -351,7 +355,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
                   if (m.id === messageId) {
                      const reactions = { ...(m.reactions || {}) };
                      const userReactions = reactions[emoji] || [];
-                     if (!userReactions.includes(userId)) {
+                     if (userReactions.includes(userId)) {
+                        // Toggle OFF
+                        reactions[emoji] = userReactions.filter(id => id !== userId);
+                        if (reactions[emoji].length === 0) delete reactions[emoji];
+                     } else {
+                        // Toggle ON
                         reactions[emoji] = [...userReactions, userId];
                      }
                      return { ...m, reactions };
@@ -374,14 +383,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setNotifications(prev => [{
             id: `inv-${Date.now()}`,
             userId: currentUser.id,
+            actorId: data.inviterId,
             sourceUserId: data.inviterId,
             sourceUserName: data.inviterName,
             sourceUserAvatar: `https://api.dicebear.com/7.x/initials/svg?seed=${data.inviterName}`,
             type: 'chat_invitation',
             targetId: data.chatId,
             text: `${data.inviterName} invited you to a chat. Join to create a temporary group.`,
+            isRead: false,
             read: false,
-            timestamp: 'Just now'
+            createdAt: new Date().toISOString()
           }, ...prev]);
        });
 
@@ -402,7 +413,53 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
        newSocket.on('chat_deleted', ({ chatId }: { chatId: string }) => {
           setChats(prev => prev.filter(c => c.id !== chatId));
-          if (activeChatId === chatId) setActiveChatId(null);
+          if (activeChatIdRef.current === chatId) setActiveChatId(null);
+       });
+
+       newSocket.on('message_reacted', ({ chatId, messageId, emoji, userId }) => {
+          setMessages(prev => {
+             const list = prev[chatId] || [];
+             return {
+                ...prev,
+                [chatId]: list.map(m => {
+                   if (m.id === messageId) {
+                      const reactions = { ...(m.reactions || {}) };
+                      const userIds = reactions[emoji] || [];
+                      if (userIds.includes(userId)) {
+                         reactions[emoji] = userIds.filter(id => id !== userId);
+                         if (reactions[emoji].length === 0) delete reactions[emoji];
+                      } else {
+                         reactions[emoji] = [...userIds, userId];
+                      }
+                      return { ...m, reactions };
+                   }
+                   return m;
+                })
+             };
+          });
+       });
+
+       newSocket.on('message_edited', ({ chatId, messageId, newText }) => {
+          setMessages(prev => {
+             const list = prev[chatId] || [];
+             return {
+                ...prev,
+                [chatId]: list.map(m => m.id === messageId ? { ...m, text: newText, isEdited: true } : m)
+             };
+          });
+       });
+
+       newSocket.on('message_deleted', ({ chatId, messageId }) => {
+          setMessages(prev => ({
+             ...prev,
+             [chatId]: (prev[chatId] || []).filter(m => m.id !== messageId)
+          }));
+       });
+
+       newSocket.on('receive_new_story', (data) => {
+          // We could refetch stories or just add it if it's new
+          // For now, let's just trigger a toast if it's someone we care about
+          addToast('New story shared!', 'info');
        });
 
        setSocket(newSocket);
@@ -427,22 +484,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [stories, setStories] = useState<Story[]>([]);
 
-  const addStory = (story: Partial<Story>) => {
-    const newStory: Story = {
-      id: `s${Date.now()}`,
-      userId: currentUser?.id,
-      userName: currentUser?.name || 'Me',
-      userAvatar: currentUser?.avatar || '',
-      mediaUrl: story.mediaUrl || '',
-      mediaType: story.mediaType || 'image',
-      timestamp: 'Just now',
-      expiresAt: '24h left',
-      views: 0,
-      reactions: {},
-      ...story
-    };
-    setStories(prev => [newStory, ...prev]);
-    addToast('Story posted!', 'success');
+  const addStory = async (story: Partial<Story>) => {
+    if (!currentUser) return;
+    try {
+      const idToken = await getToken();
+      if (!idToken) return;
+
+      const res = await fetch(ENDPOINTS.CREATE_STORY, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify({
+          mediaUrl: story.mediaUrl,
+          mediaType: story.mediaType || 'image',
+          content: story.content
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setStories(prev => [data.story, ...prev]);
+        addToast('Story posted!', 'success');
+      }
+    } catch (e) {
+      console.error(e);
+      addToast('Failed to post story', 'error');
+    }
   };
 
   const addStoryComment = (storyId: string, text: string) => {
@@ -794,6 +862,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
             reactions[emoji] = [...userReactions, userId];
           }
           
+          if (socket) {
+            const chat = chats.find(c => c.id === chatId);
+            const receiverId = chat?.participantIds?.find(id => id !== currentUser?.id) || chatId;
+            socket.emit('react_message', { chatId, messageId, emoji, userId: currentUser?.id, receiverId });
+          }
+          
           return { ...msg, reactions };
         }
         return msg;
@@ -802,91 +876,116 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  const addPost = (post: Partial<Post>) => {
+  const addPost = async (post: Partial<Post>) => {
     if (!currentUser) return;
-    const newPost: Post = {
-      id: `p${Date.now()}`,
-      userId: currentUser.id,
-      userName: currentUser.name,
-      userAvatar: currentUser.avatar,
-      caption: post.caption || '',
-      imageUrl: post.imageUrl,
-      videoUrl: post.videoUrl,
-      likes: [],
-      comments: [],
-      timestamp: 'Just now',
-    };
-    setPosts(prev => [newPost, ...prev]);
-    addToast('Post created successfully', 'success');
-  };
+    try {
+      const idToken = await getToken();
+      if (!idToken) return;
 
-  const likePost = (postId: string) => {
-    if (!currentUser) return;
-    setPosts(prev => prev.map(post => {
-      if (post.id === postId) {
-        const isLiked = post.likes.includes(currentUser.id);
-        const newLikes = isLiked 
-          ? post.likes.filter(id => id !== currentUser.id)
-          : [...post.likes, currentUser.id];
-        
-        if (!isLiked && post.userId !== currentUser.id) {
-          setNotifications(n => [{
-            id: `n${Date.now()}`,
-            userId: post.userId,
-            type: 'like',
-            sourceUserId: currentUser.id,
-            sourceUserName: currentUser.name,
-            sourceUserAvatar: currentUser.avatar,
-            targetId: postId,
-            timestamp: 'Just now',
-            read: false
-          }, ...n]);
-        }
-        return { ...post, likes: newLikes };
-      }
-      return post;
-    }));
-  };
-
-  const commentPost = (postId: string, text: string) => {
-    if (!currentUser) return;
-    setPosts(prev => prev.map(post => {
-      if (post.id === postId) {
-        if (post.userId !== currentUser.id) {
-          setNotifications(n => [{
-            id: `n${Date.now()}`,
-            userId: post.userId,
-            type: 'comment',
-            sourceUserId: currentUser.id,
-            sourceUserName: currentUser.name,
-            sourceUserAvatar: currentUser.avatar,
-            targetId: postId,
-            text,
-            timestamp: 'Just now',
-            read: false
-          }, ...n]);
-        }
-        return {
-          ...post,
-          comments: [...post.comments, {
-            id: `c${Date.now()}`,
-            userId: currentUser.id,
-            userName: currentUser.name,
-            userAvatar: currentUser.avatar,
-            text,
-            timestamp: 'Just now'
-          }]
+      const res = await fetch(ENDPOINTS.CREATE_POST, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify({
+          content: post.caption || post.text,
+          mediaUrl: post.mediaUrl || post.imageUrl,
+          mediaType: post.mediaType || (post.mediaUrl || post.imageUrl ? 'image' : 'text')
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        // Enrich the post with current user details for the UI
+        const newPost: Post = {
+          ...data.post,
+          userId: currentUser.id,
+          userName: currentUser.displayName || currentUser.username,
+          userAvatar: currentUser.avatar,
+          likes: [],
+          comments: [],
+          timestamp: 'Just now',
+          caption: data.post.content // Backend uses 'content', Frontend uses 'caption'
         };
+        setPosts(prev => [newPost, ...prev]);
+        addToast('Post shared to feed', 'success');
       }
-      return post;
-    }));
+    } catch (e) {
+      console.error(e);
+      addToast('Failed to share post', 'error');
+    }
+  };
+
+  const likePost = async (postId: string) => {
+    if (!currentUser) return;
+    try {
+      const idToken = await getToken();
+      if (!idToken) return;
+
+      const res = await fetch(ENDPOINTS.LIKE_POST(postId), {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${idToken}`
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPosts(prev => prev.map(p => {
+          if (p.id === postId) {
+            const likes = [...p.likes];
+            const liked = data.liked;
+            if (liked) {
+              if (!likes.includes(currentUser.id)) likes.push(currentUser.id);
+            } else {
+              return { ...p, likes: likes.filter(id => id !== currentUser.id) };
+            }
+            return { ...p, likes };
+          }
+          return p;
+        }));
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const commentPost = async (postId: string, text: string) => {
+    if (!currentUser) return;
+    try {
+      const idToken = await getToken();
+      if (!idToken) return;
+
+      const res = await fetch(ENDPOINTS.COMMENT_POST(postId), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify({ content: text })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPosts(prev => prev.map(post => {
+          if (post.id === postId) {
+            return {
+              ...post,
+              comments: [...post.comments, data.comment]
+            };
+          }
+          return post;
+        }));
+        addToast('Comment added', 'success');
+      }
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const followUser = async (userId: string) => {
     if (!currentUser) return;
     try {
-      const idToken = await auth.currentUser?.getIdToken();
-      const res = await fetch('http://localhost:5000/api/user/follow', {
+      const idToken = await getToken();
+      const res = await fetch(ENDPOINTS.FOLLOW, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -918,8 +1017,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const unfollowUser = async (userId: string) => {
     if (!currentUser) return;
     try {
-      const idToken = await auth.currentUser?.getIdToken();
-      const res = await fetch('http://localhost:5000/api/user/unfollow', {
+      const idToken = await getToken();
+      const res = await fetch(ENDPOINTS.UNFOLLOW, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -939,30 +1038,47 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const acceptFollowRequest = (userId: string) => {
+  const acceptFollowRequest = async (userId: string) => {
     if (!currentUser) return;
-    setCurrentUser({
-      ...currentUser,
-      followRequests: (currentUser.followRequests || []).filter(id => id !== userId),
-      followers: [...(currentUser.followers || []), userId]
-    });
-    setContacts(prev => prev.map(c => {
-      if (c.id === userId) {
-        return { ...c, following: [...(c.following || []), currentUser.id] };
+    try {
+      const idToken = await getToken();
+      const res = await fetch(`${API_BASE_URL}/api/user/follow-request/handle`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify({ senderId: userId, action: 'accept' })
+      });
+      
+      if (res.ok) {
+        setCurrentUser({
+            ...currentUser,
+            followers: [...(currentUser.followers || []), userId]
+        });
+        setNotifications(n => n.filter(notif => notif.actorId !== userId));
+        addToast('Follow request accepted', 'success');
       }
-      return c;
-    }));
-    setNotifications(n => n.filter(notif => notif.type === 'follow_request' && notif.sourceUserId === userId ? false : true));
-    addToast('Follow request accepted', 'success');
+    } catch (e) { console.error(e); }
   };
 
-  const rejectFollowRequest = (userId: string) => {
+  const rejectFollowRequest = async (userId: string) => {
     if (!currentUser) return;
-    setCurrentUser({
-      ...currentUser,
-      followRequests: (currentUser.followRequests || []).filter(id => id !== userId)
-    });
-    setNotifications(n => n.filter(notif => notif.type === 'follow_request' && notif.sourceUserId === userId ? false : true));
+    try {
+      const idToken = await getToken();
+      const res = await fetch(`${API_BASE_URL}/api/user/follow-request/handle`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify({ senderId: userId, action: 'reject' })
+      });
+      if (res.ok) {
+        setNotifications(n => n.filter(notif => notif.actorId !== userId));
+        addToast('Follow request rejected', 'info');
+      }
+    } catch (e) { console.error(e); }
   };
 
   const archivePost = (postId: string) => {
@@ -1040,7 +1156,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       appLockPin, setAppLockPin, archiveLockPin, setArchiveLockPin, isAppLocked, setIsAppLocked,
       stories, setStories, addStory, addStoryComment, typingUsers, setTyping, logout, addContact, startChatWithContact, createGroupChat,
       posts, setPosts, addPost, likePost, commentPost, followUser, unfollowUser, acceptFollowRequest, rejectFollowRequest, notifications, setNotifications, globalUsers, setGlobalUsers,
-      archivePost, pinPost, savePost, createCollection, addPostToCollection, updateStorySettings, toggleCloseFriend
+      archivePost, pinPost, savePost, createCollection, addPostToCollection, updateStorySettings, toggleCloseFriend, getToken
     }}>
       {children}
     </AppContext.Provider>

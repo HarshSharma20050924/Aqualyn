@@ -398,25 +398,7 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
                     })}
                 </div>
 
-                {/* Bot & Group Mock Results */}
-                <div className="glass-card p-4 rounded-2xl flex items-center gap-4 border border-secondary-fixed/20 cursor-pointer hover:bg-white/60 transition-all mb-2">
-                  <div className="w-14 h-14 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-600">
-                    <Bot className="w-6 h-6" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-headline font-bold text-on-surface truncate">@{searchQuery.toLowerCase()}bot</h3>
-                    <p className="text-sm text-on-surface-variant truncate">Bot • 1.2M subscribers</p>
-                  </div>
-                </div>
-                <div className="glass-card p-4 rounded-2xl flex items-center gap-4 border border-secondary-fixed/20 cursor-pointer hover:bg-white/60 transition-all">
-                  <div className="w-14 h-14 rounded-full bg-green-500/20 flex items-center justify-center text-green-600">
-                    <Users className="w-6 h-6" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-headline font-bold text-on-surface truncate">{searchQuery} Official Group</h3>
-                    <p className="text-sm text-on-surface-variant truncate">Public Group • 45K members</p>
-                  </div>
-                </div>
+                {/* Real Search Results */}
               </div>
             )}
 

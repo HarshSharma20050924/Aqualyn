@@ -104,4 +104,39 @@ router.post('/story', verifyFirebaseToken, async (req: any, res: any) => {
     }
 });
 
+// 6. TOGGLE LIKE
+router.post('/post/:postId/like', verifyFirebaseToken, async (req: any, res: any) => {
+    try {
+        const user = await (prisma as any).user.findUnique({
+            where: { firebaseUid: req.user.uid },
+            select: { id: true }
+        });
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        const result = await SocialService.toggleLike(user.id, req.params.postId);
+        res.json(result);
+    } catch (e) {
+        console.error('[SocialRoute] Like error:', e);
+        res.status(500).json({ error: 'Like operation failed' });
+    }
+});
+
+// 7. ADD COMMENT
+router.post('/post/:postId/comment', verifyFirebaseToken, async (req: any, res: any) => {
+    const { content } = req.body;
+    try {
+        const user = await (prisma as any).user.findUnique({
+            where: { firebaseUid: req.user.uid },
+            select: { id: true }
+        });
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        const comment = await SocialService.addComment(user.id, req.params.postId, content);
+        res.json({ success: true, comment });
+    } catch (e) {
+        console.error('[SocialRoute] Comment error:', e);
+        res.status(500).json({ error: 'Comment failed' });
+    }
+});
+
 export default router;

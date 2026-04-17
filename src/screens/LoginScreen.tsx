@@ -30,7 +30,6 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
   const [isCountryDropdownOpen, setIsCountryDropdownOpen] = useState(false);
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
-  const [isEmailMock, setIsEmailMock] = useState(() => localStorage.getItem('mock_auth_active') === 'true');
   
   // OTP Timer
   const [resendTimer, setResendTimer] = useState(30);
@@ -71,13 +70,15 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
         const appVerifier = setupRecaptcha('recaptcha-container');
         const confirmation = await signInWithPhoneNumber(auth, fullPhone, appVerifier);
         setConfirmationResult(confirmation);
-        setIsEmailMock(false);
-        localStorage.removeItem('mock_auth_active');
       } else {
-        // Email mock login
-        setIsEmailMock(true);
-        localStorage.setItem('mock_auth_active', 'true');
-        localStorage.setItem('mock_auth_token', `MOCK_TOKEN_${email}`);
+        // Email login (Firebase)
+        await sendSignInLinkToEmail(auth, email, {
+          url: window.location.origin + '/login',
+          handleCodeInApp: true,
+        });
+        localStorage.setItem('emailForSignIn', email);
+        alert('Real sign-in link sent to your email. (Mocking disabled)');
+        return;
       }
       setStep('otp');
       setResendTimer(30);
@@ -107,15 +108,10 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
   const handleVerifyOtp = async () => {
     const code = otp.join('');
     try {
-      if (isEmailMock) {
-        if (code === '123456') {
-          setStep('profile');
-        } else {
-          alert('Invalid Mock OTP. Use 123456');
-        }
-      } else if (confirmationResult) {
+      if (confirmationResult) {
         await confirmationResult.confirm(code);
-        setStep('profile');
+        // Perform initial sync to check if user exists
+        await syncProfileWithBackend({});
       }
     } catch (error: any) {
       alert("Invalid OTP: " + error.message);
@@ -124,46 +120,48 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
 
   const syncProfileWithBackend = async (data: any) => {
     try {
-      // Clear the logged-out flag so session persists on next reload
       localStorage.removeItem('aqualyn_logged_out');
       let idToken = '';
-      if (isEmailMock) {
-        idToken = localStorage.getItem('mock_auth_token') || `MOCK_TOKEN_${email}`;
-        localStorage.setItem('mock_auth_token', idToken);
-        localStorage.setItem('mock_auth_active', 'true');
-      } else {
-        // RETRY LOOP: Firebase state can take a few ms to populate currentUser
-        let retries = 5;
-        while (retries > 0) {
-          idToken = await auth.currentUser?.getIdToken() || '';
-          if (idToken) break;
-          await new Promise(r => setTimeout(r, 400));
-          retries--;
-        }
-        localStorage.removeItem('mock_auth_token');
-        localStorage.removeItem('mock_auth_active');
+      
+      let retries = 5;
+      while (retries > 0) {
+        idToken = await auth.currentUser?.getIdToken() || '';
+        if (idToken) break;
+        await new Promise(r => setTimeout(r, 400));
+        retries--;
       }
       
       if (!idToken) throw new Error('Client Error: No Identity Token found. Please log in again.');
       
-      // DEBUG: Show what URL and Token we are hitting
-      alert(`Connecting to: ${ENDPOINTS.AUTH_SYNC}\nToken: ${idToken.substring(0, 20)}...`);
-      
+      const payload = { ...data };
+      if (!payload.phone && phoneNumber) {
+          payload.phone = `${selectedCountry.code}${phoneNumber}`;
+      }
+
       const res = await fetch(ENDPOINTS.AUTH_SYNC, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${idToken}`
         },
-        body: JSON.stringify(data)
+        body: JSON.stringify(payload)
       });
+
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         throw new Error(`Sync Error: ${res.status} | ${errData.error || errData.details || 'Unknown server error'}`);
       }
+      
       const resData = await res.json();
       setCurrentUser(resData.user);
-      onLogin(); 
+
+      // Edge Case: If we just registered/logged in and user has no DOB, they must complete profile
+      if (!resData.user.dob) {
+          setStep('profile');
+          if (resData.user.displayName) setDisplayName(resData.user.displayName);
+      } else {
+          onLogin(); 
+      }
     } catch (error: any) {
       console.error(error);
       alert(`Sync Failed: ${error.message || 'Server error'}`);

@@ -5,7 +5,7 @@ export default function BottomNav({ currentScreen, onNavigate }: { currentScreen
   const navItems = [
     { id: 'chats', icon: MessageCircle, label: 'Chats' },
     { id: 'contacts', icon: Users, label: 'Contacts' },
-    { id: 'stories', icon: CircleDashed, label: 'Stories' },
+    { id: 'discovery', icon: CircleDashed, label: 'Feed' },
     { id: 'notifications', icon: Bell, label: 'Activity' },
     { id: 'profile', icon: Users, label: 'Profile' }
   ];
