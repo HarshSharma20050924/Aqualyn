@@ -7,3 +7,4 @@ coverage/
 .env*
 !.env.example
 everything-claude-code
+everything-claude-code/.agent
