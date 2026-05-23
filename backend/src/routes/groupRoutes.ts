@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { verifyFirebaseToken } from '../middleware/auth';
+import { verifyToken } from '../middleware/auth';
 import { GroupService } from '../services/GroupService';
 import prisma from '../config/prisma';
 
@@ -10,16 +10,10 @@ const router = Router();
  */
 
 // 1. CREATE GROUP
-router.post('/create', verifyFirebaseToken, async (req: any, res: any) => {
+router.post('/create', verifyToken, async (req: any, res: any) => {
     const { name, participantIds, description } = req.body;
     try {
-        const user = await (prisma as any).user.findUnique({
-            where: { firebaseUid: req.user.uid },
-            select: { id: true }
-        });
-        if (!user) return res.status(404).json({ error: 'User not found' });
-
-        const group = await GroupService.createGroup(user.id, name, participantIds || [], description);
+        const group = await GroupService.createGroup(req.user.id, name, participantIds || [], description);
         res.json({ success: true, group });
     } catch (e) {
         console.error('[GroupRoute] Creation error:', e);
@@ -28,16 +22,10 @@ router.post('/create', verifyFirebaseToken, async (req: any, res: any) => {
 });
 
 // 2. JOIN VIA LINK
-router.post('/join/:token', verifyFirebaseToken, async (req: any, res: any) => {
+router.post('/join/:token', verifyToken, async (req: any, res: any) => {
     const { token } = req.params;
     try {
-        const user = await (prisma as any).user.findUnique({
-            where: { firebaseUid: req.user.uid },
-            select: { id: true }
-        });
-        if (!user) return res.status(404).json({ error: 'User not found' });
-
-        const membership = await GroupService.joinByToken(user.id, token);
+        const membership = await GroupService.joinByToken(req.user.id, token);
         res.json({ success: true, membership });
     } catch (e: any) {
         res.status(400).json({ error: e.message || 'Join failed' });
@@ -45,17 +33,11 @@ router.post('/join/:token', verifyFirebaseToken, async (req: any, res: any) => {
 });
 
 // 3. UPDATE SETTINGS (RBAC Enforced)
-router.patch('/:id/settings', verifyFirebaseToken, async (req: any, res: any) => {
+router.patch('/:id/settings', verifyToken, async (req: any, res: any) => {
     const { id } = req.params;
     const { settings } = req.body;
     try {
-        const user = await (prisma as any).user.findUnique({
-            where: { firebaseUid: req.user.uid },
-            select: { id: true }
-        });
-        if (!user) return res.status(404).json({ error: 'User not found' });
-
-        const group = await GroupService.updateSettings(user.id, id, settings);
+        const group = await GroupService.updateSettings(req.user.id, id, settings);
         res.json({ success: true, group });
     } catch (e: any) {
         res.status(403).json({ error: e.message || 'Update failed' });
@@ -63,20 +45,87 @@ router.patch('/:id/settings', verifyFirebaseToken, async (req: any, res: any) =>
 });
 
 // 4. MANAGE ROLES (Promote/Demote)
-router.post('/:id/member/:targetId/role', verifyFirebaseToken, async (req: any, res: any) => {
+router.post('/:id/member/:targetId/role', verifyToken, async (req: any, res: any) => {
     const { id, targetId } = req.params;
     const { role } = req.body; // 'ADMIN' or 'MEMBER'
     try {
-        const user = await (prisma as any).user.findUnique({
-            where: { firebaseUid: req.user.uid },
-            select: { id: true }
-        });
-        if (!user) return res.status(404).json({ error: 'User not found' });
-
-        const result = await GroupService.updateMemberRole(user.id, id, targetId, role);
+        const result = await GroupService.updateMemberRole(req.user.id, id, targetId, role);
         res.json({ success: true, result });
     } catch (e: any) {
         res.status(403).json({ error: 'Permission denied' });
+    }
+});
+
+// 5. GET FULL GROUP INFO
+router.get('/:id/info', verifyToken, async (req: any, res: any) => {
+    const { id } = req.params;
+    try {
+        const chat = await (prisma as any).chat.findUnique({
+            where: { id },
+            include: {
+                participants: {
+                    include: {
+                        user: {
+                            select: { id: true, username: true, displayName: true, avatar: true, bio: true }
+                        }
+                    }
+                }
+            }
+        });
+        if (!chat) return res.status(404).json({ error: 'Group not found' });
+
+        // Count media
+        const messages = await (prisma as any).message.findMany({
+            where: { chatId: id },
+            select: { imageUrl: true, videoUrl: true, audioUrl: true, fileUrl: true, document: true }
+        });
+        let images = 0, videos = 0, docs = 0;
+        for (const m of messages) {
+            if (m.imageUrl) images++;
+            if (m.videoUrl) videos++;
+            if (m.fileUrl || m.document) docs++;
+        }
+
+        const admins = chat.participants.filter((p: any) => p.role === 'ADMIN' || p.role === 'OWNER');
+
+        res.json({
+            ...chat,
+            settings: chat.settings || {},
+            mediaCount: { images, videos, docs, total: images + videos + docs },
+            adminCount: admins.length,
+            participantCount: chat.participants.length
+        });
+    } catch (e) {
+        console.error('[GroupRoute] Info error:', e);
+        res.status(500).json({ error: 'Failed to get group info' });
+    }
+});
+
+// 6. LEAVE GROUP
+router.post('/:id/leave', verifyToken, async (req: any, res: any) => {
+    const { id } = req.params;
+    const userId = req.user.id;
+    try {
+        await (prisma as any).chatParticipant.deleteMany({
+            where: { chatId: id, userId }
+        });
+        res.json({ success: true, message: 'Left the group' });
+    } catch (e) {
+        console.error('[GroupRoute] Leave error:', e);
+        res.status(500).json({ error: 'Failed to leave group' });
+    }
+});
+
+// 7. HANDLE GROUP INVITATION (Accept / Decline)
+router.post('/:chatId/invitation/handle', verifyToken, async (req: any, res: any) => {
+    const { chatId } = req.params;
+    const { action } = req.body; // 'accept' or 'decline'
+    try {
+        const result = await GroupService.handleInvitation(req.user.id, chatId, action);
+        res.json({ success: true, result });
+    } catch (e: any) {
+        console.error('[GroupRoute] Invitation handle error:', e);
+        res.status(500).json({ error: e.message || 'Invitation handle failed' });
     }
 });
 

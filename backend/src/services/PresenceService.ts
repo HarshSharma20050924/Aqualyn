@@ -39,23 +39,28 @@ export class PresenceService {
      * Returns a Map of userId -> status
      */
     static async getPresenceBatch(userIds: string[]): Promise<Record<string, 'online' | 'offline'>> {
-        if (userIds.length === 0) return {};
-        
-        const keys = userIds.map(id => `${this.PREFIX}${id}`);
-        const results = await redis.mget(...keys);
-        
-        const presenceMap: Record<string, 'online' | 'offline'> = {};
-        userIds.forEach((id, index) => {
-            presenceMap[id] = results[index] === 'online' ? 'online' : 'offline';
-        });
-        
-        return presenceMap;
+        if (!userIds || userIds.length === 0) return {};
+        try {
+            const keys = userIds.map(id => `${this.PREFIX}${id}`);
+            const results = await redis.mget(...keys);
+            
+            const presenceMap: Record<string, 'online' | 'offline'> = {};
+            userIds.forEach((id, index) => {
+                presenceMap[id] = results[index] === 'online' ? 'online' : 'offline';
+            });
+            return presenceMap;
+        } catch (error) {
+            console.error('[Presence] Batch fetch failed:', error);
+            return {};
+        }
     }
 
-    /**
-     * Refresh the user's online status (Heartbeat).
-     */
     static async heartbeat(userId: string): Promise<void> {
-        await this.setUserOnline(userId);
+        if (!userId) return;
+        try {
+            await this.setUserOnline(userId);
+        } catch (error) {
+            console.error('[Presence] Heartbeat failed:', error);
+        }
     }
 }

@@ -19,14 +19,8 @@ export default function CallScreen({ callerName, callerAvatar, isVideo, isIncomi
   const [isVideoEnabled, setIsVideoEnabled] = useState(isVideo);
   const [duration, setDuration] = useState(0);
 
-  useEffect(() => {
-    if (callState === 'outgoing') {
-      const timer = setTimeout(() => {
-        setCallState('active');
-      }, 3000); // Mock answer after 3 seconds
-      return () => clearTimeout(timer);
-    }
-  }, [callState]);
+  // Outgoing calls stay in 'outgoing' state until accepted via socket event or ended by user.
+  // Real call acceptance will be handled by WebRTC signaling in the future.
 
   useEffect(() => {
     let interval: NodeJS.Timeout;

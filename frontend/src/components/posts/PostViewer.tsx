@@ -17,6 +17,8 @@ export default function PostViewer({ post, onClose }: PostViewerProps) {
   const [showMenu, setShowMenu] = useState(false);
   const [showCollectionPicker, setShowCollectionPicker] = useState(false);
 
+  const [showChatPicker, setShowChatPicker] = useState(false);
+
   const handleLike = () => {
     likePost(post.id);
     setIsLiked(!isLiked);
@@ -29,9 +31,10 @@ export default function PostViewer({ post, onClose }: PostViewerProps) {
     addToast('Comment added', 'success');
   };
 
-  const handleShareToChat = () => {
-    // Mock sharing to first chat
+  const handleShareToChat = (chatId: string) => {
+    sendMessage(chatId, `Shared a post: ${post.caption.substring(0, 50)}...`, { sharedPostId: post.id });
     addToast('Post shared to chat', 'success');
+    setShowChatPicker(false);
     setShowMenu(false);
   };
 
@@ -83,7 +86,7 @@ export default function PostViewer({ post, onClose }: PostViewerProps) {
             <button onClick={() => setShowComments(!showComments)} className="p-2 text-white hover:bg-white/10 rounded-full transition-colors">
               <MessageCircle className="w-7 h-7" />
             </button>
-            <button onClick={handleShareToChat} className="p-2 text-white hover:bg-white/10 rounded-full transition-colors">
+            <button onClick={() => setShowChatPicker(true)} className="p-2 text-white hover:bg-white/10 rounded-full transition-colors">
               <Share2 className="w-7 h-7" />
             </button>
           </div>
@@ -143,7 +146,7 @@ export default function PostViewer({ post, onClose }: PostViewerProps) {
                 <button onClick={handleCopyLink} className="p-4 text-on-surface font-semibold flex items-center gap-3 hover:bg-surface-variant transition-colors">
                   <LinkIcon className="w-5 h-5" /> Copy link
                 </button>
-                <button onClick={handleShareToChat} className="p-4 text-on-surface font-semibold flex items-center gap-3 hover:bg-surface-variant transition-colors">
+                <button onClick={() => { setShowChatPicker(true); setShowMenu(false); }} className="p-4 text-on-surface font-semibold flex items-center gap-3 hover:bg-surface-variant transition-colors">
                   <Share2 className="w-5 h-5" /> Share to...
                 </button>
                 <button onClick={() => setShowMenu(false)} className="p-4 text-red-500 font-bold hover:bg-surface-variant transition-colors">
@@ -155,15 +158,15 @@ export default function PostViewer({ post, onClose }: PostViewerProps) {
         )}
       </AnimatePresence>
 
-      {/* Collection Picker Modal */}
+      {/* Chat Picker Modal */}
       <AnimatePresence>
-        {showCollectionPicker && (
+        {showChatPicker && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6"
-            onClick={() => setShowCollectionPicker(false)}
+            className="fixed inset-0 z-[130] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6"
+            onClick={() => setShowChatPicker(false)}
           >
             <motion.div
               initial={{ y: 20, opacity: 0 }}
@@ -173,27 +176,23 @@ export default function PostViewer({ post, onClose }: PostViewerProps) {
               onClick={e => e.stopPropagation()}
             >
               <div className="p-4 border-b border-outline-variant/20 flex items-center justify-between">
-                <h3 className="font-bold text-on-surface">Save to Collection</h3>
-                <button onClick={() => setShowCollectionPicker(false)} className="p-2 text-on-surface-variant hover:bg-surface-variant rounded-full">
+                <h3 className="font-bold text-on-surface">Share to Chat</h3>
+                <button onClick={() => setShowChatPicker(false)} className="p-2 text-on-surface-variant hover:bg-surface-variant rounded-full">
                   <X className="w-5 h-5" />
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto p-4 space-y-2">
-                {currentUser?.collections?.map(c => (
+                {useAppContext().chats.map(c => (
                   <button 
                     key={c.id} 
-                    onClick={() => { addPostToCollection(post.id, c.id); setShowCollectionPicker(false); }}
-                    className="w-full p-4 rounded-2xl bg-surface-variant/50 hover:bg-surface-variant text-left font-semibold text-on-surface transition-colors flex items-center justify-between"
+                    onClick={() => handleShareToChat(c.id)}
+                    className="w-full p-4 rounded-2xl bg-surface-variant/50 hover:bg-surface-variant text-left font-semibold text-on-surface transition-colors flex items-center gap-4"
                   >
-                    {c.name}
-                    {c.postIds.includes(post.id) && <CheckCheck className="w-4 h-4 text-primary" />}
+                    <img src={c.avatar || `https://ui-avatars.com/api/?name=${c.name}`} className="w-10 h-10 rounded-full" />
+                    <span className="truncate">{c.name}</span>
+                    {c.isGroup && <span className="ml-auto text-[10px] bg-secondary/10 text-secondary px-2 py-1 rounded-full uppercase font-bold tracking-widest whitespace-nowrap">Group</span>}
                   </button>
                 ))}
-                {(!currentUser?.collections || currentUser.collections.length === 0) && (
-                  <div className="text-center py-8 text-on-surface-variant">
-                    No collections yet. Create one in your profile!
-                  </div>
-                )}
               </div>
             </motion.div>
           </motion.div>

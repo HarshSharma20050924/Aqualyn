@@ -14,18 +14,20 @@ const COUNTRIES = [
 import GlassyDatePicker from '../components/GlassyDatePicker';
 
 import { auth, googleProvider, setupRecaptcha } from '../config/firebase';
-import { signInWithPhoneNumber, signInWithPopup, ConfirmationResult, signInWithEmailLink, sendSignInLinkToEmail, isSignInWithEmailLink } from 'firebase/auth';
+import { signInWithPhoneNumber, signInWithPopup, ConfirmationResult, signInWithEmailLink, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithCustomToken } from 'firebase/auth';
 import { User } from '../types';
 import { useAppContext } from '../context/AppContext';
 import { ENDPOINTS } from '../config/api';
 
 export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
-  const { setCurrentUser } = useAppContext() || { setCurrentUser: () => {} };
+  const { setCurrentUser, currentUser } = useAppContext() || { setCurrentUser: () => {}, currentUser: null };
   const [step, setStep] = useState<'intro' | 'phone' | 'email' | 'otp' | 'profile'>('intro');
+  const [isExistingUser, setIsExistingUser] = useState<boolean | null>(null);
   
   // Auth States
   const [phoneNumber, setPhoneNumber] = useState('');
   const [email, setEmail] = useState('');
+  const [activeIdentifier, setActiveIdentifier] = useState('');
   const [selectedCountry, setSelectedCountry] = useState(COUNTRIES[0]);
   const [isCountryDropdownOpen, setIsCountryDropdownOpen] = useState(false);
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
@@ -63,23 +65,59 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
     return () => clearInterval(interval);
   }, [step, resendTimer]);
 
+  useEffect(() => {
+    if (currentUser && !currentUser.id) {
+       setStep('profile');
+       if (currentUser.displayName) setDisplayName(currentUser.displayName);
+       if (currentUser.email) setEmail(currentUser.email);
+       if (currentUser.phone) setPhoneNumber(currentUser.phone.replace(/\D/g, ''));
+    }
+  }, [currentUser]);
+
   const handleSendOtp = async () => {
     try {
+      let identifier = activeIdentifier;
       if (step === 'phone') {
-        const fullPhone = `${selectedCountry.code}${phoneNumber}`;
-        const appVerifier = setupRecaptcha('recaptcha-container');
-        const confirmation = await signInWithPhoneNumber(auth, fullPhone, appVerifier);
-        setConfirmationResult(confirmation);
-      } else {
-        // Email login (Firebase)
-        await sendSignInLinkToEmail(auth, email, {
-          url: window.location.origin + '/login',
-          handleCodeInApp: true,
-        });
-        localStorage.setItem('emailForSignIn', email);
-        alert('Real sign-in link sent to your email. (Mocking disabled)');
-        return;
+          identifier = `${selectedCountry.code}${phoneNumber}`;
+          setActiveIdentifier(identifier);
+      } else if (step === 'email') {
+          identifier = email;
+          setActiveIdentifier(identifier);
       }
+
+      const res = await fetch(ENDPOINTS.AUTH_SEND_OTP, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifier })
+      });
+      if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || 'Failed to send OTP');
+      }
+      const data = await res.json();
+      setIsExistingUser(data.isExisting);
+      
+      const title = 'Aqualyn Verification';
+      const body = `Your OTP code is: ${data.otp}`;
+      
+      // Native Web Push Notification (Local)
+      if ("Notification" in window) {
+          if (Notification.permission === "granted") {
+              new Notification(title, { body });
+          } else if (Notification.permission !== "denied") {
+              const permission = await Notification.requestPermission();
+              if (permission === "granted") {
+                  new Notification(title, { body });
+              } else {
+                  alert(`🔔 ${title} 🔔\n\n${body}`);
+              }
+          } else {
+              alert(`🔔 ${title} 🔔\n\n${body}`);
+          }
+      } else {
+          alert(`🔔 ${title} 🔔\n\n${body}`);
+      }
+      
       setStep('otp');
       setResendTimer(30);
       setCanResend(false);
@@ -107,32 +145,30 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
 
   const handleVerifyOtp = async () => {
     const code = otp.join('');
+    const identifier = activeIdentifier;
     try {
-      if (confirmationResult) {
-        await confirmationResult.confirm(code);
-        // Perform initial sync to check if user exists
-        await syncProfileWithBackend({});
+      const res = await fetch(ENDPOINTS.AUTH_VERIFY_OTP, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ identifier, otp: code })
+      });
+      if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || 'Failed to verify OTP');
       }
+      const data = await res.json();
+      
+      // Perform initial sync to check if user exists
+      await syncProfileWithBackend({});
     } catch (error: any) {
-      alert("Invalid OTP: " + error.message);
+      console.error("[OTP Error]", error);
+      alert("Invalid OTP or connection issue");
     }
   };
 
   const syncProfileWithBackend = async (data: any) => {
     try {
-      localStorage.removeItem('aqualyn_logged_out');
-      let idToken = '';
-      
-      let retries = 5;
-      while (retries > 0) {
-        idToken = await auth.currentUser?.getIdToken() || '';
-        if (idToken) break;
-        await new Promise(r => setTimeout(r, 400));
-        retries--;
-      }
-      
-      if (!idToken) throw new Error('Client Error: No Identity Token found. Please log in again.');
-      
       const payload = { ...data };
       if (!payload.phone && phoneNumber) {
           payload.phone = `${selectedCountry.code}${phoneNumber}`;
@@ -140,31 +176,41 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
 
       const res = await fetch(ENDPOINTS.AUTH_SYNC, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${idToken}`
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(payload)
       });
 
+      const resData = await res.json().catch(() => ({}));
+
+      if (res.status === 401) {
+          setStep('intro');
+          return;
+      }
+
       if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(`Sync Error: ${res.status} | ${errData.error || errData.details || 'Unknown server error'}`);
+        throw new Error(resData.error || resData.details || 'Sync failed');
       }
       
-      const resData = await res.json();
-      setCurrentUser(resData.user);
-
-      // Edge Case: If we just registered/logged in and user has no DOB, they must complete profile
-      if (!resData.user.dob) {
+      // If backend says profile is incomplete
+      if (resData.status === 'needs_profile') {
           setStep('profile');
-          if (resData.user.displayName) setDisplayName(resData.user.displayName);
-      } else {
-          onLogin(); 
+          if (resData.user?.displayName) setDisplayName(resData.user.displayName);
+          return;
+      }
+
+      if (resData.user) {
+          setCurrentUser(resData.user);
+          // Only proceed to home if setup is complete
+          if (resData.user.dob && resData.user.displayName) {
+              onLogin();
+          } else {
+              setStep('profile');
+          }
       }
     } catch (error: any) {
-      console.error(error);
-      alert(`Sync Failed: ${error.message || 'Server error'}`);
+      console.error('[Sync Error]', error);
+      alert(`${error.message || 'Server error'}`);
     }
   };
 
@@ -187,6 +233,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${idToken}`
         },
+        credentials: 'include',
         body: JSON.stringify({}) // Initial sync
       });
       
@@ -261,9 +308,13 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
               className="w-full glass-card border border-white/30 rounded-[2.5rem] p-8 sm:p-10 inner-glow shadow-2xl"
             >
               <div className="mb-8">
-                <h2 className="text-2xl font-bold font-headline text-on-surface mb-2">Welcome Back</h2>
-                <p className="text-on-surface-variant text-sm">
-                  {step === 'phone' ? 'Enter your phone number to continue.' : 'Enter your email address to continue.'}
+                <h2 className="text-2xl font-bold font-headline text-on-surface mb-2">
+                  {isExistingUser === true ? 'Welcome Back' : 'Join Aqualyn'}
+                </h2>
+                <p className="text-on-surface-variant text-sm text-balance">
+                   {isExistingUser === true 
+                     ? 'Sign in to continue your conversations.' 
+                     : 'Create an account to experience India\'s best messaging app.'}
                 </p>
               </div>
 

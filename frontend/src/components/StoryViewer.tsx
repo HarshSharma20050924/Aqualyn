@@ -10,7 +10,11 @@ interface StoryViewerProps {
 }
 
 export default function StoryViewer({ stories, initialIndex, onClose }: StoryViewerProps) {
-  const { addStoryComment, currentUser, addToast, setStories, chats, startChatWithContact, sendMessage } = useAppContext();
+  const { 
+    addStoryComment, deleteStory, currentUser, addToast, setStories, 
+    chats, startChatWithContact, sendMessage 
+  } = useAppContext();
+
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [progress, setProgress] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
@@ -72,15 +76,18 @@ export default function StoryViewer({ stories, initialIndex, onClose }: StoryVie
     }
   };
 
-  const handleDeleteStory = () => {
+  const handleDeleteStory = async () => {
     if (!currentStory) return;
-    setStories(prev => prev.filter(s => s.id !== currentStory.id));
-    addToast('Story deleted', 'info');
-    setIsMenuOpen(false);
-    if (stories.length <= 1) {
-      onClose();
-    } else {
-      handleNext();
+    try {
+      await deleteStory(currentStory.id);
+      setIsMenuOpen(false);
+      if (stories.length <= 1) {
+        onClose();
+      } else {
+        handleNext();
+      }
+    } catch (e) {
+      addToast('Failed to delete story', 'error');
     }
   };
 

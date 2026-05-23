@@ -6,6 +6,8 @@ import {
   MapPin, Hash, AtSign, Search, Heart, Star, Settings, Check
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
+import { uploadFile } from '../../utils/uploads';
+import { dataURLtoFile } from '../../utils/media';
 
 interface Sticker {
   id: string;
@@ -27,7 +29,7 @@ interface TextOverlay {
 }
 
 export default function StoryCreator({ onClose }: { onClose: () => void }) {
-  const { addStory, currentUser, toggleCloseFriend, globalUsers } = useAppContext();
+  const { addStory, currentUser, toggleCloseFriend, globalUsers, addToast } = useAppContext();
   const [step, setStep] = useState<'capture' | 'edit' | 'settings'>('capture');
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
   const [mediaType, setMediaType] = useState<'image' | 'video'>('image');
@@ -41,6 +43,8 @@ export default function StoryCreator({ onClose }: { onClose: () => void }) {
   const [isRecording, setIsRecording] = useState(false);
   const [isCloseFriendsOnly, setIsCloseFriendsOnly] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
+  const selectedFileRef = useRef<File | null>(null);
   
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -54,15 +58,30 @@ export default function StoryCreator({ onClose }: { onClose: () => void }) {
   ];
 
   const handleCapture = () => {
-    // Simulate capture
-    setMediaUrl('https://images.unsplash.com/photo-1558655146-d09347e92766?auto=format&fit=crop&q=80&w=600&h=900');
-    setMediaType('image');
-    setStep('edit');
+    // Real capture from camera stream via video element
+    if (videoRef.current && videoRef.current.srcObject) {
+      const canvas = document.createElement('canvas');
+      canvas.width = videoRef.current.videoWidth || 600;
+      canvas.height = videoRef.current.videoHeight || 900;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+        // For camera captures, we can still use base64 or convert to Blob
+        setMediaUrl(dataUrl);
+        setMediaType('image');
+        setStep('edit');
+        return;
+      }
+    }
+    // Fallback: prompt user to upload a file instead
+    addToast('Camera not available. Please upload a file.', 'info');
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      selectedFileRef.current = file;
       const url = URL.createObjectURL(file);
       setMediaUrl(url);
       setMediaType(file.type.startsWith('video') ? 'video' : 'image');
@@ -98,15 +117,36 @@ export default function StoryCreator({ onClose }: { onClose: () => void }) {
     setShowStickers(false);
   };
 
-  const handleShare = () => {
+  const handleShare = async () => {
     if (mediaUrl) {
-      addStory({
-        mediaUrl,
-        mediaType,
-        stickers,
-        isCloseFriends: isCloseFriendsOnly,
-      });
-      onClose();
+      setIsUploading(true);
+      try {
+        let finalMediaUrl = mediaUrl;
+        if (selectedFileRef.current) {
+          finalMediaUrl = await uploadFile(selectedFileRef.current);
+        } else if (mediaUrl?.startsWith('data:')) {
+          const file = dataURLtoFile(mediaUrl, `camera-${Date.now()}.jpg`);
+          finalMediaUrl = await uploadFile(file);
+        } else if (mediaUrl?.startsWith('blob:')) {
+          // New case: Handle blob URLs from picker or other sources
+          const response = await fetch(mediaUrl);
+          const blob = await response.blob();
+          const file = new File([blob], `story-${Date.now()}.jpg`, { type: blob.type });
+          finalMediaUrl = await uploadFile(file);
+        }
+
+        await addStory({
+          mediaUrl: finalMediaUrl,
+          mediaType,
+          stickers,
+          isCloseFriends: isCloseFriendsOnly,
+        });
+        onClose();
+      } catch (e) {
+        addToast('Failed to prepare story media', 'error');
+      } finally {
+        setIsUploading(false);
+      }
     }
   };
 
@@ -288,9 +328,10 @@ export default function StoryCreator({ onClose }: { onClose: () => void }) {
 
               <button 
                 onClick={handleShare}
-                className="flex items-center gap-3 bg-white text-black px-8 py-4 rounded-2xl font-black shadow-xl active:scale-95 transition-transform"
+                disabled={isUploading}
+                className="flex items-center gap-3 bg-white text-black px-8 py-4 rounded-2xl font-black shadow-xl active:scale-95 transition-transform disabled:opacity-50"
               >
-                Share <Send className="w-5 h-5" />
+                {isUploading ? 'Sharing...' : 'Share'} <Send className="w-5 h-5" />
               </button>
             </div>
           </div>

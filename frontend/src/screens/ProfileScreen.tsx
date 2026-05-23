@@ -1,34 +1,56 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Pen, Plus, Heart, MessageCircle, Camera, Grid, Bookmark, Folder, MoreVertical, Settings as SettingsIcon } from 'lucide-react';
-import { Post, Collection } from '../types';
+import { Pen, Plus, Heart, MessageCircle, Camera, Grid, Bookmark, Folder, MoreVertical } from 'lucide-react';
+import { Post, Collection, User } from '../types';
 import { useAppContext } from '../context/AppContext';
+import StoryViewer from '../components/StoryViewer';
 import StoryCreator from '../components/stories/StoryCreator';
 import PostCreator from '../components/posts/PostCreator';
 import PostViewer from '../components/posts/PostViewer';
+import UserListModal from '../components/social/UserListModal';
+import { apiFetch } from '../utils/fetcher';
+import { ENDPOINTS } from '../config/api';
 
 export default function ProfileScreen({ onNavigate }: { onNavigate: (s: string) => void }) {
-  const { currentUser, posts, createCollection, stories } = useAppContext();
+  const { currentUser, posts, stories, createCollection, setActiveContactId } = useAppContext();
   const [isCreatorOpen, setIsCreatorOpen] = useState(false);
   const [isPostCreatorOpen, setIsPostCreatorOpen] = useState(false);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [activeTab, setActiveTab] = useState<'posts' | 'saved' | 'collections'>('posts');
   const [isNewCollectionModalOpen, setIsNewCollectionModalOpen] = useState(false);
   const [newCollectionName, setNewCollectionName] = useState('');
+  const { addToast } = useAppContext();
+  const [activeStoryIndex, setActiveStoryIndex] = useState<number | null>(null);
+  
+  // Social list state
+  const [showList, setShowList] = useState<'followers' | 'following' | null>(null);
+  const [listData, setListData] = useState<User[]>([]);
+  const [isListLoading, setIsListLoading] = useState(false);
 
-  if (!currentUser) {
-    return (
-      <div className="bg-surface min-h-screen flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-10 h-10 border-4 border-secondary border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-on-surface-variant font-bold">Loading Profile...</p>
-        </div>
-      </div>
-    );
-  }
+  const fetchSocialList = async (type: 'followers' | 'following') => {
+    if (!currentUser) return;
+    setShowList(type);
+    setIsListLoading(true);
+    try {
+      const endpoint = type === 'followers' ? ENDPOINTS.GET_FOLLOWERS(currentUser.id) : ENDPOINTS.GET_FOLLOWING(currentUser.id);
+      const res = await apiFetch(endpoint);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) setListData(data);
+      }
+    } catch (e) {
+      console.error(e);
+      addToast('Failed to load list', 'error');
+    } finally {
+      setIsListLoading(false);
+    }
+  };
+
+  if (!currentUser) return null;
 
   const myPosts = posts.filter(p => p.userId === currentUser.id && !p.isArchived);
   const savedPosts = posts.filter(p => currentUser.savedPostIds?.includes(p.id));
+  const myStories = stories.filter(s => s.userId === currentUser.id);
 
   const handleCreateCollection = () => {
     if (!newCollectionName.trim()) return;
@@ -44,9 +66,6 @@ export default function ProfileScreen({ onNavigate }: { onNavigate: (s: string) 
           <span className="text-2xl font-black bg-gradient-to-br from-cyan-600 to-blue-500 bg-clip-text text-transparent font-headline tracking-tight">Aqualyn</span>
         </div>
         <div className="flex items-center gap-4">
-          <button onClick={() => onNavigate('settings')} className="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center hover:bg-secondary/20 transition-colors">
-            <SettingsIcon className="w-5 h-5 text-on-surface" />
-          </button>
           <div className="w-10 h-10 rounded-full border-2 border-secondary-fixed aqua-glow overflow-hidden">
             <img src={currentUser.avatar} alt="Profile" className="w-full h-full object-cover" />
           </div>
@@ -57,7 +76,7 @@ export default function ProfileScreen({ onNavigate }: { onNavigate: (s: string) 
         <section className="relative flex flex-col md:flex-row items-center md:items-end gap-8">
           <div className="relative group">
             <div className="w-40 h-40 md:w-48 md:h-48 rounded-full border-[6px] border-white aqua-glow overflow-hidden bg-surface-container shadow-xl">
-              <img src={currentUser.largeAvatar || currentUser.avatar} alt="Large Profile" className="w-full h-full object-cover" />
+              <img src={currentUser.largeAvatar} alt="Large Profile" className="w-full h-full object-cover" />
             </div>
             <button onClick={() => onNavigate('edit-profile')} className="absolute bottom-2 right-2 bg-secondary text-on-secondary w-10 h-10 rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform active:scale-90">
               <Pen className="w-5 h-5 fill-on-secondary" />
@@ -65,10 +84,26 @@ export default function ProfileScreen({ onNavigate }: { onNavigate: (s: string) 
           </div>
           <div className="flex-1 text-center md:text-left space-y-4">
             <div className="space-y-1">
-              <h1 className="text-4xl font-extrabold font-headline tracking-tight text-on-surface">{currentUser.displayName || currentUser.name}</h1>
-              <p className="text-on-surface-variant font-bold">@{currentUser.username || currentUser.id}</p>
+              <h1 className="text-4xl font-extrabold font-headline tracking-tight text-on-surface">{currentUser.displayName || currentUser.name || currentUser.username}</h1>
+              <p className="text-on-surface-variant font-bold">@{currentUser.username}</p>
             </div>
-            <p className="text-on-surface/80 max-w-md leading-relaxed">{currentUser.bio || 'Welcome to Aqualyn!'}</p>
+            <p className="text-on-surface/80 max-w-md leading-relaxed">{currentUser.bio}</p>
+            
+            <div className="flex items-center gap-8 py-2">
+              <div className="text-center cursor-pointer group">
+                <span className="block font-black text-xl text-on-surface group-hover:text-primary transition-colors">{myPosts.length}</span>
+                <span className="text-[10px] uppercase font-bold text-on-surface-variant tracking-[0.15em] opacity-60">Posts</span>
+              </div>
+              <div className="text-center cursor-pointer" onClick={() => fetchSocialList('followers')}>
+              <span className="block font-black text-xl text-on-surface">{currentUser?._count?.followers || currentUser?.followers?.length || 0}</span>
+              <span className="text-xs font-bold text-on-surface-variant uppercase tracking-widest">Followers</span>
+            </div>
+            <div className="text-center cursor-pointer" onClick={() => fetchSocialList('following')}>
+              <span className="block font-black text-xl text-on-surface">{currentUser?._count?.following || currentUser?.following?.length || 0}</span>
+              <span className="text-xs font-bold text-on-surface-variant uppercase tracking-widest">Following</span>
+            </div>
+            </div>
+
             <div className="flex flex-wrap justify-center md:justify-start gap-3 pt-2">
               <button onClick={() => onNavigate('edit-profile')} className="px-8 py-3 rounded-full bg-gradient-to-br from-secondary to-primary-container text-on-primary-container font-bold text-sm shadow-lg hover:brightness-110 active:scale-95 transition-all border-t border-white/20">
                 Edit Profile
@@ -83,7 +118,7 @@ export default function ProfileScreen({ onNavigate }: { onNavigate: (s: string) 
         <section className="space-y-4">
           <div className="flex items-center justify-between px-2">
             <h2 className="font-headline font-bold text-xl text-on-surface">Recent Stories</h2>
-            <button onClick={() => onNavigate('stories')} className="text-primary font-bold text-sm hover:text-primary-dim transition-colors">View All</button>
+            <button onClick={() => onNavigate('feed')} className="text-primary font-bold text-sm hover:text-primary-dim transition-colors">View All</button>
           </div>
           <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide snap-x">
             <div 
@@ -95,18 +130,21 @@ export default function ProfileScreen({ onNavigate }: { onNavigate: (s: string) 
               </div>
               <span className="font-semibold text-sm">Add Story</span>
             </div>
-            {stories.filter(s => s.userId === currentUser.id).map((story) => (
-              <div key={story.id} className="min-w-[120px] h-[180px] rounded-3xl overflow-hidden relative group cursor-pointer snap-start shadow-sm">
-                <img src={story.mediaUrl} alt="Story" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+            {myStories.map((story, i) => (
+              <div 
+                key={story.id} 
+                onClick={() => setActiveStoryIndex(i)}
+                className="min-w-[120px] h-[180px] rounded-3xl overflow-hidden relative group cursor-pointer snap-start shadow-sm"
+              >
+                {story.mediaType === 'video' ? (
+                  <video src={story.mediaUrl} autoPlay muted loop className="w-full h-full object-cover" />
+                ) : (
+                  <img src={story.mediaUrl} alt="Story" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+                )}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
-                <span className="absolute bottom-3 left-3 text-white font-medium text-xs">Recently</span>
+                <span className="absolute bottom-3 left-3 text-white font-medium text-xs">{story.timestamp}</span>
               </div>
             ))}
-            {stories.filter(s => s.userId === currentUser.id).length === 0 && (
-              <div className="min-w-[120px] h-[180px] rounded-3xl border-2 border-dashed border-outline-variant/10 flex items-center justify-center text-on-surface-variant text-[10px] font-bold uppercase tracking-widest text-center px-4">
-                No active stories
-              </div>
-            )}
           </div>
         </section>
 
@@ -244,7 +282,34 @@ export default function ProfileScreen({ onNavigate }: { onNavigate: (s: string) 
             </motion.div>
           </motion.div>
         )}
+        {isCreatorOpen && (
+          <StoryCreator onClose={() => setIsCreatorOpen(false)} />
+        )}
+
+        {activeStoryIndex !== null && (
+          <StoryViewer
+            stories={myStories}
+            initialIndex={activeStoryIndex}
+            onClose={() => setActiveStoryIndex(null)}
+          />
+        )}
       </AnimatePresence>
+
+      <UserListModal 
+        isOpen={!!showList}
+        onClose={() => setShowList(null)}
+        title={showList || ''}
+        users={listData}
+        isLoading={isListLoading}
+        onUserClick={(u) => {
+            if (u.id === currentUser?.id) {
+                onNavigate('profile');
+            } else {
+                setActiveContactId(u.id);
+                onNavigate('contact-profile');
+            }
+        }}
+      />
     </motion.div>
   );
 }

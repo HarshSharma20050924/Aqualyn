@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Play, Pause, FileText, Download, MapPin, CheckCheck, Reply, Copy, Trash2, Smile, Timer, Edit2, Wallet, ArrowRight } from 'lucide-react';
+import { Play, Pause, FileText, Download, MapPin, CheckCheck, Reply, Copy, Trash2, Smile, Timer, Edit2, Wallet, ArrowRight, ShieldAlert } from 'lucide-react';
 import { Message } from '../../types';
 import { useAppContext } from '../../context/AppContext';
 
@@ -14,15 +14,98 @@ interface MessageBubbleProps {
   isSecret?: boolean;
 }
 
+const ScrambledText = ({ text, isSecret }: { text: string; isSecret?: boolean }) => {
+  const [displayText, setDisplayText] = useState(text);
+
+  useEffect(() => {
+    if (!isSecret) {
+      setDisplayText(text);
+      return;
+    }
+    
+    let frame = 0;
+    const scrambleChars = '01#$@&%*+=-_?~X';
+    const totalFrames = 15;
+    const interval = setInterval(() => {
+      frame++;
+      const progress = frame / totalFrames;
+      const scrambled = text.split('').map((char, index) => {
+        if (char === ' ') return ' ';
+        if (index / text.length < progress) return char;
+        return scrambleChars[Math.floor(Math.random() * scrambleChars.length)];
+      }).join('');
+      
+      setDisplayText(scrambled);
+      if (frame >= totalFrames) {
+        clearInterval(interval);
+        setDisplayText(text);
+      }
+    }, 45);
+
+    return () => clearInterval(interval);
+  }, [text, isSecret]);
+
+  return (
+    <span className={isSecret ? "font-mono font-medium tracking-wide text-green-400 drop-shadow-[0_0_8px_rgba(34,197,94,0.6)]" : ""}>
+      {displayText}
+    </span>
+  );
+};
+
 export default function MessageBubble({ msg, isMe, onReply, onEdit, replyMessage, onMediaClick, isSecret }: MessageBubbleProps) {
   const { deleteMessage, addReaction, currentUser, addToast, chats } = useAppContext();
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioProgress, setAudioProgress] = useState(0);
+  const [audioDuration, setAudioDuration] = useState(0);
   const pressTimer = useRef<NodeJS.Timeout | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [timeLeft, setTimeLeft] = useState<number | null>(null);
 
   const activeChat = chats.find(c => c.id === msg.chatId);
   const otherParticipantName = activeChat?.name || 'User';
+
+  // ⏱️ Self-Destruct Message Timer for Secret Chats
+  useEffect(() => {
+    if (!isSecret) return;
+    const timerDuration = activeChat?.selfDestructTimer || 30; 
+    const createdAtTime = msg.createdAt ? new Date(msg.createdAt).getTime() : Date.now();
+    const elapsed = Math.floor((Date.now() - createdAtTime) / 1000);
+    const remaining = Math.max(0, timerDuration - elapsed);
+    
+    setTimeLeft(remaining);
+
+    if (remaining <= 0) {
+      deleteMessage(msg.chatId, msg.id);
+      return;
+    }
+
+    const interval = setInterval(() => {
+      setTimeLeft(prev => {
+        if (prev === null || prev <= 1) {
+          clearInterval(interval);
+          deleteMessage(msg.chatId, msg.id);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isSecret, msg.id, msg.chatId, activeChat?.selfDestructTimer]);
+
+  const isSystemNotice = msg.text?.startsWith('[System]') || msg.text?.startsWith('[Security Notice]');
+
+  if (isSystemNotice) {
+    return (
+      <div className="flex justify-center my-4 w-full">
+        <span className="bg-[#121820] px-4 py-2 rounded-full text-xs font-semibold text-slate-300 border border-slate-700/50 flex items-center gap-2 shadow-lg z-10">
+          <ShieldAlert className="w-4 h-4 text-red-400" />
+          {msg.text.replace(/\[(System|Security Notice)\] /g, '')}
+        </span>
+      </div>
+    );
+  }
 
   const handleDragEnd = (_: any, info: any) => {
     if (Math.abs(info.offset.x) > 100) {
@@ -43,22 +126,44 @@ export default function MessageBubble({ msg, isMe, onReply, onEdit, replyMessage
     if (pressTimer.current) clearTimeout(pressTimer.current);
   };
 
-  // Mock audio playback
+  // Real audio playback using HTMLAudioElement
   useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (isPlaying) {
-      interval = setInterval(() => {
-        setAudioProgress(prev => {
-          if (prev >= 100) {
-            setIsPlaying(false);
-            return 0;
-          }
-          return prev + 2;
-        });
-      }, 100);
+    if (msg.audioUrl && !audioRef.current) {
+      const audio = new Audio(msg.audioUrl);
+      audioRef.current = audio;
+      
+      audio.addEventListener('loadedmetadata', () => {
+        setAudioDuration(audio.duration);
+      });
+      audio.addEventListener('timeupdate', () => {
+        if (audio.duration) {
+          setAudioProgress((audio.currentTime / audio.duration) * 100);
+        }
+      });
+      audio.addEventListener('ended', () => {
+        setIsPlaying(false);
+        setAudioProgress(0);
+      });
     }
-    return () => clearInterval(interval);
-  }, [isPlaying]);
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+    };
+  }, [msg.audioUrl]);
+
+  const toggleAudioPlayback = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (isPlaying) {
+      audio.pause();
+      setIsPlaying(false);
+    } else {
+      audio.play().catch(err => console.error('Audio play error:', err));
+      setIsPlaying(true);
+    }
+  };
 
   const handleCopy = () => {
     if (msg.text) navigator.clipboard.writeText(msg.text);
@@ -200,7 +305,7 @@ export default function MessageBubble({ msg, isMe, onReply, onEdit, replyMessage
           {msg.audioUrl && (
             <div className="flex items-center gap-3 min-w-[200px] mb-1">
               <button 
-                onClick={() => setIsPlaying(!isPlaying)}
+                onClick={toggleAudioPlayback}
                 className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isMe ? 'bg-white text-secondary' : 'bg-secondary text-white'}`}
               >
                 {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-1" />}
@@ -208,7 +313,11 @@ export default function MessageBubble({ msg, isMe, onReply, onEdit, replyMessage
               <div className="flex-1 h-1.5 bg-black/10 rounded-full overflow-hidden relative">
                 <div className={`absolute left-0 top-0 bottom-0 ${isMe ? 'bg-white' : 'bg-secondary'}`} style={{ width: `${audioProgress}%` }} />
               </div>
-              <span className="text-xs font-mono opacity-70">0:14</span>
+              <span className="text-xs font-mono opacity-70">
+                {audioDuration > 0 
+                  ? `${Math.floor(audioDuration / 60)}:${Math.floor(audioDuration % 60).toString().padStart(2, '0')}` 
+                  : '0:00'}
+              </span>
             </div>
           )}
 
@@ -302,7 +411,9 @@ export default function MessageBubble({ msg, isMe, onReply, onEdit, replyMessage
 
           {/* Text Content */}
           {msg.text && (
-            <p className={`text-[15px] leading-relaxed ${isMe ? 'text-white' : 'text-on-surface'}`}>{msg.text}</p>
+            <p className={`text-[15px] leading-relaxed ${isMe ? 'text-white' : 'text-on-surface'}`}>
+              <ScrambledText text={msg.text} isSecret={isSecret} />
+            </p>
           )}
         </div>
 
@@ -320,7 +431,13 @@ export default function MessageBubble({ msg, isMe, onReply, onEdit, replyMessage
       </motion.div>
 
       <div className={`flex items-center gap-1 ${isMe ? 'mr-1' : 'ml-1'} ${msg.reactions && Object.keys(msg.reactions).length > 0 ? 'mt-3' : ''}`}>
-        {isSecret && <Timer className="w-3 h-3 text-green-500" />}
+        {isSecret && timeLeft !== null && (
+          <span className="text-[9px] text-green-400 font-black px-1.5 py-0.5 rounded-full bg-green-950/40 border border-green-500/20 mr-1 animate-pulse flex items-center gap-0.5">
+            <Timer className="w-2.5 h-2.5 text-green-400" />
+            {timeLeft}s
+          </span>
+        )}
+        {isSecret && timeLeft === null && <Timer className="w-3 h-3 text-green-500 mr-1" />}
         {msg.isEdited && <span className="text-[10px] text-on-surface-variant italic mr-1">edited</span>}
         <span className="text-[10px] text-on-surface-variant">{msg.timestamp}</span>
         {isMe && (

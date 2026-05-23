@@ -2,13 +2,21 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { ArrowLeft, MessageCircle, Phone, Video, Info, Bell, Ban, Trash2, Lock, ShieldCheck, UserPlus, UserCheck, Clock, Grid, PlayCircle } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
+import { useCall } from '../context/CallContext';
 import { auth } from '../config/firebase';
 import { ENDPOINTS } from '../config/api';
+import { apiFetch } from '../utils/fetcher';
+import { User } from '../types';
+import UserListModal from '../components/social/UserListModal';
 
 export default function ContactProfileScreen({ onBack, onNavigate }: { onBack: () => void, onNavigate: (s: string) => void }) {
-  const { contacts, activeContactId, startChatWithContact, addToast, chats, setChats, currentUser, blockContact, reportContact, muteChat, followUser, unfollowUser, posts, globalUsers, setGlobalUsers, getToken } = useAppContext();
+  const { contacts, activeContactId, setActiveContactId, startChatWithContact, addToast, chats, setChats, currentUser, blockContact, reportContact, muteChat, followUser, unfollowUser, posts, globalUsers, setGlobalUsers, requestSecretChat, createGroupChat } = useAppContext();
+  const { startCall } = useCall();
   const [requestSent, setRequestSent] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState<'posts' | 'highlights'>('posts');
+  const [userPostsData, setUserPostsData] = React.useState<any[]>([]);
+  const [userStoriesData, setUserStoriesData] = React.useState<any[]>([]);
+  const [isLoadingContent, setIsLoadingContent] = React.useState(false);
   
   // Look in globalUsers first, then contacts, and finally currentUser (for self-profile view)
   const contact = globalUsers.find(c => c.id === activeContactId) || 
@@ -22,34 +30,80 @@ export default function ContactProfileScreen({ onBack, onNavigate }: { onBack: (
   const isFollowing = currentUser?.following?.includes(activeContactId || '');
   const isRequested = contact?.receivedFollowReqs?.some((r: any) => r.senderId === currentUser?.id);
 
-  // Fetch user if missing
-  React.useEffect(() => {
-    if (activeContactId && !contact) {
-      const fetchUser = async () => {
-        try {
-          const idToken = await getToken();
-          if (!idToken) return;
+  const [mediaCount, setMediaCount] = React.useState({ total: 0 });
+  const [showList, setShowList] = React.useState<'followers' | 'following' | null>(null);
+  const [listData, setListData] = React.useState<User[]>([]);
+  const [isListLoading, setIsListLoading] = React.useState(false);
 
-          const res = await fetch(ENDPOINTS.USER_PROFILE(activeContactId), {
-            headers: { 'Authorization': `Bearer ${idToken}` }
-          });
-          
-          if (res.ok) {
-            const data = await res.json();
-            setGlobalUsers(prev => {
-              if (prev.some(u => u.id === data.id)) return prev;
-              return [...prev, data];
-            });
+  React.useEffect(() => {
+    if (!activeContactId) return;
+    const fetchContent = async () => {
+      setIsLoadingContent(true);
+      try {
+        const [postsRes, storiesRes] = await Promise.all([
+          apiFetch(ENDPOINTS.USER_POSTS(activeContactId)),
+          apiFetch(ENDPOINTS.USER_STORIES(activeContactId))
+        ]);
+        if (postsRes.ok) setUserPostsData(await postsRes.json());
+        if (storiesRes.ok) setUserStoriesData(await storiesRes.json());
+      } catch (e) {
+        console.error('Failed to fetch user content', e);
+      } finally {
+        setIsLoadingContent(false);
+      }
+    };
+    fetchContent();
+  }, [activeContactId]);
+
+  const fetchSocialList = async (type: 'followers' | 'following') => {
+    if (!activeContactId) return;
+    setShowList(type);
+    setIsListLoading(true);
+    try {
+      const endpoint = type === 'followers' ? ENDPOINTS.GET_FOLLOWERS(activeContactId) : ENDPOINTS.GET_FOLLOWING(activeContactId);
+      const res = await apiFetch(endpoint);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) setListData(data);
+      }
+    } catch (e) {
+      console.error(e);
+      addToast('Failed to load list', 'error');
+    } finally {
+      setIsListLoading(false);
+    }
+  };
+
+  // Fetch user if missing and media count
+  React.useEffect(() => {
+    if (activeContactId) {
+      const fetchData = async () => {
+        try {
+          // Fetch profile if missing
+          if (!contact) {
+            const res = await apiFetch(ENDPOINTS.USER_PROFILE(activeContactId));
+            if (res.ok) {
+              const data = await res.json();
+              setGlobalUsers(prev => prev.some(u => u.id === data.id) ? prev : [...prev, data]);
+            }
+          }
+
+          // Fetch media count
+          if (chat) {
+            const mediaRes = await apiFetch(ENDPOINTS.CHAT_MEDIA(chat.id));
+            if (mediaRes.ok) {
+              const mediaData = await mediaRes.json();
+              setMediaCount(mediaData);
+            }
           }
         } catch (e) {
-          console.error("[ContactProfile] Critical fetch error:", e);
+          console.error("[ContactProfile] Data fetch error:", e);
         }
       };
       
-      const timer = setTimeout(fetchUser, 100);
-      return () => clearTimeout(timer);
+      fetchData();
     }
-  }, [activeContactId, contact, setGlobalUsers]);
+  }, [activeContactId, chat?.id, contact, setGlobalUsers]);
   
   if (!contact) {
     return (
@@ -76,8 +130,6 @@ export default function ContactProfileScreen({ onBack, onNavigate }: { onBack: (
   const displayName = contact.displayName || contact.name || 'User';
   const username = contact.username || displayName.toLowerCase().replace(/\s+/g, '_');
   const avatarUrl = contact.avatar;
-
-  const userPosts = posts.filter(p => p.userId === contact.id);
   const isPrivate = contact.isPrivate && !isFollowing;
 
   const handleMessage = () => {
@@ -108,30 +160,12 @@ export default function ContactProfileScreen({ onBack, onNavigate }: { onBack: (
   };
 
   const handleRequestSecretChat = () => {
-    setRequestSent(true);
-    addToast('Secret chat request sent to ' + contact.name, 'info');
-    
-    // Mock acceptance after 2 seconds
-    setTimeout(() => {
-      const existingChat = chats.find(c => c.id === contact.id);
-      if (existingChat) {
-        setChats(prev => prev.map(c => c.id === contact.id ? { ...c, isSecret: true, selfDestructTimer: 60 } : c));
-      } else {
-        setChats(prev => [...prev, {
-          id: contact.id,
-          name: contact.displayName || contact.name || 'User',
-          avatar: contact.avatar,
-          isSecret: true,
-          selfDestructTimer: 60,
-          lastMessage: 'Secret chat started',
-          lastMessageTime: 'Just now'
-        }]);
-      }
-      addToast(contact.name + ' accepted your secret chat request!', 'success');
-      setRequestSent(false);
-      startChatWithContact(contact.id);
-      onNavigate('chat-detail');
-    }, 2000);
+    if (contact?.id) {
+      requestSecretChat(contact.id);
+      setTimeout(() => {
+        onNavigate('chat-detail');
+      }, 50);
+    }
   };
 
   return (
@@ -166,22 +200,37 @@ export default function ContactProfileScreen({ onBack, onNavigate }: { onBack: (
           </div>
           
           <div className="flex items-center gap-6 py-2">
-            <div className="text-center">
-              <span className="block font-black text-lg text-on-surface">{userPosts.length}</span>
+            <div className="text-center cursor-pointer">
+              <span className="block font-black text-lg text-on-surface">{userPostsData.length}</span>
               <span className="text-[10px] uppercase font-bold text-on-surface-variant tracking-wider">Posts</span>
             </div>
-            <div className="text-center">
-              <span className="block font-black text-lg text-on-surface">{contact.followers?.length || 0}</span>
+            <div className="text-center cursor-pointer" onClick={() => fetchSocialList('followers')}>
+              <span className="block font-black text-lg text-on-surface">{contact._count?.followers ?? contact.followers?.length ?? 0}</span>
               <span className="text-[10px] uppercase font-bold text-on-surface-variant tracking-wider">Followers</span>
             </div>
-            <div className="text-center">
-              <span className="block font-black text-lg text-on-surface">{contact.following?.length || 0}</span>
+            <div className="text-center cursor-pointer" onClick={() => fetchSocialList('following')}>
+              <span className="block font-black text-lg text-on-surface">{contact._count?.following ?? contact.following?.length ?? 0}</span>
               <span className="text-[10px] uppercase font-bold text-on-surface-variant tracking-wider">Following</span>
             </div>
           </div>
 
           {/* Action Buttons — Instagram-style */}
-          <div className="flex gap-3 w-full max-w-sm pt-2">
+          <div className="flex gap-2 w-full max-w-sm pt-2">
+            <button 
+              onClick={() => startCall(contact.id, displayName, contact.avatar, 'VOICE')}
+              className="flex-1 py-3 rounded-2xl bg-surface-container text-on-surface font-bold border border-white/40 active:scale-95 transition-all flex items-center justify-center"
+            >
+              <Phone className="w-5 h-5" />
+            </button>
+            <button 
+              onClick={() => startCall(contact.id, displayName, contact.avatar, 'VIDEO')}
+              className="flex-1 py-3 rounded-2xl bg-surface-container text-on-surface font-bold border border-white/40 active:scale-95 transition-all flex items-center justify-center"
+            >
+              <Video className="w-5 h-5 text-secondary" />
+            </button>
+          </div>
+
+          <div className="flex gap-3 w-full max-w-sm">
             {isFollowing ? (
               <>
                 <button 
@@ -193,7 +242,7 @@ export default function ContactProfileScreen({ onBack, onNavigate }: { onBack: (
                 </button>
                 <button 
                   onClick={() => unfollowUser(contact.id)}
-                  className="px-6 py-3 rounded-2xl bg-surface-container text-on-surface font-bold border border-white/40 active:scale-95 transition-all"
+                  className="flex-1 py-3 rounded-2xl bg-surface-container text-on-surface font-bold border border-white/40 active:scale-95 transition-all"
                 >
                   Following
                 </button>
@@ -261,18 +310,46 @@ export default function ContactProfileScreen({ onBack, onNavigate }: { onBack: (
               </button>
             </div>
 
-            {/* Grid */}
-            <div className="grid grid-cols-3 gap-1 pt-1">
-              {userPosts.length > 0 ? userPosts.map(post => (
-                <div key={post.id} className="aspect-square bg-surface-container overflow-hidden group cursor-pointer relative">
-                  <img src={post.mediaUrl} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
-                  {post.mediaType === 'video' && (
-                    <PlayCircle className="absolute top-2 right-2 w-4 h-4 text-white drop-shadow-md" />
+            {/* Grid & Highlights */}
+            <div className="mt-4">
+              {isLoadingContent ? (
+                <div className="text-center text-on-surface-variant py-10">Loading...</div>
+              ) : activeTab === 'posts' ? (
+                <div className="grid grid-cols-3 gap-1 pt-1">
+                  {userPostsData.length > 0 ? userPostsData.map((post: any, i) => (
+                    <div key={post.id || i} className="aspect-square bg-surface-container overflow-hidden group cursor-pointer relative">
+                      <img src={post.mediaUrl} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                      {post.mediaType === 'video' && (
+                        <PlayCircle className="absolute top-2 right-2 w-4 h-4 text-white drop-shadow-md" />
+                      )}
+                    </div>
+                  )) : (
+                    <div className="col-span-3 py-20 text-center text-on-surface-variant">
+                      <p className="font-medium">No posts yet</p>
+                    </div>
                   )}
                 </div>
-              )) : (
-                <div className="col-span-3 py-20 text-center text-on-surface-variant">
-                  <p className="font-medium">No posts yet</p>
+              ) : (
+                <div className="flex gap-4 overflow-x-auto pb-4 snap-x pt-4 px-2">
+                  {userStoriesData.length > 0 ? userStoriesData.map((story: any, i) => (
+                    <div key={story.id || i} className="flex flex-col items-center gap-2 snap-center shrink-0 cursor-pointer group">
+                      <div className="w-16 h-16 rounded-full p-[2px] bg-primary/20 group-hover:bg-primary transition-colors">
+                        <div className="w-full h-full rounded-full border-2 border-surface overflow-hidden relative">
+                          <img 
+                            src={story.mediaUrl}
+                            alt="Highlight"
+                            className="w-full h-full object-cover"
+                          />
+                          <div className="absolute inset-0 bg-black/20 group-hover:bg-black/0 transition-colors" />
+                        </div>
+                      </div>
+                      <span className="text-xs text-on-surface-variant font-medium">{new Date(story.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                    </div>
+                  )) : (
+                    <div className="text-center py-20 text-on-surface-variant w-full">
+                      <p className="font-medium">No highlights yet</p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -284,6 +361,25 @@ export default function ContactProfileScreen({ onBack, onNavigate }: { onBack: (
             <h3 className="text-sm font-bold text-primary uppercase tracking-wider mb-2">About</h3>
             <p className="text-on-surface">{contact.bio || 'Hey there! I am using Aqualyn.'}</p>
           </div>
+          
+          <div onClick={() => {
+            if (contact) {
+              createGroupChat(`${currentUser?.displayName || 'My'} & ${contact.displayName || contact.name || 'Friend'} Group`, [contact.id]);
+            }
+          }} className="p-5 border-b border-white/20 flex items-center justify-between hover:bg-white/40 transition-colors cursor-pointer">
+            <div className="flex items-center gap-4">
+              <UserCheck className="w-5 h-5 text-cyan-600" />
+              <span className="font-semibold text-on-surface">Start Group Chat</span>
+            </div>
+          </div>
+
+          <div onClick={handleRequestSecretChat} className="p-5 border-b border-white/20 flex items-center justify-between hover:bg-white/40 transition-colors cursor-pointer">
+            <div className="flex items-center gap-4">
+              <Lock className="w-5 h-5 text-secondary animate-pulse" />
+              <span className="font-semibold text-secondary">Start Secret Chat (Incognito)</span>
+            </div>
+          </div>
+
           <div onClick={handleMute} className="p-5 border-b border-white/20 flex items-center justify-between hover:bg-white/40 transition-colors cursor-pointer">
             <div className="flex items-center gap-4">
               <Bell className="w-5 h-5 text-on-surface-variant" />
@@ -301,7 +397,7 @@ export default function ContactProfileScreen({ onBack, onNavigate }: { onBack: (
               <Info className="w-5 h-5 text-on-surface-variant" />
               <span className="font-semibold text-on-surface">Media, Links, and Docs</span>
             </div>
-            <span className="text-sm font-bold text-secondary">12</span>
+            <span className="text-sm font-bold text-secondary">{mediaCount.total}</span>
           </div>
         </div>
 
@@ -316,6 +412,22 @@ export default function ContactProfileScreen({ onBack, onNavigate }: { onBack: (
           </div>
         </div>
       </main>
+
+      <UserListModal 
+        isOpen={!!showList}
+        onClose={() => setShowList(null)}
+        title={showList || ''}
+        users={listData}
+        isLoading={isListLoading}
+        onUserClick={(u) => {
+            if (u.id === currentUser?.id) {
+                onNavigate('profile');
+            } else {
+                setActiveContactId(u.id);
+                // The useEffect will handle fetching the new contact's data
+            }
+        }}
+      />
     </motion.div>
   );
 }

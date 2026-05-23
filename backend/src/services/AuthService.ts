@@ -1,5 +1,7 @@
 import { redis, pubClient } from '../config/redis';
-import admin from '../config/firebaseAdmin';
+import jwt from 'jsonwebtoken';
+import prisma from '../config/prisma';
+const JWT_SECRET = process.env.JWT_SECRET || '07f4aa247bb2789d402af105e7fc416e57aebb266facfb2c30ad2843a86e4e61';
 
 /**
  * AuthService handles distributed token lifecycle and session invalidation.
@@ -15,8 +17,8 @@ export class AuthService {
     static async logout(userId: string, token: string): Promise<void> {
         try {
             // 1. Decode token to find its expiry
-            const decodedToken = await admin.auth().verifyIdToken(token, true);
-            const expiry = decodedToken.exp - Math.floor(Date.now() / 1000);
+            const decoded: any = jwt.verify(token, JWT_SECRET);
+            const expiry = decoded.exp - Math.floor(Date.now() / 1000);
 
             if (expiry > 0) {
                 // 2. Add to Redis Denylist with TTL
@@ -24,7 +26,14 @@ export class AuthService {
                 await redis.set(key, '1', 'EX', expiry);
             }
 
-            // 3. Global Kill Signal (Socket Disconnect)
+            // 3. Remove session from DB
+            try {
+                await (prisma as any).session.deleteMany({ where: { token } });
+            } catch (dbErr) {
+                console.error('[AuthService] Session DB delete warning:', dbErr);
+            }
+
+            // 4. Global Kill Signal (Socket Disconnect)
             // Broadcast to all backend servers via Redis Pub/Sub
             await pubClient.publish('GLOBAL_LOGOUT', JSON.stringify({ userId, token }));
             

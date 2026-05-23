@@ -35,7 +35,7 @@ const ToggleRow = ({ icon, title, subtitle, state, setState }: any) => (
 );
 
 export default function NewChatModal({ isOpen, onClose, onNavigate }: NewChatModalProps) {
-  const { contacts, currentUser, startChatWithContact, createGroupChat } = useAppContext();
+  const { contacts, currentUser, startChatWithContact, createGroupChat, globalUsers } = useAppContext();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
   const [mode, setMode] = useState<'default' | 'group-select' | 'group-info'>('default');
@@ -48,8 +48,22 @@ export default function NewChatModal({ isOpen, onClose, onNavigate }: NewChatMod
   
   const [isAddContactOpen, setIsAddContactOpen] = useState(false);
 
-  const filteredContacts = contacts.filter(c => 
-    c.name.toLowerCase().includes(searchQuery.toLowerCase())
+  // Combine local contacts and other global users for global discovery
+  const allAvailableUsers = [
+    ...contacts.map(c => ({ id: c.id, name: c.name, avatar: c.avatar, role: c.role || 'Contact', isContact: true })),
+    ...globalUsers
+      .filter(u => !contacts.some(c => c.id === u.id) && u.id !== currentUser?.id)
+      .map(u => ({
+        id: u.id,
+        name: u.displayName || u.username || 'Aqualyn User',
+        avatar: u.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${u.username || 'U'}`,
+        role: u.bio || 'Aqualyn User',
+        isContact: false
+      }))
+  ];
+
+  const filteredContacts = allAvailableUsers.filter(u => 
+    u.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const toggleContact = (id: string) => {
@@ -153,7 +167,7 @@ export default function NewChatModal({ isOpen, onClose, onNavigate }: NewChatMod
                       <div className="flex gap-4 overflow-x-auto px-4 py-3 border-b border-white/10 custom-scrollbar shrink-0 items-start min-h-[100px]">
                         <AnimatePresence>
                           {selectedContacts.map(id => {
-                            const c = contacts.find(c => c.id === id);
+                            const c = allAvailableUsers.find(c => c.id === id);
                             if (!c) return null;
                             return (
                               <motion.div

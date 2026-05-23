@@ -2,6 +2,9 @@ import { Server, Socket } from 'socket.io';
 import { PresenceService } from './PresenceService';
 import prisma from '../config/prisma';
 import { notificationQueue } from '../config/queues';
+import { subClient, pubClient } from '../config/redis';
+import { ActivityService } from './ActivityService';
+import { ContentService } from './ContentService';
 
 /**
  * SocketService handles the distributed real-time communication for Aqualyn.
@@ -10,12 +13,18 @@ import { notificationQueue } from '../config/queues';
 export class SocketService {
     private static io: Server;
 
+    static emitToUser(userId: string, event: string, data: any) {
+        if (this.io) {
+            this.io.to(userId).emit(event, data);
+        }
+    }
+
     /**
      * Initializes the Socket.io instance with the provided server.
      */
     static init(io: Server) {
         this.io = io;
-        this.io.on('connection', (socket) => this.handleConnection(socket));
+        this.io.on('connection', (socket: Socket) => this.handleConnection(socket));
         
         // Listen for Global Distributed Logout events
         this.setupAuthSubscriptions();
@@ -27,13 +36,28 @@ export class SocketService {
      * Listens for distributed logout signals across all server nodes.
      */
     private static setupAuthSubscriptions() {
-        const { subClient } = require('../config/redis');
         subClient.subscribe('GLOBAL_LOGOUT', (err: any) => {
             if (err) console.error('[Socket] Redis Global Logout Sub Error:', err);
         });
 
         subClient.subscribe('SOCIAL_STORY_UPDATE', (err: any) => {
             if (err) console.error('[Socket] Redis Social Sub Error:', err);
+        });
+
+        subClient.subscribe('BROADCAST_ACTIVITY', (err: any) => {
+            if (err) console.error('[Socket] Redis Broadcast Activity Error:', err);
+        });
+
+        subClient.subscribe('SOCIAL_POST_UPDATE', (err: any) => {
+            if (err) console.error('[Socket] Redis Social Post Sub Error:', err);
+        });
+
+        subClient.subscribe('SOCIAL_LIKE_UPDATE', (err: any) => {
+            if (err) console.error('[Socket] Redis Social Like Sub Error:', err);
+        });
+
+        subClient.subscribe('SOCIAL_COMMENT_UPDATE', (err: any) => {
+            if (err) console.error('[Socket] Redis Social Comment Sub Error:', err);
         });
 
         subClient.on('message', (channel: string, message: string) => {
@@ -43,15 +67,47 @@ export class SocketService {
             }
 
             if (channel === 'SOCIAL_STORY_UPDATE') {
-                const { userId, storyId, followerIds } = JSON.parse(message);
+                const { userId, storyId, story, followerIds } = JSON.parse(message);
                 // Broadcast to every follower's room on this specific node
                 for (const followerId of followerIds) {
                     this.io.to(followerId).emit('receive_new_story', { 
                         userId, 
                         storyId,
+                        story,
                         timestamp: new Date()
                     });
                 }
+            }
+
+            if (channel === 'SOCIAL_POST_UPDATE') {
+                const { userId, postId, post, followerIds } = JSON.parse(message);
+                for (const followerId of followerIds) {
+                    this.io.to(followerId).emit('receive_new_post', { 
+                        userId, 
+                        postId,
+                        post,
+                        timestamp: new Date()
+                    });
+                }
+            }
+
+            if (channel === 'BROADCAST_ACTIVITY') {
+                const { userId, activity } = JSON.parse(message);
+                this.io.to(userId).emit('new_notification', activity);
+            }
+
+            if (channel === 'SOCIAL_LIKE_UPDATE') {
+                const { userId, postId, liked } = JSON.parse(message);
+                // In production, we'd typically broadcast this to all online followers or just the author
+                // For simplicity, we broadcast to the author's room which everyone interested in their feed should listen to?
+                // Actually, emitting specifically to followers or the target post's room is better.
+                // For now, let's broadcast globally or to people currently viewed room.
+                this.io.emit('receive_post_like', { userId, postId, liked });
+            }
+
+            if (channel === 'SOCIAL_COMMENT_UPDATE') {
+                const { userId, postId, comment } = JSON.parse(message);
+                this.io.emit('receive_post_comment', { userId, postId, comment });
             }
         });
     }
@@ -80,11 +136,21 @@ export class SocketService {
         console.log(`[Socket] Connection established: ${socket.id}`);
 
         socket.on('join', async (userId: string) => {
-            console.log(`[Socket] User ${userId} joined room`);
+            if (!userId || userId === 'null' || userId === 'undefined') {
+                console.warn(`[Socket] Attempted join with invalid userId: ${userId}`);
+                return;
+            }
+            socket.data.userId = userId;
             socket.join(userId);
-            // Mark online and update the DB timestamp
+            console.log(`[Socket] User ${userId} joined room`);
+
+            // Presence management
             await PresenceService.setUserOnline(userId);
-            await prisma.user.update({ where: { id: userId }, data: { lastLogin: new Date() } });
+            try {
+                await (prisma as any).user.update({ where: { id: userId }, data: { lastLogin: new Date() } });
+            } catch (e) {
+                console.error(`[Socket] Failed to update lastLogin for ${userId}:`, e);
+            }
         });
 
         socket.on('heartbeat', async (userId: string) => {
@@ -93,26 +159,112 @@ export class SocketService {
         });
 
         socket.on('disconnecting', async () => {
-            const userRooms = Array.from(socket.rooms).filter(r => r !== socket.id);
-            for (const userId of userRooms) {
+            const userId = socket.data.userId;
+            if (userId && userId !== 'null' && userId !== 'undefined') {
                 await PresenceService.setUserOffline(userId);
                 // Last Seen persistence
-                await prisma.user.update({ where: { id: userId }, data: { lastLogin: new Date() } });
-                console.log(`[Socket] User ${userId} disconnected. Presence saved.`);
+                try {
+                    await (prisma as any).user.update({ where: { id: userId }, data: { lastLogin: new Date() } });
+                    console.log(`[Socket] User ${userId} disconnected. Presence saved.`);
+                } catch (e) {
+                    console.error(`[Socket] Failed to update disconnect presence for ${userId}:`, e);
+                }
             }
         });
 
         // Delegate specific events to handlers
-        socket.on('send_message', (data) => this.handleSendMessage(socket, data));
-        socket.on('typing', (data) => this.handleTyping(socket, data));
-        socket.on('mark_as_read', (data) => this.handleMarkAsRead(socket, data));
-        socket.on('react_message', (data) => this.handleReactMessage(socket, data));
-        socket.on('edit_message', (data) => this.handleEditMessage(socket, data));
-        socket.on('delete_message_for_everyone', (data) => this.handleDeleteMessageForEveryone(socket, data));
-        socket.on('delete_chat_for_me', (data) => this.handleDeleteChatForMe(socket, data));
-        socket.on('delete_message_for_me', (data) => this.handleDeleteMessageForMe(socket, data));
-        socket.on('delete_chat_for_everyone', (data) => this.handleDeleteChatForEveryone(socket, data));
-        socket.on('invite_to_chat', (data) => this.handleInviteToChat(socket, data));
+        socket.on('send_message', (data: any) => this.handleSendMessage(socket, data));
+        socket.on('typing', (data: any) => this.handleTyping(socket, data));
+        socket.on('mark_as_read', (data: any) => this.handleMarkAsRead(socket, data));
+        socket.on('react_message', (data: any) => this.handleReactMessage(socket, data));
+        socket.on('edit_message', (data: any) => this.handleEditMessage(socket, data));
+        socket.on('delete_message_for_everyone', (data: any) => this.handleDeleteMessageForEveryone(socket, data));
+        socket.on('delete_chat_for_me', (data: any) => this.handleDeleteChatForMe(socket, data));
+        socket.on('delete_message_for_me', (data: any) => this.handleDeleteMessageForMe(socket, data));
+        socket.on('delete_chat_for_everyone', (data: any) => this.handleDeleteChatForEveryone(socket, data));
+        socket.on('invite_to_chat', (data: any) => this.handleInviteToChat(socket, data));
+
+        // --- WebRTC Signaling with CallLog Persistence ---
+        socket.on('call_user', async (data: any) => {
+            try {
+                // Create a CallLog entry when call is initiated
+                const callLog = await (prisma as any).callLog.create({
+                    data: {
+                        callerId: data.from,
+                        calleeId: data.to,
+                        type: data.type || 'VOICE',
+                        status: 'ringing'
+                    }
+                });
+                // Forward call request to target user
+                this.io.to(data.to).emit('incoming_call', {
+                    from: data.from,
+                    callerName: data.callerName,
+                    callerAvatar: data.callerAvatar,
+                    type: data.type,
+                    signal: data.signal,
+                    callLogId: callLog.id
+                });
+                // Also send the callLogId back to the caller
+                socket.emit('call_log_created', { callLogId: callLog.id });
+            } catch (e) {
+                console.error('[Socket] call_user error:', e);
+                this.io.to(data.to).emit('incoming_call', {
+                    from: data.from,
+                    callerName: data.callerName,
+                    callerAvatar: data.callerAvatar,
+                    type: data.type,
+                    signal: data.signal
+                });
+            }
+        });
+
+        socket.on('call_accepted', async (data: any) => {
+            this.io.to(data.to).emit('call_accepted', { signal: data.signal, answer: data.answer });
+            // Update CallLog to active
+            if (data.callLogId) {
+                try {
+                    await (prisma as any).callLog.update({
+                        where: { id: data.callLogId },
+                        data: { status: 'active' }
+                    });
+                } catch (e) { console.error('[Socket] call_accepted log error:', e); }
+            }
+        });
+
+        socket.on('call_rejected', async (data: any) => {
+            this.io.to(data.to).emit('call_rejected', { reason: data.reason });
+            // Update CallLog to rejected
+            if (data.callLogId) {
+                try {
+                    await (prisma as any).callLog.update({
+                        where: { id: data.callLogId },
+                        data: { status: 'rejected', endedAt: new Date() }
+                    });
+                } catch (e) { console.error('[Socket] call_rejected log error:', e); }
+            }
+        });
+
+        socket.on('webrtc_signal', (data: any) => {
+            this.io.to(data.to).emit('webrtc_signal', { signal: data.signal, from: data.from });
+        });
+
+        socket.on('end_call', async (data: any) => {
+            this.io.to(data.to).emit('call_ended');
+            // Update CallLog to ended with duration
+            if (data.callLogId) {
+                try {
+                    const callLog = await (prisma as any).callLog.findUnique({ where: { id: data.callLogId } });
+                    if (callLog) {
+                        const duration = Math.floor((Date.now() - new Date(callLog.startedAt).getTime()) / 1000);
+                        await (prisma as any).callLog.update({
+                            where: { id: data.callLogId },
+                            data: { status: 'ended', endedAt: new Date(), duration }
+                        });
+                    }
+                } catch (e) { console.error('[Socket] end_call log error:', e); }
+            }
+        });
     }
 
     private static async handleSendMessage(socket: Socket, data: any) {
@@ -165,7 +317,6 @@ export class SocketService {
 
             // 🟢 DISTRIBUTED MENTION LOGIC (Run in background)
             if (text) {
-                const { ContentService } = require('./ContentService');
                 ContentService.handleChatMentions(senderId, chatId, text).catch((e: any) => 
                     console.error('[SocketService] Mention Error:', e)
                 );
@@ -176,23 +327,65 @@ export class SocketService {
                 select: { displayName: true, avatar: true, username: true }
             });
 
-            const recipientStatus = await PresenceService.getUserStatus(receiverId);
-            if (recipientStatus === 'online') {
-                await (prisma as any).message.update({ where: { id: message.id }, data: { status: 'delivered' } });
-                message.status = 'delivered';
-            }
+            const chatPayload = {
+                id: chat.id,
+                name: chat.name,
+                avatar: chat.avatar,
+                isGroup: chat.isGroup,
+                isSecret: chat.isSecret
+            };
 
-            this.io.to(receiverId).emit('receive_message', {
-                ...message,
-                sender: sender,
-                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            });
+            if (chat.isGroup) {
+                const participants = await (prisma as any).chatParticipant.findMany({
+                    where: { chatId },
+                    select: { userId: true }
+                });
+                for (const p of participants) {
+                    if (p.userId !== senderId) {
+                        this.io.to(p.userId).emit('receive_message', {
+                            ...message,
+                            sender: sender,
+                            chat: chatPayload,
+                            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                        });
+                    }
+                }
+            } else {
+                const recipientStatus = await PresenceService.getUserStatus(receiverId);
+                if (recipientStatus === 'online') {
+                    await (prisma as any).message.update({ where: { id: message.id }, data: { status: 'delivered' } });
+                    message.status = 'delivered';
+                }
+
+                this.io.to(receiverId).emit('receive_message', {
+                    ...message,
+                    sender: sender,
+                    chat: chatPayload,
+                    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                });
+            }
 
             socket.emit('message_sent_ack', {
                 ...message,
                 sender: sender,
                 timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             });
+
+            // 🔵 Create Activity Notification
+            const activity = await ActivityService.createActivity({
+                userId: receiverId,
+                actorId: senderId,
+                type: 'direct_message',
+                text: text ? (text.length > 50 ? text.substring(0, 50) + '...' : text) : 'Sent a media file'
+            });
+
+            if (activity) {
+                const activityWithActor = {
+                    ...activity,
+                    actor: sender
+                };
+                pubClient.publish('BROADCAST_ACTIVITY', JSON.stringify({ userId: receiverId, activity: activityWithActor }));
+            }
 
             // 5. Distributed Push Notification (Background)
             // We offload this to the Queue so the Socket response is instant

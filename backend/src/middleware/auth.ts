@@ -1,35 +1,52 @@
 import { Request, Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
+const JWT_SECRET = process.env.JWT_SECRET || '07f4aa247bb2789d402af105e7fc416e57aebb266facfb2c30ad2843a86e4e61';
+
 import admin from '../config/firebaseAdmin';
 
-export const verifyFirebaseToken = async (req: Request, res: Response, next: NextFunction) => {
-    console.log(`[Auth] Inbound Request: ${req.method} ${req.path}`);
+export const verifyToken = async (req: Request, res: Response, next: NextFunction) => {
+    // CHECK COOKIE FIRST, THEN HEADER
+    const token = req.cookies.token || (req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.split(' ')[1] : null);
     
-    // CASE-INSENSITIVE HEADER SEARCH
-    const authHeader = req.headers.authorization || (req.headers as any).Authorization;
-    
-    if (!authHeader || !authHeader.toLowerCase().startsWith('bearer ')) {
-        console.warn('[Auth] Missing or invalid Authorization header | Headers:', JSON.stringify(req.headers));
-        return res.status(401).json({ error: 'Unauthorized: Missing or invalid token' });
+    if (!token) {
+        return res.status(401).json({ error: 'Unauthorized: Missing token' });
     }
-
-    // CASE-INSENSITIVE SPLIT
-    const token = authHeader.split(/bearer /i)[1];
-    console.log(`[Auth] Inbound Token: ${token?.substring(0, 15)}...`);
     
     try {
-        const decodedToken = await admin.auth().verifyIdToken(token);
+        let decodedToken: any;
         
-        // 1. Check Global Revocation (Distributed-ready)
+        // Try native JWT first
+        try {
+            decodedToken = jwt.verify(token, JWT_SECRET) as any;
+        } catch (nativeErr) {
+            // If native fails, try Firebase (for Google Sign-in flow)
+            try {
+                const firebaseUser = await admin.auth().verifyIdToken(token);
+                decodedToken = {
+                    uid: firebaseUser.uid,
+                    email: firebaseUser.email,
+                    phone_number: firebaseUser.phone_number,
+                    id: null // Will be looked up in controller
+                };
+            } catch (firebaseErr: any) {
+                console.error('[Auth] Native & Firebase verification failed');
+                throw new Error('Invalid token');
+            }
+        }
+        
+        // Ensure either id (existing user) or uid (registration) is present
+        if (!decodedToken.id && !decodedToken.uid) {
+            return res.status(401).json({ error: 'Unauthorized: Malformed token payload' });
+        }
+        
         const isRevoked = await (require('../services/AuthService')).AuthService.isRevoked(token);
         if (isRevoked) {
             return res.status(401).json({ error: 'Unauthorized: Session revoked' });
         }
-
-        // 2. Bind the uid to the request (so we can use it in the controller)
+        
         (req as any).user = decodedToken;
         next();
     } catch (error: any) {
-        console.error('[Auth] Firebase token verification failed:', error.message || error);
-        return res.status(401).json({ error: 'Unauthorized: Token verification failed', details: error.message });
+        return res.status(401).json({ error: 'Unauthorized: Token verification failed' });
     }
 };

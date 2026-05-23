@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, Save, Camera, ChevronDown } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { ENDPOINTS } from '../config/api';
+import { apiFetch } from '../utils/fetcher';
+import { uploadFile } from '../utils/uploads';
 
 export default function EditProfileScreen({ onBack }: { onBack: () => void }) {
   const { currentUser, setCurrentUser, addToast } = useAppContext();
@@ -45,14 +47,8 @@ export default function EditProfileScreen({ onBack }: { onBack: () => void }) {
     }
     setIsSaving(true);
     try {
-      const { auth } = await import('../config/firebase');
-      const idToken = await auth.currentUser?.getIdToken();
-      const res = await fetch(ENDPOINTS.AUTH_SYNC, {
+      const res = await apiFetch(ENDPOINTS.AUTH_SYNC, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${idToken}`
-        },
         body: JSON.stringify({ displayName: name, username, bio, role, avatar, phone, showPhoneTo, searchByPhone })
       });
       if (!res.ok) {
@@ -73,12 +69,28 @@ export default function EditProfileScreen({ onBack }: { onBack: () => void }) {
     setIsSaving(false);
   };
 
-  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      // In a real app we upload to Firebase Storage, here we use local URL mock for demo
-      const imageUrl = URL.createObjectURL(file);
-      setAvatar(imageUrl);
+    if (!file) return;
+
+    try {
+      const url = await uploadFile(file);
+      const res = await apiFetch(ENDPOINTS.UPLOAD_AVATAR, {
+        method: 'POST',
+        body: JSON.stringify({ avatar: url })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAvatar(data.avatar);
+        if (currentUser) {
+          setCurrentUser({ ...currentUser, avatar: data.avatar, largeAvatar: data.avatar });
+        }
+        addToast('Avatar updated successfully', 'success');
+      } else {
+        throw new Error('Upload failed');
+      }
+    } catch (err) {
+      addToast('Failed to upload avatar', 'error');
     }
   };
 

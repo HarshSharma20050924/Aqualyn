@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, Pin, Users, CheckCheck, Mic, UserPlus, Lock, Pen, Bot, Globe, MoreVertical, Download, Moon, Sun, Trash2, CheckSquare, Archive, Volume2, VolumeX, Eye, EyeOff, FolderPlus, Eraser, ChevronRight, X } from 'lucide-react';
+import { Search, Pin, Users, CheckCheck, Mic, UserPlus, Lock, Pen, Bot, Globe, MoreVertical, Download, Moon, Sun, Trash2, CheckSquare, Archive, Volume2, VolumeX, Eye, EyeOff, FolderPlus, Eraser, ChevronRight, X, Check } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import NewChatModal from '../components/chat/NewChatModal';
 import NewFolderModal from '../components/modals/NewFolderModal';
 import { ENDPOINTS } from '../config/api';
 import { ChatPeekPreview } from '../components/chat/ChatPeekPreview';
 import DeleteChatDialog from '../components/chat/DeleteChatDialog';
+
+import { apiFetch } from '../utils/fetcher';
 
 export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string) => void }) {
   const { currentUser, chats, setActiveChatId, messages, isLoading, folders, archiveChat, pinChat, muteChat, deleteChat, clearHistory, markAsRead, addChatToFolder, addToast, archiveLockPin, theme, setTheme, globalUsers, setGlobalUsers, followUser, startChatWithContact, setActiveContactId } = useAppContext();
@@ -29,11 +31,10 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
   const [chatToDelete, setChatToDelete] = useState<string | null>(null);
   const peekTimer = React.useRef<NodeJS.Timeout | null>(null);
 
-
   React.useEffect(() => {
     if (searchQuery && isSearching) {
       const timer = setTimeout(() => {
-        fetch(ENDPOINTS.USER_SEARCH(searchQuery))
+        apiFetch(ENDPOINTS.USER_SEARCH(searchQuery))
           .then(res => res.json())
           .then(data => {
             setGlobalSearchResults(data);
@@ -81,16 +82,13 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
   };
 
   const handleTouchStart = (e: React.MouseEvent | React.TouchEvent, id: string) => {
-    if (isSelectionMode) return;
     const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
     const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
 
     pressTimer.current = setTimeout(() => {
+      if (window.navigator?.vibrate) window.navigator.vibrate(50);
       setContextMenuChatId(id);
       setContextMenuPos({ x: clientX, y: clientY });
-      if (window.navigator && window.navigator.vibrate) {
-        window.navigator.vibrate(50);
-      }
     }, 500);
   };
 
@@ -104,6 +102,7 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
       if (next.has(id)) next.delete(id);
       else next.add(id);
       if (next.size === 0) setIsSelectionMode(false);
+      else setIsSelectionMode(true);
       return next;
     });
   };
@@ -201,16 +200,60 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
           {isSelectionMode ? (
             <div className="flex-1 flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <button onClick={() => { setIsSelectionMode(false); setSelectedChats(new Set()); }} className="text-on-surface-variant hover:text-on-surface">
-                  <span className="text-sm font-bold">Cancel</span>
+                <button onClick={() => { setIsSelectionMode(false); setSelectedChats(new Set()); }} className="p-2 rounded-full hover:bg-black/5 transition-colors">
+                  <X className="w-6 h-6 text-on-surface-variant" />
                 </button>
                 <span className="font-headline font-bold text-lg">{selectedChats.size} Selected</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <button onClick={handleExportChats} className="p-2 rounded-full text-cyan-600 hover:bg-white/20 transition-colors">
-                  <Download className="w-6 h-6" />
+                <button
+                  onClick={() => {
+                    const allIds = new Set(filteredChats.map(c => c.id));
+                    if (selectedChats.size === allIds.size) {
+                      setSelectedChats(new Set());
+                    } else {
+                      setSelectedChats(allIds);
+                    }
+                  }}
+                  className="text-xs font-bold text-secondary px-3 py-1 rounded-full bg-secondary/10 hover:bg-secondary/20 transition-colors"
+                >
+                  {selectedChats.size === filteredChats.length ? 'Deselect All' : 'Select All'}
                 </button>
-                <button onClick={handleDeleteChats} className="p-2 rounded-full text-red-500 hover:bg-red-500/10 transition-colors">
+              </div>
+              <div className="flex items-center gap-1">
+                <button 
+                  onClick={() => {
+                    selectedChats.forEach(id => archiveChat(id));
+                    setIsSelectionMode(false);
+                    setSelectedChats(new Set());
+                    addToast(`Archived ${selectedChats.size} chats`, 'success');
+                  }}
+                  className="p-2 rounded-full text-on-surface-variant hover:bg-white/40 transition-colors"
+                  title="Archive"
+                >
+                  <Archive className="w-6 h-6" />
+                </button>
+                <button 
+                  onClick={() => {
+                    selectedChats.forEach(id => pinChat(id));
+                    setIsSelectionMode(false);
+                    setSelectedChats(new Set());
+                  }}
+                  className="p-2 rounded-full text-on-surface-variant hover:bg-white/40 transition-colors"
+                  title="Pin"
+                >
+                  <Pin className="w-6 h-6" />
+                </button>
+                <button 
+                  onClick={() => {
+                    selectedChats.forEach(id => muteChat(id));
+                    setIsSelectionMode(false);
+                    setSelectedChats(new Set());
+                  }}
+                  className="p-2 rounded-full text-on-surface-variant hover:bg-white/40 transition-colors"
+                  title="Mute"
+                >
+                  <Volume2 className="w-6 h-6" />
+                </button>
+                <button onClick={handleDeleteChats} className="p-2 rounded-full text-red-500 hover:bg-red-500/10 transition-colors" title="Delete">
                   <Trash2 className="w-6 h-6" />
                 </button>
               </div>
@@ -426,41 +469,48 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
                           {chat.isGroup ? (
                             <div className="w-14 h-14 rounded-2xl bg-surface-container-highest flex items-center justify-center text-primary overflow-hidden">
                               <Users className="w-8 h-8 fill-primary/20" />
+                              {isSelectionMode && (
+                                <div className={`absolute inset-0 rounded-2xl flex items-center justify-center transition-all duration-150 ${selectedChats.has(chat.id) ? 'bg-secondary/80' : 'bg-black/20'}`}>
+                                  {selectedChats.has(chat.id) && <Check className="w-6 h-6 text-white" strokeWidth={3} />}
+                                </div>
+                              )}
                             </div>
                           ) : (
                             <>
-                              <div 
-                                className="w-14 h-14 rounded-2xl overflow-hidden shadow-lg cursor-pointer"
+                              <div
+                                className="relative w-14 h-14 rounded-2xl overflow-hidden shadow-lg cursor-pointer"
                                 onClick={(e) => {
                                   e.stopPropagation();
+                                  if (isSelectionMode) { toggleSelection(chat.id); return; }
                                   const tid = chat.participantIds?.find(id => id !== currentUser?.id) || chat.id;
                                   setActiveContactId(tid);
                                   onNavigate('contact-profile');
                                 }}
                                 onMouseDown={(e) => {
                                   e.stopPropagation();
-                                  peekTimer.current = setTimeout(() => {
+                                  if (!isSelectionMode) peekTimer.current = setTimeout(() => {
                                     setPeekChatId(chat.id);
                                     if (window.navigator?.vibrate) window.navigator.vibrate(10);
                                   }, 400);
                                 }}
-                                onMouseUp={() => {
-                                  if (peekTimer.current) clearTimeout(peekTimer.current);
-                                }}
+                                onMouseUp={() => { if (peekTimer.current) clearTimeout(peekTimer.current); }}
                                 onTouchStart={(e) => {
                                   e.stopPropagation();
-                                  peekTimer.current = setTimeout(() => {
+                                  if (!isSelectionMode) peekTimer.current = setTimeout(() => {
                                     setPeekChatId(chat.id);
                                     if (window.navigator?.vibrate) window.navigator.vibrate(10);
                                   }, 400);
                                 }}
-                                onTouchEnd={() => {
-                                  if (peekTimer.current) clearTimeout(peekTimer.current);
-                                }}
+                                onTouchEnd={() => { if (peekTimer.current) clearTimeout(peekTimer.current); }}
                               >
                                 <img src={chat.avatar} alt={chat.name} className="w-full h-full object-cover" />
+                                {isSelectionMode && (
+                                  <div className={`absolute inset-0 flex items-center justify-center transition-all duration-150 ${selectedChats.has(chat.id) ? 'bg-secondary/80' : 'bg-black/20'}`}>
+                                    {selectedChats.has(chat.id) && <Check className="w-6 h-6 text-white" strokeWidth={3} />}
+                                  </div>
+                                )}
                               </div>
-                              <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-secondary-fixed rounded-full border-2 border-white aqua-glow"></div>
+                              {!isSelectionMode && <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-secondary-fixed rounded-full border-2 border-white aqua-glow"></div>}
                             </>
                           )}
                         </div>
@@ -514,30 +564,40 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
                             <UserPlus className="w-6 h-6" />
                           </div>
                         ) : (
-                          <div 
-                            className={`w-14 h-14 rounded-full overflow-hidden ${chat.id === 'c3' ? 'grayscale opacity-80' : ''}`}
+                          <div
+                            className={`relative w-14 h-14 rounded-full overflow-hidden cursor-pointer ${chat.id === 'c3' ? 'grayscale opacity-80' : ''}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (isSelectionMode) { toggleSelection(chat.id); return; }
+                              if (!chat.isGroup) {
+                                const tid = chat.participantIds?.find(id => id !== currentUser?.id) || chat.id;
+                                setActiveContactId(tid);
+                                onNavigate('contact-profile');
+                              }
+                            }}
                             onMouseDown={(e) => {
                               e.stopPropagation();
-                              peekTimer.current = setTimeout(() => {
+                              if (!isSelectionMode) peekTimer.current = setTimeout(() => {
                                 setPeekChatId(chat.id);
                                 if (window.navigator?.vibrate) window.navigator.vibrate(10);
                               }, 400);
                             }}
-                            onMouseUp={() => {
-                              if (peekTimer.current) clearTimeout(peekTimer.current);
-                            }}
+                            onMouseUp={() => { if (peekTimer.current) clearTimeout(peekTimer.current); }}
                             onTouchStart={(e) => {
                               e.stopPropagation();
-                              peekTimer.current = setTimeout(() => {
+                              if (!isSelectionMode) peekTimer.current = setTimeout(() => {
                                 setPeekChatId(chat.id);
                                 if (window.navigator?.vibrate) window.navigator.vibrate(10);
                               }, 400);
                             }}
-                            onTouchEnd={() => {
-                              if (peekTimer.current) clearTimeout(peekTimer.current);
-                            }}
+                            onTouchEnd={() => { if (peekTimer.current) clearTimeout(peekTimer.current); }}
                           >
                             <img src={chat.avatar} alt={chat.name} className="w-full h-full object-cover" />
+                            {isSelectionMode && (
+                              <div className={`absolute inset-0 flex items-center justify-center transition-all duration-150 ${selectedChats.has(chat.id) ? 'bg-secondary/80' : 'bg-black/20'}`}>
+                                {selectedChats.has(chat.id) && <Check className="w-6 h-6 text-white" strokeWidth={3} />}
+                              </div>
+                            )}
                           </div>
                         )}
                         <div className={`flex-1 min-w-0 ${chat.id === 'c4' ? 'border-b border-surface-container pb-2' : ''}`}>
@@ -658,6 +718,15 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
               }}
               className="fixed z-[101] w-52 glass-card rounded-2xl p-2 shadow-2xl border border-white/20 flex flex-col gap-1"
             >
+              <button 
+                onClick={() => handleContextAction(() => {
+                  setIsSelectionMode(true);
+                  if (contextMenuChatId) toggleSelection(contextMenuChatId);
+                })} 
+                className="flex items-center gap-3 px-3 py-2 hover:bg-white/10 rounded-xl text-sm font-medium text-blue-500 transition-colors"
+              >
+                <CheckSquare className="w-4 h-4" /> Select
+              </button>
               <button onClick={() => handleContextAction(() => {
                 if (contextMenuChatId) {
                   const chat = chats.find(c => c.id === contextMenuChatId);

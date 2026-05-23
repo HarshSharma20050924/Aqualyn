@@ -38,6 +38,11 @@ export interface User {
   following?: string[];
   sentFollowReqs?: any[];
   receivedFollowReqs?: any[];
+  _count?: {
+    followers: number;
+    following: number;
+    posts?: number;
+  };
   followRequests?: any[]; // Keep for legacy screens
   blockedUsers?: string[];
   reportedUsers?: string[];
@@ -52,6 +57,7 @@ export interface User {
     allowReplies?: 'everyone' | 'following' | 'off';
   };
   invitationSettings?: 'everyone' | 'mutual' | 'no_one';
+  settings?: any;
 }
 
 export interface Story {
@@ -62,7 +68,8 @@ export interface Story {
   mediaUrl: string;
   mediaType: 'image' | 'video';
   timestamp: string;
-  expiresAt: string;
+  createdAt: string;
+  expiresAt?: string;
   views: number;
   reactions: Record<string, number>;
   isCloseFriends?: boolean;
@@ -110,6 +117,7 @@ export interface Message {
   isEdited?: boolean;
   status?: 'sent' | 'delivered' | 'seen';
   deletedFor?: string[];
+  sharedPostId?: string;
 }
 
 export interface Chat {
@@ -148,4 +156,17 @@ export interface ThemeSettings {
   wallpaper?: string;
   bubbleStyle: 'rounded' | 'sharp' | 'glass';
   fontSize: number;
+}
+
+export interface CallSession {
+  id: string;
+  callerId: string;
+  calleeId: string;
+  type: 'VOICE' | 'VIDEO';
+  status: 'ringing' | 'active' | 'ended' | 'missed' | 'rejected' | 'initiated';
+  startedAt: string;
+  endedAt?: string;
+  duration?: number;
+  caller?: Pick<User, 'id' | 'displayName' | 'username' | 'avatar'>;
+  callee?: Pick<User, 'id' | 'displayName' | 'username' | 'avatar'>;
 }

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Camera as CameraIcon, Video, RefreshCcw, Zap, ZapOff, Check, ArrowLeft } from 'lucide-react';
+import { fileToBase64 } from '../../utils/media';
 import { useAppContext } from '../../context/AppContext';
 
 interface CameraUIProps {
@@ -18,6 +19,8 @@ export default function CameraUI({ isOpen, onClose, onCapture }: CameraUIProps) 
   const [mode, setMode] = useState<'photo' | 'video'>('photo');
   const [isRecording, setIsRecording] = useState(false);
   const [capturedMedia, setCapturedMedia] = useState<{ url: string, type: 'photo' | 'video' } | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
 
   useEffect(() => {
     if (isOpen && !capturedMedia) {
@@ -73,12 +76,37 @@ export default function CameraUI({ isOpen, onClose, onCapture }: CameraUIProps) 
         }
       }
     } else {
-      // Mock video recording for now
+      // Real video recording using MediaRecorder
       if (isRecording) {
+        // Stop recording
+        const recorder = mediaRecorderRef.current;
+        if (recorder && recorder.state !== 'inactive') {
+          recorder.onstop = async () => {
+            const blob = new Blob(chunksRef.current, { type: 'video/webm' });
+            const videoUrl = await fileToBase64(blob);
+            setCapturedMedia({ url: videoUrl, type: 'video' });
+            chunksRef.current = [];
+          };
+          recorder.stop();
+        }
         setIsRecording(false);
-        setCapturedMedia({ url: 'mock-video-url', type: 'video' });
       } else {
-        setIsRecording(true);
+        // Start recording
+        chunksRef.current = [];
+        if (stream) {
+          try {
+            const recorder = new MediaRecorder(stream);
+            mediaRecorderRef.current = recorder;
+            recorder.ondataavailable = (e) => {
+              if (e.data.size > 0) chunksRef.current.push(e.data);
+            };
+            recorder.start();
+            setIsRecording(true);
+          } catch (err) {
+            console.error('MediaRecorder error:', err);
+            addToast('Video recording not supported', 'error');
+          }
+        }
       }
     }
   };
@@ -122,11 +150,16 @@ export default function CameraUI({ isOpen, onClose, onCapture }: CameraUIProps) 
             {capturedMedia ? (
               capturedMedia.type === 'photo' ? (
                 <img src={capturedMedia.url} alt="Captured" className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-white">
-                  Video Preview (Mock)
-                </div>
-              )
+              ) : capturedMedia.type === 'video' ? (
+                <video 
+                  src={capturedMedia.url} 
+                  className="w-full h-full object-cover" 
+                  autoPlay 
+                  loop 
+                  muted 
+                  playsInline 
+                />
+              ) : null
             ) : (
               <video
                 ref={videoRef}

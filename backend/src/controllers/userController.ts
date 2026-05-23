@@ -7,8 +7,13 @@ export const followUser = async (req: Request, res: Response) => {
         const decodedToken = (req as any).user;
         const { targetUserId } = req.body;
 
-        const currentUser = await prisma.user.findUnique({
-            where: { firebaseUid: decodedToken.uid }
+        const currentUser = await (prisma as any).user.findFirst({
+            where: {
+                OR: [
+                    { id: decodedToken.id || "" },
+                    { firebaseUid: decodedToken.uid || "" }
+                ].filter(c => Object.values(c)[0] !== "")
+            }
         });
 
         if (!currentUser) return res.status(404).json({ error: 'User not found' });
@@ -94,8 +99,13 @@ export const unfollowUser = async (req: Request, res: Response) => {
         const decodedToken = (req as any).user;
         const { targetUserId } = req.body;
 
-        const currentUser = await prisma.user.findUnique({
-            where: { firebaseUid: decodedToken.uid }
+        const currentUser = await (prisma as any).user.findFirst({
+            where: {
+                OR: [
+                    { id: decodedToken.id || "" },
+                    { firebaseUid: decodedToken.uid || "" }
+                ].filter(c => Object.values(c)[0] !== "")
+            }
         });
 
         if (!currentUser) return res.status(404).json({ error: 'User not found' });
@@ -127,8 +137,8 @@ export const handleFollowRequest = async (req: Request, res: Response) => {
         const decodedToken = (req as any).user;
         const { requestId, senderId, action } = req.body; // action: 'accept' or 'reject'
 
-        const currentUser = await prisma.user.findUnique({
-            where: { firebaseUid: decodedToken.uid }
+        const currentUser = await (prisma as any).user.findFirst({
+            where: decodedToken.id ? { id: decodedToken.id } : { firebaseUid: decodedToken.uid }
         });
 
         if (!currentUser) return res.status(404).json({ error: 'User not found' });
@@ -203,9 +213,12 @@ export const getNotifications = async (req: Request, res: Response) => {
     try {
         const decodedToken = (req as any).user;
         
-        const user = await prisma.user.findUnique({
-            where: { firebaseUid: decodedToken.uid }
-        });
+        let user;
+        if (decodedToken.id) {
+            user = await prisma.user.findUnique({ where: { id: decodedToken.id } });
+        } else {
+            user = await prisma.user.findUnique({ where: { firebaseUid: decodedToken.uid } });
+        }
 
         if (!user) return res.status(404).json({ error: 'User not found' });
 
@@ -235,8 +248,8 @@ export const getNotifications = async (req: Request, res: Response) => {
 export const markNotificationsRead = async (req: Request, res: Response) => {
     try {
         const decodedToken = (req as any).user;
-        const user = await prisma.user.findUnique({
-            where: { firebaseUid: decodedToken.uid }
+        const user = await (prisma as any).user.findFirst({
+            where: decodedToken.id ? { id: decodedToken.id } : { firebaseUid: decodedToken.uid }
         });
 
         if (!user) return res.status(404).json({ error: 'User not found' });
@@ -250,5 +263,51 @@ export const markNotificationsRead = async (req: Request, res: Response) => {
     } catch (error) {
         console.error('Mark notifications read error:', error);
         res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+export const getFollowersList = async (req: Request, res: Response) => {
+    try {
+        const { userId } = req.params;
+        const followers = await (prisma as any).userFollows.findMany({
+            where: { followingId: userId },
+            include: {
+                follower: {
+                    select: {
+                        id: true,
+                        username: true,
+                        displayName: true,
+                        avatar: true,
+                        bio: true
+                    }
+                }
+            }
+        });
+        res.json(followers.map((f: any) => f.follower));
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch followers' });
+    }
+};
+
+export const getFollowingList = async (req: Request, res: Response) => {
+    try {
+        const { userId } = req.params;
+        const following = await (prisma as any).userFollows.findMany({
+            where: { followerId: userId },
+            include: {
+                following: {
+                    select: {
+                        id: true,
+                        username: true,
+                        displayName: true,
+                        avatar: true,
+                        bio: true
+                    }
+                }
+            }
+        });
+        res.json(following.map((f: any) => f.following));
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch following' });
     }
 };

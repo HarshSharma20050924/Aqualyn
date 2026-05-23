@@ -8,12 +8,13 @@ import SettingsScreen from './screens/SettingsScreen';
 import ContactsScreen from './screens/ContactsScreen';
 import EditProfileScreen from './screens/EditProfileScreen';
 import ContactProfileScreen from './screens/ContactProfileScreen';
-import DiscoveryScreen from './screens/DiscoveryScreen';
 import NotificationsScreen from './screens/NotificationsScreen';
+import FeedScreen from './screens/FeedScreen';
 import BottomNav from './components/BottomNav';
 import ToastContainer from './components/ui/ToastContainer';
 import AppLockScreen from './components/AppLockScreen';
 import { useAppContext } from './context/AppContext';
+import { CallOverlay } from './components/CallOverlay';
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState('login');
@@ -45,9 +46,9 @@ export default function App() {
   
   useEffect(() => {
     if (!isLoading) {
-      if (currentUser && currentScreen === 'login') {
+      if (currentUser?.id && currentScreen === 'login') {
         setCurrentScreen('chats');
-      } else if (!currentUser && currentScreen !== 'login') {
+      } else if (!currentUser?.id && currentScreen !== 'login') {
         setCurrentScreen('login');
       }
     }
@@ -68,6 +69,7 @@ export default function App() {
   return (
     <div className={`min-h-screen bg-surface text-on-surface font-body selection:bg-secondary-container/30 overflow-x-hidden bubble-${theme.bubbleStyle}`}>
       <ToastContainer />
+      <CallOverlay />
       
       {appLockPin && isAppLocked ? (
         <AppLockScreen />
@@ -75,18 +77,18 @@ export default function App() {
         <>
           <AnimatePresence mode="wait">
             {currentScreen === 'login' && <LoginScreen key="login" onLogin={() => setCurrentScreen('chats')} />}
+            {currentScreen === 'feed' && <FeedScreen key="feed" onNavigate={setCurrentScreen} />}
             {currentScreen === 'chats' && <ChatListScreen key="chats" onNavigate={setCurrentScreen} />}
             {currentScreen === 'chat-detail' && <ChatDetailScreen key="chat-detail" onBack={() => setCurrentScreen('chats')} onNavigate={setCurrentScreen} />}
             {currentScreen === 'profile' && <ProfileScreen key="profile" onNavigate={setCurrentScreen} />}
             {currentScreen === 'settings' && <SettingsScreen key="settings" onBack={() => setCurrentScreen('profile')} onNavigate={setCurrentScreen} />}
             {currentScreen === 'contacts' && <ContactsScreen key="contacts" onNavigate={setCurrentScreen} />}
             {currentScreen === 'edit-profile' && <EditProfileScreen key="edit-profile" onBack={() => setCurrentScreen('profile')} />}
-            {currentScreen === 'contact-profile' && <ContactProfileScreen key="contact-profile" onBack={() => setCurrentScreen('chats')} onNavigate={setCurrentScreen} />}
-            {currentScreen === 'discovery' && <DiscoveryScreen key="discovery" onBack={() => setCurrentScreen('chats')} onNavigate={setCurrentScreen} />}
-            {currentScreen === 'notifications' && <NotificationsScreen key="notifications" onBack={() => setCurrentScreen('chats')} />}
+            {currentScreen === 'contact-profile' && <ContactProfileScreen key="contact-profile" onBack={() => setCurrentScreen('contacts')} onNavigate={setCurrentScreen} />}
+            {currentScreen === 'notifications' && <NotificationsScreen key="notifications" onBack={() => setCurrentScreen('feed')} />}
           </AnimatePresence>
           
-          {currentScreen !== 'login' && currentScreen !== 'chat-detail' && currentScreen !== 'contact-profile' && currentScreen !== 'edit-profile' && (
+          {currentScreen !== 'login' && currentScreen !== 'chat-detail' && currentScreen !== 'contact-profile' && currentScreen !== 'edit-profile' && currentScreen !== 'notifications' && (
             <BottomNav currentScreen={currentScreen} onNavigate={setCurrentScreen} />
           )}
         </>

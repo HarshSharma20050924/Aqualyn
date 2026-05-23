@@ -21,11 +21,20 @@ export default function ToastContainer() {
               'bg-blue-500/10 border-blue-500/20 text-blue-600'
             }`}
           >
-            {toast.type === 'success' && <CheckCircle2 className="w-5 h-5 shrink-0" />}
-            {toast.type === 'error' && <AlertCircle className="w-5 h-5 shrink-0" />}
-            {toast.type === 'info' && <Info className="w-5 h-5 shrink-0" />}
-            <p className="text-sm font-medium flex-1">{toast.message}</p>
-            <button onClick={() => removeToast(toast.id)} className="p-1 hover:bg-black/5 rounded-full transition-colors">
+            {toast.avatar ? (
+              <img src={toast.avatar} alt={toast.title} className="w-10 h-10 rounded-full object-cover shrink-0" />
+            ) : (
+              <>
+                {toast.type === 'success' && <CheckCircle2 className="w-5 h-5 shrink-0" />}
+                {toast.type === 'error' && <AlertCircle className="w-5 h-5 shrink-0" />}
+                {toast.type === 'info' && <Info className="w-5 h-5 shrink-0" />}
+              </>
+            )}
+            <div className="flex-1 min-w-0">
+              {toast.title && <p className="text-sm font-bold truncate mb-0.5">{toast.title}</p>}
+              <p className="text-sm font-medium opacity-90 truncate">{toast.message}</p>
+            </div>
+            <button onClick={() => removeToast(toast.id)} className="p-1 hover:bg-black/5 rounded-full transition-colors shrink-0">
               <X className="w-4 h-4" />
             </button>
           </motion.div>

@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Image as ImageIcon, Video, Camera, Check, MapPin, Tag, Music } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
+import { uploadFile } from '../../utils/uploads';
 
 interface PostCreatorProps {
   onClose: () => void;
@@ -14,35 +15,50 @@ export default function PostCreator({ onClose }: PostCreatorProps) {
   const [mediaType, setMediaType] = useState<'image' | 'video' | null>(null);
   const [location, setLocation] = useState('');
   const [isTagging, setIsTagging] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const selectedFileRef = useRef<File | null>(null);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      selectedFileRef.current = file;
       const url = URL.createObjectURL(file);
       setMediaUrl(url);
       setMediaType(file.type.startsWith('video/') ? 'video' : 'image');
     }
   };
 
-  const handlePost = () => {
+  const handlePost = async () => {
     if (!mediaUrl && !caption.trim()) {
       addToast('Please add a photo, video, or caption', 'error');
       return;
     }
 
-    addPost({
-      caption,
-      mediaUrl: mediaUrl || undefined,
-      mediaType: mediaType || undefined,
-      userId: currentUser?.id,
-      userName: currentUser?.name,
-      userAvatar: currentUser?.avatar,
-      timestamp: 'Just now',
-      likes: [],
-      comments: []
-    });
-    onClose();
+    setIsUploading(true);
+    try {
+      let finalMediaUrl = mediaUrl;
+      if (selectedFileRef.current) {
+        finalMediaUrl = await uploadFile(selectedFileRef.current);
+      }
+
+      await addPost({
+        caption,
+        mediaUrl: finalMediaUrl || undefined,
+        mediaType: mediaType || undefined,
+        userId: currentUser?.id,
+        userName: currentUser?.name,
+        userAvatar: currentUser?.avatar,
+        timestamp: 'Just now',
+        likes: [],
+        comments: []
+      });
+      onClose();
+    } catch (e) {
+      addToast('Failed to prepare media', 'error');
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   return (
@@ -60,10 +76,11 @@ export default function PostCreator({ onClose }: PostCreatorProps) {
           <h2 className="text-on-surface font-headline font-bold text-xl">New Post</h2>
           <button 
             onClick={handlePost}
-            disabled={!mediaUrl && !caption.trim()}
-            className="px-6 py-2 bg-primary text-on-primary rounded-full font-bold disabled:opacity-50 transition-all active:scale-95"
+            disabled={(!mediaUrl && !caption.trim()) || isUploading}
+            className="px-6 py-2 bg-primary text-on-primary rounded-full font-bold disabled:opacity-50 transition-all active:scale-95 flex items-center gap-2"
           >
-            Share
+            {isUploading ? 'Posting...' : 'Share'}
+            {!isUploading && <Check className="w-4 h-4" />}
           </button>
         </div>
 

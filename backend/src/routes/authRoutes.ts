@@ -1,21 +1,29 @@
 import { Router } from 'express';
-import { verifyFirebaseToken } from '../middleware/auth';
-import { loginOrRegister, getProfile } from '../controllers/authController';
+import { verifyToken } from '../middleware/auth';
+import { loginOrRegister, getProfile, sendOtp, verifyOtp, syncToken } from '../controllers/authController';
 
 const router = Router();
 
-router.post('/sync', verifyFirebaseToken, loginOrRegister);
-router.get('/profile', verifyFirebaseToken, getProfile);
+router.post('/sync', verifyToken, loginOrRegister);
+router.post('/sync-token', verifyToken, syncToken);
+router.get('/profile', verifyToken, getProfile);
+router.post('/send-otp', sendOtp);
+router.post('/verify-otp', verifyOtp);
 
-router.post('/logout', verifyFirebaseToken, async (req: any, res: any) => {
+
+router.post('/logout', verifyToken, async (req: any, res: any) => {
     try {
         const userId = req.user.uid;
-        const authHeader = req.headers.authorization;
-        const token = authHeader.split('Bearer ')[1];
+        // In verifyToken middleware we already extracted the token
+        // Let's get it again or pass it through req
+        const token = req.cookies.token || (req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.split(' ')[1] : null);
         
-        const { AuthService } = require('../services/AuthService');
-        await AuthService.logout(userId, token);
+        if (token) {
+            const { AuthService } = require('../services/AuthService');
+            await AuthService.logout(userId, token);
+        }
 
+        res.clearCookie('token');
         res.json({ success: true, message: 'Logged out successfully' });
     } catch (e) {
         console.error('[AuthRoute] Logout failed:', e);
@@ -24,3 +32,4 @@ router.post('/logout', verifyFirebaseToken, async (req: any, res: any) => {
 });
 
 export default router;
+

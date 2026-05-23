@@ -1,23 +1,49 @@
-import React from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { Palette, Check, SlidersHorizontal } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 
 export default function VisualPreferences() {
-  const { aquaIntensity, setAquaIntensity, theme, setTheme } = useAppContext();
+  const { aquaIntensity, setAquaIntensity, theme, setTheme, updateSettings } = useAppContext();
+  const intensityTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   const themeModes = [
     { label: 'Liquid (Light)', value: 'light' },
     { label: 'Obsidian (Dark)', value: 'dark' }
   ];
 
+  const persistVisualSettings = useCallback(async (newSettings: any) => {
+    try {
+      await updateSettings({ theme: newSettings });
+    } catch (e) {
+      console.error('Failed to persist visual settings', e);
+    }
+  }, [updateSettings]);
+
   const handleThemeChange = (mode: 'light' | 'dark') => {
-    setTheme(prev => ({ ...prev, mode }));
+    const newTheme = { ...theme, mode };
+    setTheme(newTheme);
     if (mode === 'dark') {
       document.documentElement.classList.add('dark');
     } else {
       document.documentElement.classList.remove('dark');
     }
+    persistVisualSettings(newTheme);
   };
+
+  const handleIntensityChange = (val: number) => {
+    setAquaIntensity(val);
+    
+    if (intensityTimeoutRef.current) clearTimeout(intensityTimeoutRef.current);
+    intensityTimeoutRef.current = setTimeout(() => {
+      persistVisualSettings({ ...theme, aquaIntensity: val });
+    }, 500);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (intensityTimeoutRef.current) clearTimeout(intensityTimeoutRef.current);
+    };
+  }, []);
 
   return (
     <section className="space-y-4">
@@ -54,7 +80,7 @@ export default function VisualPreferences() {
             type="range" 
             min="0" max="100" 
             value={aquaIntensity}
-            onChange={(e) => setAquaIntensity(Number(e.target.value))}
+            onChange={(e) => handleIntensityChange(Number(e.target.value))}
             className="w-full h-2 bg-surface-container-highest rounded-lg appearance-none cursor-pointer custom-slider" 
           />
           <p className="text-xs text-on-surface-variant mt-2">Adjusts the blur and opacity of glassmorphism elements.</p>

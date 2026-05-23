@@ -191,4 +191,16 @@
   ::-webkit-scrollbar-thumb:hover {
     background: rgba(0, 87, 189, 0.25);
   }
+
+  @keyframes scanline {
+    0% {
+      transform: translateY(-100%);
+    }
+    100% {
+      transform: translateY(100%);
+    }
+  }
+  .animate-scanline {
+    animation: scanline 6s linear infinite;
+  }
 }

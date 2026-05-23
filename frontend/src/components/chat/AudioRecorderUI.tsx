@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Mic, Trash2, Send, Square } from 'lucide-react';
+import { fileToBase64 } from '../../utils/media';
 
 interface AudioRecorderUIProps {
   isRecording: boolean;
@@ -12,15 +13,44 @@ export default function AudioRecorderUI({ isRecording, onStop, onCancel }: Audio
   const [duration, setDuration] = useState(0);
   const [isLocked, setIsLocked] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
     if (isRecording) {
       setDuration(0);
+      chunksRef.current = [];
+      
+      // Start real audio recording
+      navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(stream => {
+          streamRef.current = stream;
+          const mediaRecorder = new MediaRecorder(stream);
+          mediaRecorderRef.current = mediaRecorder;
+          
+          mediaRecorder.ondataavailable = (e) => {
+            if (e.data.size > 0) {
+              chunksRef.current.push(e.data);
+            }
+          };
+          
+          mediaRecorder.start();
+        })
+        .catch(err => {
+          console.error('Failed to start audio recording:', err);
+        });
+      
       timerRef.current = setInterval(() => {
         setDuration(prev => prev + 1);
       }, 1000);
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
+      // Stop the stream
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
+      }
     }
 
     return () => {
@@ -35,8 +65,23 @@ export default function AudioRecorderUI({ isRecording, onStop, onCancel }: Audio
   };
 
   const handleStop = () => {
-    // In a real app, this would return the actual audio blob/url
-    onStop('mock-audio-url');
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.onstop = async () => {
+        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        const base64 = await fileToBase64(blob);
+        onStop(base64);
+      };
+      recorder.stop();
+    } else {
+      onStop();
+    }
+    
+    // Stop the stream
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
   };
 
   return (

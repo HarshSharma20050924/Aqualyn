@@ -1,20 +1,22 @@
-import express from 'express';
-import cors from 'cors';
 import dotenv from 'dotenv';
+dotenv.config();
+
+import express from 'express';
+import cookieParser from 'cookie-parser';
+import cors from 'cors';
 import authRoutes from './routes/authRoutes';
 import userRoutes from './routes/userRoutes';
 import chatRoutes from './routes/chatRoutes';
 import socialRoutes from './routes/socialRoutes';
 import groupRoutes from './routes/groupRoutes';
-import { PrismaClient } from '@prisma/client';
+import uploadRoutes from './routes/uploadRoutes';
+import path from 'path';
 import { Server } from 'socket.io';
 import { createServer } from 'http';
 import prisma from './config/prisma';
 import { createAdapter } from '@socket.io/redis-adapter';
 import { pubClient, subClient } from './config/redis';
 import { SocketService } from './services/SocketService';
-
-dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -28,12 +30,29 @@ io.adapter(createAdapter(pubClient, subClient));
 // Initialize our clean SocketService
 SocketService.init(io);
 
+app.use(cookieParser());
+const allowedOrigins = [
+    'http://localhost:5173', 
+    'http://127.0.0.1:5173', 
+    'http://localhost:3000', 
+    'http://127.0.0.1:3000'
+];
+
+if (process.env.FRONTEND_URL) {
+    allowedOrigins.push(process.env.FRONTEND_URL);
+}
+
 app.use(cors({
-    origin: '*',
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    origin: allowedOrigins,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// Serve Static Files
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Users Search API
 app.get('/api/users/search', async (req, res) => {
@@ -78,6 +97,7 @@ app.use('/api/user', userRoutes);
 app.use('/api/chats', chatRoutes);
 app.use('/api/social', socialRoutes);
 app.use('/api/groups', groupRoutes);
+app.use('/api/upload', uploadRoutes);
 
 app.get('/api/health', (req, res) => {
     res.json({ status: 'Aqualyn server is running' });
