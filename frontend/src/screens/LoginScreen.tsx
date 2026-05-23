@@ -23,6 +23,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
   const { setCurrentUser, currentUser } = useAppContext() || { setCurrentUser: () => {}, currentUser: null };
   const [step, setStep] = useState<'intro' | 'phone' | 'email' | 'otp' | 'profile'>('intro');
   const [isExistingUser, setIsExistingUser] = useState<boolean | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   
   // Auth States
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -75,6 +76,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
   }, [currentUser]);
 
   const handleSendOtp = async () => {
+    setIsLoading(true);
     try {
       let identifier = activeIdentifier;
       if (step === 'phone') {
@@ -124,6 +126,8 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
       setOtp(['', '', '', '', '', '']);
     } catch (error: any) {
       alert(error.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -144,6 +148,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
   };
 
   const handleVerifyOtp = async () => {
+    setIsLoading(true);
     const code = otp.join('');
     const identifier = activeIdentifier;
     try {
@@ -164,10 +169,13 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
     } catch (error: any) {
       console.error("[OTP Error]", error);
       alert("Invalid OTP or connection issue");
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const syncProfileWithBackend = async (data: any) => {
+    setIsLoading(true);
     try {
       const payload = { ...data };
       if (!payload.phone && phoneNumber) {
@@ -211,6 +219,8 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
     } catch (error: any) {
       console.error('[Sync Error]', error);
       alert(`${error.message || 'Server error'}`);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -221,6 +231,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
   };
 
   const handleGoogleSignIn = async () => {
+    setIsLoading(true);
     try {
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
@@ -255,6 +266,8 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
       }
     } catch (error: any) {
       alert(error.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -386,11 +399,17 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
 
                 <button 
                   onClick={handleSendOtp} 
-                  disabled={step === 'phone' ? !phoneNumber : !email}
+                  disabled={step === 'phone' ? (!phoneNumber || isLoading) : (!email || isLoading)}
                   className="w-full h-14 bg-gradient-to-br from-secondary to-primary-container text-white font-headline font-bold rounded-2xl shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:pointer-events-none"
                 >
-                  Continue
-                  <ArrowRight className="w-5 h-5" />
+                  {isLoading ? (
+                    <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                  ) : (
+                    <>
+                      Continue
+                      <ArrowRight className="w-5 h-5" />
+                    </>
+                  )}
                 </button>
 
                 <div className="relative flex items-center py-2">
@@ -401,10 +420,17 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
 
                 <button 
                   onClick={handleGoogleSignIn}
-                  className="w-full h-14 glass-card bg-white/40 border border-white/40 text-on-surface font-headline font-bold rounded-2xl hover:bg-white/60 active:scale-[0.98] transition-all flex items-center justify-center gap-3 shadow-sm"
+                  disabled={isLoading}
+                  className="w-full h-14 glass-card bg-white/40 border border-white/40 text-on-surface font-headline font-bold rounded-2xl hover:bg-white/60 active:scale-[0.98] transition-all flex items-center justify-center gap-3 shadow-sm disabled:opacity-50 disabled:pointer-events-none"
                 >
-                  <GoogleIcon />
-                  Continue with Google
+                  {isLoading ? (
+                    <div className="w-6 h-6 border-2 border-secondary/30 border-t-secondary rounded-full animate-spin"></div>
+                  ) : (
+                    <>
+                      <GoogleIcon />
+                      Continue with Google
+                    </>
+                  )}
                 </button>
 
                 <button 
@@ -450,11 +476,17 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
                 <div className="flex flex-col gap-4">
                   <button 
                     onClick={handleVerifyOtp} 
-                    disabled={otp.some(d => !d)}
+                    disabled={otp.some(d => !d) || isLoading}
                     className="w-full h-14 bg-gradient-to-br from-secondary to-primary-container text-white font-headline font-bold rounded-2xl shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:pointer-events-none"
                   >
-                    Verify & Enter
-                    <ArrowRight className="w-5 h-5" />
+                    {isLoading ? (
+                      <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    ) : (
+                      <>
+                        Verify & Enter
+                        <ArrowRight className="w-5 h-5" />
+                      </>
+                    )}
                   </button>
                   
                   <button 
@@ -520,11 +552,17 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
 
                 <button 
                   onClick={handleCompleteSetup} 
-                  disabled={!displayName.trim() || !dob}
+                  disabled={!displayName.trim() || !dob || isLoading}
                   className="w-full h-14 bg-gradient-to-br from-secondary to-primary-container text-white font-headline font-bold rounded-2xl shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:pointer-events-none mt-4"
                 >
-                  Complete Setup
-                  <Check className="w-5 h-5" />
+                  {isLoading ? (
+                    <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                  ) : (
+                    <>
+                      Complete Setup
+                      <Check className="w-5 h-5" />
+                    </>
+                  )}
                 </button>
               </div>
             </motion.div>

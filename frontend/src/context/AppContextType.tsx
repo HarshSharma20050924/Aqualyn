@@ -37,6 +37,7 @@ export interface AppContextType {
   removeToast: (id: string) => void;
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
+  isFetchingData: boolean;
   folders: Folder[];
   setFolders: React.Dispatch<React.SetStateAction<Folder[]>>;
   createFolder: (name: string, chatIds?: string[]) => string;

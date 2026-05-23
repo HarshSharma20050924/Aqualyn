@@ -7,7 +7,7 @@ import StoryViewer from '../components/StoryViewer';
 import StoryCreator from '../components/stories/StoryCreator';
 
 export default function FeedScreen({ onNavigate }: { onNavigate: (s: string) => void }) {
-  const { posts, stories, globalUsers, currentUser, likePost, savePost, addToast } = useAppContext();
+  const { posts, stories, globalUsers, currentUser, likePost, savePost, addToast, isFetchingData } = useAppContext();
   const [doubleClickTarget, setDoubleClickTarget] = useState<string | null>(null);
   const [viewerStories, setViewerStories] = useState<Story[]>([]);
   const [activeStoryIndex, setActiveStoryIndex] = useState<number | null>(null);
@@ -219,6 +219,31 @@ export default function FeedScreen({ onNavigate }: { onNavigate: (s: string) => 
 
   const feedPosts = [...posts].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
+  const PostSkeleton = () => (
+    <div className="bg-surface mb-6 border-b border-surface-container pb-6 w-full max-w-lg mx-auto sm:border sm:rounded-3xl sm:mb-8 sm:pb-0 sm:overflow-hidden sm:shadow-sm animate-pulse">
+      <div className="flex items-center justify-between p-3 sm:px-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-surface-container"></div>
+          <div className="w-24 h-4 rounded bg-surface-container"></div>
+        </div>
+        <div className="w-5 h-5 rounded bg-surface-container"></div>
+      </div>
+      <div className="w-full aspect-square bg-surface-container"></div>
+      <div className="p-3 sm:px-4 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex gap-4">
+            <div className="w-7 h-7 rounded bg-surface-container"></div>
+            <div className="w-7 h-7 rounded bg-surface-container"></div>
+            <div className="w-7 h-7 rounded bg-surface-container"></div>
+          </div>
+          <div className="w-7 h-7 rounded bg-surface-container"></div>
+        </div>
+        <div className="w-16 h-3 rounded bg-surface-container"></div>
+        <div className="w-3/4 h-3 rounded bg-surface-container"></div>
+      </div>
+    </div>
+  );
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="min-h-screen bg-surface pb-28">
       {/* Header */}
@@ -286,7 +311,12 @@ export default function FeedScreen({ onNavigate }: { onNavigate: (s: string) => 
 
         {/* Posts Feed */}
         <div className="mt-2 sm:mt-6 sm:px-4">
-          {feedPosts.length === 0 ? (
+          {isFetchingData ? (
+            <>
+              <PostSkeleton />
+              <PostSkeleton />
+            </>
+          ) : feedPosts.length === 0 ? (
             <div className="text-center mt-20 opacity-60">
               <p className="text-on-surface-variant font-medium">No posts yet.</p>
               <p className="text-sm mt-2">Follow some friends to see their updates here.</p>

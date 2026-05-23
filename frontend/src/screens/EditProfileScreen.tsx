@@ -18,6 +18,7 @@ export default function EditProfileScreen({ onBack }: { onBack: () => void }) {
   const [searchByPhone, setSearchByPhone] = useState(currentUser?.searchByPhone ?? true);
   const [avatar, setAvatar] = useState(currentUser?.largeAvatar || currentUser?.avatar || '');
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -73,6 +74,7 @@ export default function EditProfileScreen({ onBack }: { onBack: () => void }) {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    setIsUploadingAvatar(true);
     try {
       const url = await uploadFile(file);
       const res = await apiFetch(ENDPOINTS.UPLOAD_AVATAR, {
@@ -91,6 +93,8 @@ export default function EditProfileScreen({ onBack }: { onBack: () => void }) {
       }
     } catch (err) {
       addToast('Failed to upload avatar', 'error');
+    } finally {
+      setIsUploadingAvatar(false);
     }
   };
 
@@ -104,7 +108,11 @@ export default function EditProfileScreen({ onBack }: { onBack: () => void }) {
           <h1 className="font-headline tracking-tight font-bold text-lg text-on-surface">Edit Profile</h1>
         </div>
         <button onClick={handleSave} disabled={isSaving} className="text-primary font-bold flex items-center gap-2 hover:opacity-80 disabled:opacity-50">
-          <Save className="w-5 h-5" />
+          {isSaving ? (
+            <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin"></div>
+          ) : (
+            <Save className="w-5 h-5" />
+          )}
           {isSaving ? 'Saving...' : 'Save'}
         </button>
       </header>
@@ -116,9 +124,15 @@ export default function EditProfileScreen({ onBack }: { onBack: () => void }) {
             onClick={() => fileInputRef.current?.click()}
           >
             <img src={avatar} alt="Profile" className="w-full h-full object-cover" />
-            <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-              <Camera className="w-6 h-6 text-white mb-1" />
-              <span className="text-white text-xs font-bold">Change</span>
+            <div className={`absolute inset-0 bg-black/40 flex flex-col items-center justify-center transition-opacity ${isUploadingAvatar ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+              {isUploadingAvatar ? (
+                <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin mb-1"></div>
+              ) : (
+                <>
+                  <Camera className="w-6 h-6 text-white mb-1" />
+                  <span className="text-white text-xs font-bold">Change</span>
+                </>
+              )}
             </div>
           </div>
           <input 

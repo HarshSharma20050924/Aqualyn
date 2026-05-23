@@ -19,6 +19,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [contacts, setContacts] = useState<User[]>(initialContacts);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isFetchingData, setIsFetchingData] = useState(true);
   const [socket, setSocket] = useState<Socket | null>(null);
   const [typingUsers, setTypingUsers] = useState<Record<string, string[]>>({});
   const [appLockPin, setAppLockPin] = useState<string | null>(null);
@@ -60,6 +61,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const fetchInitialData = async () => {
+    setIsFetchingData(true);
     try {
       console.log("[Data] Fetching initial dashboard data...");
       const [notifRes, chatsRes, feedRes, storyRes] = await Promise.all([
@@ -110,6 +112,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
     } catch (e) {
       console.error("[Data] Initial fetch failed:", e);
+    } finally {
+      setIsFetchingData(false);
     }
   };
 
@@ -362,7 +366,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     <AppContext.Provider value={{
       currentUser, setCurrentUser, socket, chats, setChats, messages, setMessages, contacts, ...actions,
       activeChatId, setActiveChatId, activeContactId, setActiveContactId,
-      toasts, addToast, removeToast, isLoading, setIsLoading,
+      toasts, addToast, removeToast, isLoading, setIsLoading, isFetchingData,
       folders, setFolders, theme, setTheme, aquaIntensity, setAquaIntensity,
       appLockPin, setAppLockPin, archiveLockPin, setArchiveLockPin, isAppLocked, setIsAppLocked,
       stories, setStories, typingUsers, logout: actions.logout,
