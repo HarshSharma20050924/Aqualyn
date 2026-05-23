@@ -23,7 +23,11 @@ router.post('/logout', verifyToken, async (req: any, res: any) => {
             await AuthService.logout(userId, token);
         }
 
-        res.clearCookie('token');
+        res.clearCookie('token', {
+            httpOnly: true,
+            secure: true,
+            sameSite: 'none'
+        });
         res.json({ success: true, message: 'Logged out successfully' });
     } catch (e) {
         console.error('[AuthRoute] Logout failed:', e);

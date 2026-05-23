@@ -168,7 +168,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (currentUser) {
-      const newSocket = io(API_BASE_URL);
+      const newSocket = io(API_BASE_URL, { withCredentials: true });
       newSocket.on('connect', () => {
         if (currentUser?.id) newSocket.emit('join', currentUser.id);
       });

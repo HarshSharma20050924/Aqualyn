@@ -21,16 +21,6 @@ import { SocketService } from './services/SocketService';
 const app = express();
 const port = process.env.PORT || 5000;
 const server = createServer(app);
-export const io = new Server(server, {
-    cors: { origin: '*' }
-});
-
-// Setup Distributed Redis Adapter
-io.adapter(createAdapter(pubClient, subClient));
-// Initialize our clean SocketService
-SocketService.init(io);
-
-app.use(cookieParser());
 const allowedOrigins = [
     'http://localhost:5173', 
     'http://127.0.0.1:5173', 
@@ -41,6 +31,21 @@ const allowedOrigins = [
 if (process.env.FRONTEND_URL) {
     allowedOrigins.push(process.env.FRONTEND_URL);
 }
+
+export const io = new Server(server, {
+    cors: { 
+        origin: allowedOrigins,
+        credentials: true
+    }
+});
+
+// Setup Distributed Redis Adapter
+io.adapter(createAdapter(pubClient, subClient));
+// Initialize our clean SocketService
+SocketService.init(io);
+
+app.use(cookieParser());
+
 
 app.use(cors({
     origin: allowedOrigins,
