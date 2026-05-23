@@ -102,14 +102,30 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
       const title = 'Aqualyn Verification';
       const body = `Your OTP code is: ${data.otp}`;
       
-      // Native Web Push Notification (Local)
+      // Show notification via ServiceWorker (works on mobile PWAs)
+      const showNotif = async (t: string, b: string) => {
+        try {
+          const reg = await navigator.serviceWorker?.ready;
+          if (reg) {
+            reg.active?.postMessage({ type: 'SHOW_NOTIFICATION', title: t, body: b, icon: '/pwa-192.png' });
+            return;
+          }
+        } catch {}
+        // Fallback for desktop
+        try {
+          new Notification(t, { body: b, icon: '/pwa-192.png' });
+          return;
+        } catch {}
+        alert(`🔔 ${t} 🔔\n\n${b}`);
+      };
+
       if ("Notification" in window) {
           if (Notification.permission === "granted") {
-              new Notification(title, { body });
+              await showNotif(title, body);
           } else if (Notification.permission !== "denied") {
               const permission = await Notification.requestPermission();
               if (permission === "granted") {
-                  new Notification(title, { body });
+                  await showNotif(title, body);
               } else {
                   alert(`🔔 ${title} 🔔\n\n${body}`);
               }

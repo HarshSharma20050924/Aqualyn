@@ -14,3 +14,10 @@ createRoot(document.getElementById('root')!).render(
     </AppProvider>
   </StrictMode>,
 );
+
+// Register service worker for notifications
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch((err) => {
+    console.warn('[SW] Registration failed:', err);
+  });
+}
