@@ -25,6 +25,7 @@ model User {
   isPrivate     Boolean   @default(false)
   settings      Json      @default("{}") // Store theme, notification prefs, privacy toggles
   invitationSettings String @default("everyone") // everyone, mutual, no_one
+  appLockPin    String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   lastLogin     DateTime?
@@ -41,7 +42,10 @@ model User {
   comments    Comment[]
   
   chatParticipants ChatParticipant[]
+  folders          ChatFolder[]
   messages         Message[]
+  savedPosts       SavedPost[]
+  storyViews       StoryView[]
   notifications    Notification[] @relation("userNotifications")
   actions          Notification[] @relation("actorActions")
   
@@ -127,12 +131,26 @@ model ChatParticipant {
   userId    String
   role      GroupRole @default(MEMBER)
   status    String    @default("JOINED") // JOINED, INVITED, DECLINED
+  isArchived Boolean  @default(false)
+  isPinned  Boolean   @default(false)
   joinedAt  DateTime  @default(now())
 
   chat      Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
   user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([chatId, userId])
+}
+
+model ChatFolder {
+  id        String   @id @default(uuid())
+  userId    String
+  name      String
+  chatIds   String[] @default([])
+  createdAt DateTime @default(now())
+
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Message {
@@ -162,6 +180,7 @@ model Message {
   status      String   @default("sent") // sent, delivered, seen
   isEdited    Boolean  @default(false)
   isRead      Boolean  @default(false)
+  isPinned    Boolean  @default(false)
   reactions   Json?    @default("{}")
   deletedFor  Json?    @default("[]")
   createdAt   DateTime @default(now())
@@ -179,12 +198,15 @@ model Post {
   content   String?
   mediaUrl  String?
   mediaType String?  // 'image', 'video'
+  location  String?
+  isCommentsDisabled Boolean @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   author    User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
   likes     Like[]
   comments  Comment[]
+  savedBy   SavedPost[]
 
   @@index([authorId, createdAt(sort: Desc)])
 }
@@ -200,8 +222,35 @@ model Story {
   createdAt DateTime @default(now())
 
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  views     StoryView[]
 
   @@index([userId, createdAt(sort: Desc)])
+}
+
+model StoryView {
+  id        String   @id @default(uuid())
+  storyId   String
+  userId    String
+  viewedAt  DateTime @default(now())
+
+  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([storyId, userId])
+  @@index([storyId])
+}
+
+model SavedPost {
+  id        String   @id @default(uuid())
+  userId    String
+  postId    String
+  savedAt   DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@index([userId])
 }
 
 model Like {

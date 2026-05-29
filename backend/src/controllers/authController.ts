@@ -12,6 +12,8 @@ export const sendOtp = async (req: Request, res: Response): Promise<Response | a
 
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
         await redis.set(`otp:${identifier}`, otp, 'EX', 300); // 5 min expiry
+        
+        console.log(`[Auth] Generated OTP for ${identifier}: ${otp}`);
 
         // Check if user exists
         const isEmail = identifier.includes('@');
@@ -294,21 +296,7 @@ export const loginOrRegister = async (req: Request, res: Response): Promise<Resp
             });
         } else {
             // EXISTING USER - SYNC & UPDATE
-            // Check for DOB mismatch - if they have no DOB, they must provide it
-            if (!user.dob && !dob) {
-                 return res.status(200).json({ 
-                    message: 'Profile completion required', 
-                    status: 'needs_profile',
-                    user: { 
-                        id: user.id,
-                        displayName: user.displayName,
-                        email: user.email, 
-                        phone: user.phone,
-                        avatar: user.avatar
-                    } 
-                });
-            }
-
+            // Existing users should be allowed to sign in immediately.
             const updateData: any = {
                 lastLogin: new Date(),
             };

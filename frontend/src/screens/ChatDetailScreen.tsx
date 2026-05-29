@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, Video, Phone, MoreVertical, Plus, Smile, Mic, CheckCheck, Users, X, Clock, Lock, Search, Download, Trash2, Edit2, Share2, UserPlus, User } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
@@ -48,6 +48,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
 
   const chat = chats.find(c => c.id === activeChatId);
   const chatMessages = activeChatId ? (messages[activeChatId] || []) : [];
+  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [screenshotAlert, setScreenshotAlert] = useState(false);
 
   const triggerScreenshotAlert = () => {
@@ -98,8 +99,22 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
     }
   }, [activeChatId, chatMessages.length]);
 
+  // Skeleton message bubble component
+  const SkeletonBubble = ({ isMe }: { isMe: boolean }) => (
+    <div className={`flex flex-col space-y-1 max-w-[85%] ${isMe ? 'items-end ml-auto' : 'items-start'}`}>
+      <div className="chat-bubble rounded-2xl p-4 w-[220px]">
+        <div className="h-3 bg-white/10 rounded-full animate-pulse w-3/4 mb-2" />
+        <div className="h-3 bg-white/10 rounded-full animate-pulse w-1/2" />
+      </div>
+      <div className={`flex items-center gap-1 ${isMe ? 'mr-1' : 'ml-1'}`}>
+        <div className="h-2 bg-white/10 rounded-full animate-pulse w-8" />
+      </div>
+    </div>
+  );
+
   useEffect(() => {
     if (activeChatId && (!messages[activeChatId] || messages[activeChatId].length === 0)) {
+      setIsLoadingMessages(true);
       const fetchHistory = async () => {
         try {
           const res = await apiFetch(ENDPOINTS.CHAT_MESSAGES(activeChatId));
@@ -109,6 +124,8 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
           }
         } catch (e) {
           console.error("Failed to fetch history:", e);
+        } finally {
+          setIsLoadingMessages(false);
         }
       };
       fetchHistory();
@@ -307,8 +324,11 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
     setShowHeaderMenu(false);
   };
 
-  const filteredMessages = chatMessages.filter(m =>
-    !searchQuery || m.text?.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredMessages = useMemo(
+    () => chatMessages.filter(m =>
+      !searchQuery || m.text?.toLowerCase().includes(searchQuery.toLowerCase())
+    ),
+    [chatMessages, searchQuery]
   );
 
   return (
@@ -491,77 +511,93 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
         </div>
 
         <div className="space-y-6 flex flex-col justify-end">
-          {filteredMessages.map((msg, i) => {
-            if (msg.text?.startsWith('[System] 🔒 Secret Chat Request:::')) {
-              const secretChatId = msg.text.split(':::')[1];
-              const isSender = msg.senderId === currentUser?.id;
-              return (
-                <div key={msg.id} className="flex justify-center my-4">
-                  <div className="bg-surface-container border border-blue-500/30 p-4 rounded-2xl w-full max-w-sm flex flex-col items-center shadow-[0_8px_32px_rgba(0,122,255,0.1)]">
-                    <div className="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-500 mb-3">
-                      <Lock className="w-6 h-6" />
-                    </div>
-                    <h4 className="text-on-surface font-bold text-lg mb-1">Secret Chat Request</h4>
-                    <p className="text-sm text-on-surface-variant text-center mb-4">
-                      {isSender
-                        ? 'Waiting for the other user to accept your request to start an end-to-end encrypted session.'
-                        : 'Wants to start an end-to-end encrypted secret chat with you.'}
-                    </p>
+          {isLoadingMessages ? (
+            // Skeleton chat bubbles while loading
+            <>
+              {[0, 1, 2, 3, 4, 5].map((i) => (
+                <SkeletonBubble key={i} isMe={i % 3 === 0} />
+              ))}
+            </>
+          ) : (
+            filteredMessages.map((msg, i) => {
+                if (msg.text?.startsWith('[System] 🔒 Secret Chat Request:::')) {
+                  const secretChatId = msg.text.split(':::')[1];
+                  const isSender = msg.senderId === currentUser?.id;
+                  return (
+                    <div key={msg.id} className="flex justify-center my-4">
+                      <div className="bg-surface-container border border-blue-500/30 p-4 rounded-2xl w-full max-w-sm flex flex-col items-center shadow-[0_8px_32px_rgba(0,122,255,0.1)]">
+                        <div className="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-500 mb-3">
+                          <Lock className="w-6 h-6" />
+                        </div>
+                        <h4 className="text-on-surface font-bold text-lg mb-1">Secret Chat Request</h4>
+                        <p className="text-sm text-on-surface-variant text-center mb-4">
+                          {isSender
+                            ? 'Waiting for the other user to accept your request to start an end-to-end encrypted session.'
+                            : 'Wants to start an end-to-end encrypted secret chat with you.'}
+                        </p>
 
-                    {!isSender && (
-                      <div className="flex w-full gap-2 mt-2">
-                        <button
-                          onClick={async () => {
-                            await handleSecretChatInvitation(secretChatId, 'accept');
-                            setActiveChatId(secretChatId);
-                          }}
-                          className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-medium py-2 rounded-xl transition-colors"
-                        >
-                          Accept
-                        </button>
-                        <button
-                          onClick={() => handleSecretChatInvitation(secretChatId, 'decline')}
-                          className="flex-1 bg-surface-container-highest hover:bg-surface-container-high text-on-surface-variant font-medium py-2 rounded-xl transition-colors"
-                        >
-                          Decline
-                        </button>
+                        {!isSender && (
+                          <div className="flex w-full gap-2 mt-2">
+                            <button
+                              onClick={async () => {
+                                await handleSecretChatInvitation(secretChatId, 'accept');
+                                setActiveChatId(secretChatId);
+                              }}
+                              className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-medium py-2 rounded-xl transition-colors"
+                            >
+                              Accept
+                            </button>
+                            <button
+                              onClick={() => handleSecretChatInvitation(secretChatId, 'decline')}
+                              className="flex-1 bg-surface-container-highest hover:bg-surface-container-high text-on-surface-variant font-medium py-2 rounded-xl transition-colors"
+                            >
+                              Decline
+                            </button>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                </div>
-              );
-            }
-            return (
-              <MessageBubble
-                key={msg.id}
-                msg={msg}
-                isMe={msg.senderId === currentUser?.id}
-                onReply={setReplyingTo}
-                onEdit={handleEdit}
-                replyMessage={msg.replyToId ? chatMessages.find(m => m.id === msg.replyToId) : undefined}
-                onMediaClick={handleMediaClick}
-                isSecret={chat.isSecret}
-              />
-            );
-          })}
-          <div ref={bottomRef} className="h-4 w-full" />
+                    </div>
+                  );
+                }
+                return (
+                  <MessageBubble
+                    key={msg.id}
+                    msg={msg}
+                    isMe={msg.senderId === currentUser?.id}
+                    onReply={setReplyingTo}
+                    onEdit={handleEdit}
+                    replyMessage={msg.replyToId ? chatMessages.find(m => m.id === msg.replyToId) : undefined}
+                    onMediaClick={handleMediaClick}
+                    isSecret={chat.isSecret}
+                  />
+                );
+              })
+            )}
 
-          {typingInThisChat.length > 0 && (
-            <div className="flex items-center gap-2 text-on-surface-variant text-sm p-4 animate-pulse">
-              <div className="flex gap-1">
-                <span className="w-1.5 h-1.5 bg-secondary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                <span className="w-1.5 h-1.5 bg-secondary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                <span className="w-1.5 h-1.5 bg-secondary rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+            {!isLoadingMessages && filteredMessages.length === 0 && (
+              <div className="py-14 text-center text-on-surface-variant">
+                <p className="text-sm font-medium">No messages yet. Start the conversation now.</p>
               </div>
-              <span className="font-medium">
-                {typingInThisChat.length === 1
-                  ? `${typingInThisChat[0]} is typing...`
-                  : `${typingInThisChat.length} people are typing...`}
-              </span>
-            </div>
-          )}
-        </div>
-      </main>
+            )}
+
+            <div ref={bottomRef} className="h-4 w-full" />
+
+            {typingInThisChat.length > 0 && (
+              <div className="flex items-center gap-2 text-on-surface-variant text-sm p-4 animate-pulse">
+                <div className="flex gap-1">
+                  <span className="w-1.5 h-1.5 bg-secondary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-1.5 h-1.5 bg-secondary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-1.5 h-1.5 bg-secondary rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                </div>
+                <span className="font-medium">
+                  {typingInThisChat.length === 1
+                    ? `${typingInThisChat[0]} is typing...`
+                    : `${typingInThisChat.length} people are typing...`}
+                </span>
+              </div>
+            )}
+          </div>
+        </main>
 
       <div className={`fixed bottom-0 left-0 w-full p-4 md:p-6 z-50 transition-colors duration-300 ${chat.isSecret
           ? 'bg-gradient-to-t from-black via-black/95 to-transparent'

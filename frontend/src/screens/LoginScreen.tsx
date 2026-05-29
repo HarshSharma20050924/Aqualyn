@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Droplet, ArrowRight, Phone, Mail, ChevronDown, Calendar, Eye, EyeOff, Check, Shield, Globe, Headset } from 'lucide-react';
 
@@ -14,7 +14,7 @@ const COUNTRIES = [
 import GlassyDatePicker from '../components/GlassyDatePicker';
 
 import { auth, googleProvider, setupRecaptcha } from '../config/firebase';
-import { signInWithPhoneNumber, signInWithPopup, ConfirmationResult, signInWithEmailLink, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithCustomToken } from 'firebase/auth';
+import { signInWithPhoneNumber, signInWithPopup, ConfirmationResult, signInWithEmailLink, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithCustomToken, signInWithRedirect, getRedirectResult } from 'firebase/auth';
 import { User } from '../types';
 import { useAppContext } from '../context/AppContext';
 import { ENDPOINTS } from '../config/api';
@@ -24,6 +24,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
   const [step, setStep] = useState<'intro' | 'phone' | 'email' | 'otp' | 'profile'>('intro');
   const [isExistingUser, setIsExistingUser] = useState<boolean | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   
   // Auth States
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -75,6 +76,31 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
     }
   }, [currentUser]);
 
+  // Detect mobile / PWA environment
+  const isMobile = typeof window !== 'undefined' && (
+    /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Mobile/i.test(navigator.userAgent) ||
+    window.matchMedia('(hover: none)').matches
+  );
+
+  const showNotif = async (t: string, b: string, fallbackAlert = false) => {
+    try {
+      const reg = await navigator.serviceWorker?.ready;
+      if (reg) {
+        reg.active?.postMessage({ type: 'SHOW_NOTIFICATION', title: t, body: b, icon: '/pwa-192.png' });
+        return true;
+      }
+    } catch {}
+    if (fallbackAlert) {
+      try {
+        new Notification(t, { body: b, icon: '/pwa-192.png' });
+        return true;
+      } catch {}
+      alert(`🔔 ${t} 🔔\n\n${b}`);
+      return true;
+    }
+    return false;
+  };
+
   const handleSendOtp = async () => {
     setIsLoading(true);
     try {
@@ -98,44 +124,27 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
       }
       const data = await res.json();
       setIsExistingUser(data.isExisting);
-      
+
       const title = 'Aqualyn Verification';
       const body = `Your OTP code is: ${data.otp}`;
-      
-      // Show notification via ServiceWorker (works on mobile PWAs)
-      const showNotif = async (t: string, b: string) => {
-        try {
-          const reg = await navigator.serviceWorker?.ready;
-          if (reg) {
-            reg.active?.postMessage({ type: 'SHOW_NOTIFICATION', title: t, body: b, icon: '/pwa-192.png' });
-            return;
-          }
-        } catch {}
-        // Fallback for desktop
-        try {
-          new Notification(t, { body: b, icon: '/pwa-192.png' });
-          return;
-        } catch {}
-        alert(`🔔 ${t} 🔔\n\n${b}`);
-      };
 
+      // On mobile / PWA we ALWAYS use Notification API or ServiceWorker
+      // Never fall back to alert() during send — that breaks the flow
       if ("Notification" in window) {
-          if (Notification.permission === "granted") {
-              await showNotif(title, body);
-          } else if (Notification.permission !== "denied") {
-              const permission = await Notification.requestPermission();
-              if (permission === "granted") {
-                  await showNotif(title, body);
-              } else {
-                  alert(`🔔 ${title} 🔔\n\n${body}`);
-              }
+        if (Notification.permission === "granted") {
+          await showNotif(title, body, true);
+        } else if (Notification.permission !== "denied") {
+          const permission = await Notification.requestPermission();
+          if (permission === "granted") {
+            await showNotif(title, body, true);
           } else {
-              alert(`🔔 ${title} 🔔\n\n${body}`);
+            // User denied permission → still show OTP screen, skip alert
+            console.warn('[OTP] Notification permission denied');
           }
-      } else {
-          alert(`🔔 ${title} 🔔\n\n${body}`);
+        }
+        // If permanently denied → silently skip the alert fallback on all platforms
       }
-      
+
       setStep('otp');
       setResendTimer(30);
       setCanResend(false);
@@ -246,46 +255,119 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
     }
   };
 
-  const handleGoogleSignIn = async () => {
-    setIsLoading(true);
-    try {
-      const result = await signInWithPopup(auth, googleProvider);
-      const user = result.user;
-      
-      // Auto-sync to check if profile is complete
-      const idToken = await user.getIdToken();
-      const res = await fetch(ENDPOINTS.AUTH_SYNC, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${idToken}`
-        },
-        credentials: 'include',
-        body: JSON.stringify({}) // Initial sync
-      });
-      
-      if (res.ok) {
-        const resData = await res.json();
-        setCurrentUser(resData.user);
-        // Clear logged-out flag
-        localStorage.removeItem('aqualyn_logged_out');
-        
-        // If user already has a dob, they have completed setup
-        if (resData.user.dob) {
-           onLogin();
-        } else {
-           if (user.displayName) setDisplayName(user.displayName);
-           setStep('profile');
+  // ─────────────────────────────────────────
+  //  PRODUCTION-GRADE GOOGLE AUTH
+  //  Mobile / PWA → signInWithRedirect
+  //  Desktop   → signInWithPopup
+  //  Also returns early on redirect so we
+  //  never show both flows at once.
+  // ─────────────────────────────────────────
+  const handleGoogleSignIn = useCallback(async (): Promise<void> => {
+    if (isLoading || isGoogleLoading) return;
+
+    // ── 1. On redirect result page, resolve immediately ──
+    if (window.location.hash && window.location.hash.includes('googleauth')) {
+      try {
+        const result = await handleRedirectResult_();
+        if (result.ok) {
+          onLogin();
+        } else if (result.needsProfile) {
+          setStep('profile');
         }
+        return;
+      } catch (err: any) {
+        alert(err.message);
+        window.history.replaceState(null, '', window.location.pathname);
+        return;
+      }
+    }
+
+    // ── 2. Guarded flow ──
+    setIsGoogleLoading(true);
+    try {
+      if (isMobile) {
+        localStorage.setItem('_gg_signin_active', '1');
+        await signInWithRedirect(auth, googleProvider);
       } else {
-        throw new Error('Failed to sync with backend');
+        const result = await signInWithPopup(auth, googleProvider);
+        const syncResult = await handleGoogleResult_(result);
+        if (syncResult.ok) {
+          onLogin();
+        } else if (syncResult.needsProfile) {
+          setStep('profile');
+        }
       }
     } catch (error: any) {
       alert(error.message);
     } finally {
+      if (!isMobile) setIsGoogleLoading(false);
+    }
+  }, [isLoading, isGoogleLoading, isMobile, onLogin]);
+
+  // Helper: process popup / redirect result into our backend
+  const handleGoogleResult_ = async (result: { user?: { getIdToken: () => Promise<string> }; credential?: string | null }) => {
+    const res = await fetch(ENDPOINTS.AUTH_SYNC, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(result.user
+          ? { 'Authorization': `Bearer ${await result.user.getIdToken()}` }
+          : {}),
+      },
+      credentials: 'include',
+      body: JSON.stringify({}),
+    });
+    if (!res.ok) throw new Error('Failed to sync with backend');
+    const resData = await res.json();
+    localStorage.removeItem('aqualyn_logged_out');
+
+    if (resData.user) {
+      setCurrentUser(resData.user);
+    }
+
+    if (resData.status === 'needs_profile') {
+      return { ok: false, needsProfile: true };
+    }
+
+    return { ok: true };
+  };
+
+  // Called on page-load after a redirect round-trip
+  const handleRedirectResult_ = async (): Promise<{ ok: boolean; needsProfile?: boolean }> => {
+    setIsLoading(true);
+    try {
+      const result = await getRedirectResult(auth);
+      if (!result?.user) return { ok: false };
+      const syncResult = await handleGoogleResult_(result);
+      localStorage.removeItem('_gg_signin_active');
+      window.history.replaceState(null, '', window.location.pathname);
+      return syncResult;
+    } finally {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    const processGoogleRedirect = async () => {
+      if (window.location.hash.includes('googleauth') || localStorage.getItem('_gg_signin_active') === '1') {
+        setIsGoogleLoading(true);
+        try {
+          const result = await handleRedirectResult_();
+          if (result.ok) {
+            onLogin();
+          } else if (result.needsProfile) {
+            setStep('profile');
+          }
+        } catch (error: any) {
+          console.warn('[Google Redirect] ', error);
+        } finally {
+          setIsGoogleLoading(false);
+        }
+      }
+    };
+
+    processGoogleRedirect();
+  }, [handleRedirectResult_, onLogin]);
 
   const GoogleIcon = () => (
     <svg className="w-5 h-5" viewBox="0 0 24 24">
@@ -321,7 +403,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
               <h1 className="font-headline text-5xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-br from-primary to-secondary mb-4">Aqualyn</h1>
               <h2 className="font-headline text-2xl font-bold text-on-surface mb-3">India's Best Messaging App</h2>
               <p className="font-body text-on-surface-variant text-base font-medium tracking-wide mb-12 max-w-xs leading-relaxed">
-                Not your average chat app. Experience crystal clear, fluid communication designed for the modern world.
+                Experience crystal clear, fluid communication designed for the modern world.
               </p>
               <button onClick={() => setStep('phone')} className="w-full h-14 bg-gradient-to-br from-secondary to-primary-container text-white font-headline font-bold rounded-full shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 text-lg">
                 Get Started
@@ -436,10 +518,10 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
 
                 <button 
                   onClick={handleGoogleSignIn}
-                  disabled={isLoading}
+                  disabled={isLoading || isGoogleLoading}
                   className="w-full h-14 glass-card bg-white/40 border border-white/40 text-on-surface font-headline font-bold rounded-2xl hover:bg-white/60 active:scale-[0.98] transition-all flex items-center justify-center gap-3 shadow-sm disabled:opacity-50 disabled:pointer-events-none"
                 >
-                  {isLoading ? (
+                  {isGoogleLoading ? (
                     <div className="w-6 h-6 border-2 border-secondary/30 border-t-secondary rounded-full animate-spin"></div>
                   ) : (
                     <>

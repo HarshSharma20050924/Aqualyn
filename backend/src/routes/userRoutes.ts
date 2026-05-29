@@ -246,4 +246,42 @@ router.get('/call-history', async (req: any, res: any) => {
     }
 });
 
+// 11. APP LOCK PIN
+router.post('/pin/set', async (req: any, res: any) => {
+    const userId = req.user.id;
+    const { pin } = req.body;
+    try {
+        await (prisma as any).user.update({
+            where: { id: userId },
+            data: { appLockPin: pin }
+        });
+        res.json({ success: true, message: 'PIN set successfully' });
+    } catch (e) {
+        console.error('[UserRoute] Set PIN error:', e);
+        res.status(500).json({ error: 'Failed to set PIN' });
+    }
+});
+
+router.post('/pin/verify', async (req: any, res: any) => {
+    const userId = req.user.id;
+    const { pin } = req.body;
+    if (!pin) return res.status(400).json({ error: 'PIN required' });
+    
+    try {
+        const user = await (prisma as any).user.findUnique({
+            where: { id: userId },
+            select: { appLockPin: true }
+        });
+        
+        if (!user || user.appLockPin !== pin) {
+            return res.status(401).json({ success: false, error: 'Invalid PIN' });
+        }
+        
+        res.json({ success: true, message: 'PIN verified' });
+    } catch (e) {
+        console.error('[UserRoute] Verify PIN error:', e);
+        res.status(500).json({ error: 'Failed to verify PIN' });
+    }
+});
+
 export default router;

@@ -138,6 +138,9 @@ export interface Chat {
   participantIds?: string[];
   description?: string;
   adminOnly?: boolean;
+  settings?: Record<string, any>;
+  myStatus?: string;
+  myRole?: string;
   disappearingMessages?: boolean;
   isTempGroup?: boolean;
   originalChatId?: string;

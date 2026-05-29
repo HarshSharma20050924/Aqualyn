@@ -25,6 +25,8 @@ router.get('/', async (req: any, res: any) => {
                         userId: true,
                         role: true,
                         status: true,
+                        isArchived: true,
+                        isPinned: true,
                         user: {
                             select: { id: true, username: true, displayName: true, avatar: true }
                         }
@@ -83,7 +85,9 @@ router.get('/', async (req: any, res: any) => {
                 participantIds: c.participants.map((p: any) => p.userId),
                 isMuted: mutedSet.has(c.id),
                 myStatus: myParticipant?.status || 'JOINED',
-                myRole: myParticipant?.role || 'MEMBER'
+                myRole: myParticipant?.role || 'MEMBER',
+                isArchived: myParticipant?.isArchived || false,
+                isPinned: myParticipant?.isPinned || false
             };
         });
 
@@ -110,7 +114,7 @@ router.get('/:chatId/messages', async (req: any, res: any) => {
                 audioUrl: true, document: true, location: true,
                 contact: true, payment: true, schedule: true,
                 wallet: true, replyToId: true, status: true,
-                isEdited: true, isRead: true, reactions: true,
+                isEdited: true, isRead: true, isPinned: true, reactions: true,
                 deletedFor: true, createdAt: true
             }
         });
@@ -130,6 +134,80 @@ router.get('/:chatId/messages', async (req: any, res: any) => {
     } catch (e) {
         console.error('[ChatRoutes] Failed to fetch messages:', e);
         res.status(500).json({ error: 'Failed to fetch messages' });
+    }
+});
+
+// Send a message
+router.post('/:chatId/messages', async (req: any, res: any) => {
+    try {
+        const { chatId } = req.params;
+        const userId = req.user.id;
+        const { content, replyToId } = req.body;
+
+        const message = await (prisma as any).message.create({
+            data: {
+                text: content,
+                senderId: userId,
+                chatId: chatId,
+                replyToId: replyToId
+            }
+        });
+        
+        // Map to frontend response
+        res.json({
+            ...message,
+            timestamp: new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        });
+    } catch (e) {
+        console.error('[ChatRoutes] Failed to send message:', e);
+        res.status(500).json({ error: 'Failed to send message' });
+    }
+});
+
+// Delete a message
+router.delete('/:chatId/messages/:messageId', async (req: any, res: any) => {
+    try {
+        const { messageId } = req.params;
+        const userId = req.user.id;
+
+        const message = await (prisma as any).message.findUnique({
+            where: { id: messageId }
+        });
+        
+        if (!message) return res.status(404).json({ error: 'Message not found' });
+        
+        // Soft delete for the user
+        const deletedFor = message.deletedFor || [];
+        if (!deletedFor.includes(userId)) {
+            deletedFor.push(userId);
+            await (prisma as any).message.update({
+                where: { id: messageId },
+                data: { deletedFor }
+            });
+        }
+        
+        res.json({ message: 'Message deleted successfully' });
+    } catch (e) {
+        console.error('[ChatRoutes] Failed to delete message:', e);
+        res.status(500).json({ error: 'Failed to delete message' });
+    }
+});
+
+// Update message reactions
+router.post('/:chatId/messages/:messageId/reactions', async (req: any, res: any) => {
+    try {
+        const { messageId } = req.params;
+        const { reactions } = req.body;
+
+        await (prisma as any).message.update({
+            where: { id: messageId },
+            data: { reactions }
+        });
+        
+        res.json({ message: 'Reactions updated successfully' });
+    } catch (e) {
+        console.error('[ChatRoutes] Failed to update reactions:', e);
+        res.status(500).json({ error: 'Failed to update reactions' });
     }
 });
 
@@ -337,6 +415,134 @@ router.post('/secret/handle', async (req: any, res: any) => {
     } catch (e: any) {
         console.error('[ChatRoutes] Secret Chat Handle Error:', e);
         res.status(500).json({ error: e.message || 'Failed to handle secret chat request' });
+    }
+});
+
+// Folders
+router.get('/folders', async (req: any, res: any) => {
+    try {
+        const folders = await (prisma as any).chatFolder.findMany({
+            where: { userId: req.user.id },
+            orderBy: { createdAt: 'asc' }
+        });
+        res.json(folders);
+    } catch (e) {
+        console.error('[ChatRoutes] Folders get error:', e);
+        res.status(500).json({ error: 'Failed to get folders' });
+    }
+});
+
+router.post('/folders', async (req: any, res: any) => {
+    const { name, chatIds } = req.body;
+    if (!name) return res.status(400).json({ error: 'Folder name required' });
+    try {
+        const folder = await (prisma as any).chatFolder.create({
+            data: { userId: req.user.id, name, chatIds: chatIds || [] }
+        });
+        res.json(folder);
+    } catch (e) {
+        console.error('[ChatRoutes] Folders create error:', e);
+        res.status(500).json({ error: 'Failed to create folder' });
+    }
+});
+
+router.put('/folders/:id', async (req: any, res: any) => {
+    const { name, chatIds } = req.body;
+    try {
+        const folder = await (prisma as any).chatFolder.findFirst({
+            where: { id: req.params.id, userId: req.user.id }
+        });
+        if (!folder) return res.status(404).json({ error: 'Folder not found' });
+        
+        const updated = await (prisma as any).chatFolder.update({
+            where: { id: req.params.id },
+            data: { 
+                name: name !== undefined ? name : folder.name, 
+                chatIds: chatIds !== undefined ? chatIds : folder.chatIds 
+            }
+        });
+        res.json(updated);
+    } catch (e) {
+        console.error('[ChatRoutes] Folders update error:', e);
+        res.status(500).json({ error: 'Failed to update folder' });
+    }
+});
+
+router.delete('/folders/:id', async (req: any, res: any) => {
+    try {
+        await (prisma as any).chatFolder.deleteMany({
+            where: { id: req.params.id, userId: req.user.id }
+        });
+        res.json({ success: true, message: 'Folder deleted' });
+    } catch (e) {
+        console.error('[ChatRoutes] Folders delete error:', e);
+        res.status(500).json({ error: 'Failed to delete folder' });
+    }
+});
+
+// Archive Chat
+router.post('/:chatId/archive', async (req: any, res: any) => {
+    const { chatId } = req.params;
+    const userId = req.user.id;
+    try {
+        const participant = await (prisma as any).chatParticipant.findFirst({
+            where: { chatId, userId }
+        });
+        if (!participant) return res.status(404).json({ error: 'Chat not found' });
+        
+        const updated = await (prisma as any).chatParticipant.update({
+            where: { id: participant.id },
+            data: { isArchived: !participant.isArchived }
+        });
+        res.json({ success: true, isArchived: updated.isArchived });
+    } catch (e) {
+        console.error('[ChatRoutes] Archive error:', e);
+        res.status(500).json({ error: 'Archive failed' });
+    }
+});
+
+// Pin Chat
+router.post('/:chatId/pin', async (req: any, res: any) => {
+    const { chatId } = req.params;
+    const userId = req.user.id;
+    try {
+        const participant = await (prisma as any).chatParticipant.findFirst({
+            where: { chatId, userId }
+        });
+        if (!participant) return res.status(404).json({ error: 'Chat not found' });
+        
+        const updated = await (prisma as any).chatParticipant.update({
+            where: { id: participant.id },
+            data: { isPinned: !participant.isPinned }
+        });
+        res.json({ success: true, isPinned: updated.isPinned });
+    } catch (e) {
+        console.error('[ChatRoutes] Pin chat error:', e);
+        res.status(500).json({ error: 'Pin chat failed' });
+    }
+});
+
+// Pin Message
+router.post('/:chatId/messages/:messageId/pin', async (req: any, res: any) => {
+    const { chatId, messageId } = req.params;
+    try {
+        const message = await (prisma as any).message.findUnique({
+            where: { id: messageId }
+        });
+        if (!message) return res.status(404).json({ error: 'Message not found' });
+        
+        const updated = await (prisma as any).message.update({
+            where: { id: messageId },
+            data: { isPinned: !message.isPinned }
+        });
+        
+        // Notify others
+        (SocketService as any).io.to(chatId).emit('message_pinned', { chatId, messageId, isPinned: updated.isPinned });
+        
+        res.json({ success: true, isPinned: updated.isPinned });
+    } catch (e) {
+        console.error('[ChatRoutes] Pin message error:', e);
+        res.status(500).json({ error: 'Pin message failed' });
     }
 });
 

@@ -15,6 +15,9 @@ import ToastContainer from './components/ui/ToastContainer';
 import AppLockScreen from './components/AppLockScreen';
 import { useAppContext } from './context/AppContext';
 import { CallOverlay } from './components/CallOverlay';
+import { ENDPOINTS } from './config/api';
+import { getRedirectResult } from 'firebase/auth';
+import { auth } from './config/firebase';
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState('login');
@@ -42,6 +45,34 @@ export default function App() {
     }
   }, [theme, aquaIntensity]);
   
+  // Google redirect result resolver (mobile / PWA)
+  useEffect(() => {
+    // Only resolve when coming back from a Google redirect round-trip
+    // and the redirect hasn't already been processed.
+    if (!window.location.hash.includes('googleauth')) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const result = await getRedirectResult(auth);
+        if (cancelled || !result?.user) return;
+        const idToken = await result.user.getIdToken();
+        await fetch(ENDPOINTS.AUTH_SYNC, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
+          credentials: 'include',
+          body: JSON.stringify({}),
+        });
+        // clear hash without triggering navigation
+        history.replaceState(null, '', window.location.pathname);
+      } catch (err: any) {
+        console.error('[Google Redirect] Failed:', err);
+        history.replaceState(null, '', window.location.pathname);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+  
+
   const { currentUser, isLoading } = useAppContext();
   
   useEffect(() => {

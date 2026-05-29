@@ -149,4 +149,63 @@ router.post('/post/:postId/comment', verifyToken, async (req: any, res: any) => 
     }
 });
 
+// 8. SAVE POST
+router.post('/post/:postId/save', verifyToken, async (req: any, res: any) => {
+    const userId = req.user.id;
+    const { postId } = req.params;
+    try {
+        const existing = await (prisma as any).savedPost.findUnique({
+            where: { userId_postId: { userId, postId } }
+        });
+        if (existing) {
+            await (prisma as any).savedPost.delete({ where: { id: existing.id } });
+            return res.json({ saved: false });
+        } else {
+            await (prisma as any).savedPost.create({ data: { userId, postId } });
+            return res.json({ saved: true });
+        }
+    } catch (e) {
+        console.error('[SocialRoute] Save post error:', e);
+        res.status(500).json({ error: 'Save post failed' });
+    }
+});
+
+// 9. GET SAVED POSTS
+router.get('/saved-posts', verifyToken, async (req: any, res: any) => {
+    try {
+        const saved = await (prisma as any).savedPost.findMany({
+            where: { userId: req.user.id },
+            include: {
+                post: {
+                    include: { author: { select: { id: true, username: true, displayName: true, avatar: true } } }
+                }
+            },
+            orderBy: { savedAt: 'desc' }
+        });
+        res.json(saved.map((s: any) => s.post));
+    } catch (e) {
+        console.error('[SocialRoute] Get saved posts error:', e);
+        res.status(500).json({ error: 'Get saved posts failed' });
+    }
+});
+
+// 10. VIEW STORY
+router.post('/story/:storyId/view', verifyToken, async (req: any, res: any) => {
+    const userId = req.user.id;
+    const { storyId } = req.params;
+    try {
+        // Upsert view
+        const existing = await (prisma as any).storyView.findUnique({
+            where: { storyId_userId: { storyId, userId } }
+        });
+        if (!existing) {
+            await (prisma as any).storyView.create({ data: { storyId, userId } });
+        }
+        res.json({ success: true });
+    } catch (e) {
+        console.error('[SocialRoute] View story error:', e);
+        res.status(500).json({ error: 'View story failed' });
+    }
+});
+
 export default router;

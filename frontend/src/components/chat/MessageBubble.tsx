@@ -69,7 +69,7 @@ export default function MessageBubble({ msg, isMe, onReply, onEdit, replyMessage
   useEffect(() => {
     if (!isSecret) return;
     const timerDuration = activeChat?.selfDestructTimer || 30; 
-    const createdAtTime = msg.createdAt ? new Date(msg.createdAt).getTime() : Date.now();
+    const createdAtTime = msg.timestamp ? new Date(msg.timestamp).getTime() : Date.now();
     const elapsed = Math.floor((Date.now() - createdAtTime) / 1000);
     const remaining = Math.max(0, timerDuration - elapsed);
     

@@ -39,10 +39,16 @@ router.post('/', verifyToken, upload.single('file'), async (req: any, res: any) 
     }
 
     // Upload to Vercel Blob
+    const token = process.env.BLOB_READ_WRITE_TOKEN;
+    if (!token) {
+      console.error('[Upload] Missing BLOB_READ_WRITE_TOKEN environment variable');
+      return res.status(500).json({ error: 'Server misconfiguration: missing blob token' });
+    }
+
     const blob = await put(fileName, fileBuffer, {
       access: 'public',
       addRandomSuffix: true,
-      token: process.env.BLOB_READ_WRITE_TOKEN
+      token
     });
 
     res.json({
