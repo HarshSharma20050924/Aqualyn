@@ -1,0 +1,858 @@
+openapi: 3.0.3
+info:
+  title: Aqualyn Backend API
+  version: 1.0.0
+  description: Complete API reference. Base URL http://localhost:5000
+servers:
+  - url: http://localhost:5000
+
+paths:
+  # ── AUTH ──────────────────────────────────────────────
+  /api/auth/send-otp:
+    post:
+      tags: [Auth]
+      summary: Send OTP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [identifier]
+              properties:
+                identifier:
+                  type: string
+                  description: Phone or email
+      responses:
+        '200':
+          description: OTP sent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  otp: { type: string }
+                  isExisting: { type: boolean }
+
+  /api/auth/verify-otp:
+    post:
+      tags: [Auth]
+      summary: Verify OTP → get JWT
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [identifier, otp]
+              properties:
+                identifier: { type: string }
+                otp: { type: string }
+      responses:
+        '200':
+          description: JWT token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string }
+
+  /api/auth/sync:
+    post:
+      tags: [Auth]
+      summary: Login or register (profile sync)
+      security: [{ bearer: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                displayName: { type: string }
+                dob: { type: string, format: date }
+                avatar: { type: string }
+                username: { type: string }
+      responses:
+        '200':
+          description: User synced
+        '201':
+          description: User registered
+
+  /api/auth/sync-token:
+    post:
+      tags: [Auth]
+      summary: Refresh JWT
+      security: [{ bearer: [] }]
+      responses:
+        '200':
+          description: New token + user
+
+  /api/auth/profile:
+    get:
+      tags: [Auth]
+      summary: Get current user profile
+      security: [{ bearer: [] }]
+      responses:
+        '200':
+          description: User profile object
+
+  /api/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout
+      security: [{ bearer: [] }]
+      responses:
+        '200':
+          description: Logged out
+
+  # ── USER ─────────────────────────────────────────────
+  /api/user/settings:
+    get:
+      tags: [User]
+      summary: Get settings
+      security: [{ bearer: [] }]
+      responses: { '200': { description: Settings } }
+    patch:
+      tags: [User]
+      summary: Update settings
+      security: [{ bearer: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object }
+      responses: { '200': { description: Updated } }
+
+  /api/user/sessions:
+    get:
+      tags: [User]
+      summary: List active sessions
+      security: [{ bearer: [] }]
+      responses: { '200': { description: Sessions array } }
+
+  /api/user/sessions/{id}:
+    delete:
+      tags: [User]
+      summary: Revoke session
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses: { '200': { description: Revoked } }
+
+  /api/user/storage-usage:
+    get:
+      tags: [User]
+      summary: Storage usage
+      security: [{ bearer: [] }]
+      responses: { '200': { description: Usage stats } }
+
+  /api/user/export:
+    post:
+      tags: [User]
+      summary: Initiate data export
+      security: [{ bearer: [] }]
+      responses: { '200': { description: Export started } }
+
+  /api/user/follow:
+    post:
+      tags: [User]
+      summary: Follow user
+      security: [{ bearer: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetUserId]
+              properties:
+                targetUserId: { type: string }
+      responses: { '200': { description: status following or requested } }
+
+  /api/user/unfollow:
+    post:
+      tags: [User]
+      summary: Unfollow user
+      security: [{ bearer: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetUserId]
+              properties:
+                targetUserId: { type: string }
+      responses: { '200': { description: unfollowed } }
+
+  /api/user/follow-request/handle:
+    post:
+      tags: [User]
+      summary: Accept/reject follow request
+      security: [{ bearer: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                requestId: { type: string }
+                senderId: { type: string }
+                action: { type: string, enum: [accept, reject] }
+      responses: { '200': { description: Handled } }
+
+  /api/user/notifications:
+    get:
+      tags: [User]
+      summary: Get notifications
+      security: [{ bearer: [] }]
+      responses: { '200': { description: Notifications array } }
+
+  /api/user/notifications/read:
+    post:
+      tags: [User]
+      summary: Mark all notifications read
+      security: [{ bearer: [] }]
+      responses: { '200': { description: Done } }
+
+  /api/user/{userId}/followers:
+    get:
+      tags: [User]
+      summary: Get followers list
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: userId, in: path, required: true, schema: { type: string } }
+      responses: { '200': { description: Array of UserBrief } }
+
+  /api/user/{userId}/following:
+    get:
+      tags: [User]
+      summary: Get following list
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: userId, in: path, required: true, schema: { type: string } }
+      responses: { '200': { description: Array of UserBrief } }
+
+  /api/user/profile/{userId}:
+    get:
+      tags: [User]
+      summary: Get public profile
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: userId, in: path, required: true, schema: { type: string } }
+      responses: { '200': { description: Profile } }
+
+  /api/user/block:
+    post:
+      tags: [User]
+      summary: Toggle block user
+      security: [{ bearer: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetUserId]
+              properties:
+                targetUserId: { type: string }
+      responses: { '200': { description: blocked true/false } }
+
+  /api/user/report:
+    post:
+      tags: [User]
+      summary: Report user
+      security: [{ bearer: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetUserId]
+              properties:
+                targetUserId: { type: string }
+                reason: { type: string }
+      responses: { '200': { description: Reported } }
+
+  /api/user/blocked:
+    get:
+      tags: [User]
+      summary: Get blocked user IDs
+      security: [{ bearer: [] }]
+      responses: { '200': { description: String array } }
+
+  /api/user/privacy:
+    patch:
+      tags: [User]
+      summary: Update privacy fields
+      security: [{ bearer: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                invitationSettings: { type: string }
+                showPhoneTo: { type: string }
+                searchByPhone: { type: boolean }
+                isPrivate: { type: boolean }
+      responses: { '200': { description: Updated user } }
+
+  /api/user/upload-avatar:
+    post:
+      tags: [User]
+      summary: Upload avatar (base64/URL)
+      security: [{ bearer: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [avatar]
+              properties:
+                avatar: { type: string }
+      responses: { '200': { description: avatar URL } }
+
+  /api/user/contacts/sync:
+    post:
+      tags: [User]
+      summary: Sync phone contacts
+      security: [{ bearer: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phones]
+              properties:
+                phones: { type: array, items: { type: string } }
+      responses: { '200': { description: Matched users } }
+
+  /api/user/call-history:
+    get:
+      tags: [User]
+      summary: Call history
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: limit, in: query, schema: { type: integer } }
+      responses: { '200': { description: calls array + total } }
+
+  /api/user/pin/set:
+    post:
+      tags: [User]
+      summary: Set app lock PIN
+      security: [{ bearer: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pin]
+              properties:
+                pin: { type: string }
+      responses: { '200': { description: PIN set } }
+
+  /api/user/pin/verify:
+    post:
+      tags: [User]
+      summary: Verify app lock PIN
+      security: [{ bearer: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pin]
+              properties:
+                pin: { type: string }
+      responses: { '200': { description: success true/false } }
+
+  # ── CHATS ────────────────────────────────────────────
+  /api/chats:
+    get:
+      tags: [Chats]
+      summary: Get all user chats
+      security: [{ bearer: [] }]
+      responses: { '200': { description: Chat list } }
+
+  /api/chats/{chatId}/messages:
+    get:
+      tags: [Chats]
+      summary: Get messages for a chat
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: chatId, in: path, required: true, schema: { type: string } }
+      responses: { '200': { description: Messages array } }
+    post:
+      tags: [Chats]
+      summary: Send message
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: chatId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content: { type: string }
+                replyToId: { type: string }
+      responses: { '200': { description: Created message } }
+
+  /api/chats/{chatId}/messages/{messageId}:
+    delete:
+      tags: [Chats]
+      summary: Delete message (soft)
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: chatId, in: path, required: true, schema: { type: string } }
+        - { name: messageId, in: path, required: true, schema: { type: string } }
+      responses: { '200': { description: Deleted } }
+
+  /api/chats/{chatId}/messages/{messageId}/reactions:
+    post:
+      tags: [Chats]
+      summary: Update message reactions
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: chatId, in: path, required: true, schema: { type: string } }
+        - { name: messageId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reactions: { type: object }
+      responses: { '200': { description: Updated } }
+
+  /api/chats/{chatId}/messages/{messageId}/pin:
+    post:
+      tags: [Chats]
+      summary: Toggle pin message
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: chatId, in: path, required: true, schema: { type: string } }
+        - { name: messageId, in: path, required: true, schema: { type: string } }
+      responses: { '200': { description: Toggled } }
+
+  /api/chats/{chatId}/mute:
+    post:
+      tags: [Chats]
+      summary: Toggle mute chat
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: chatId, in: path, required: true, schema: { type: string } }
+      responses: { '200': { description: muted true/false } }
+
+  /api/chats/{chatId}/settings:
+    patch:
+      tags: [Chats]
+      summary: Update chat settings
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: chatId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                settings: { type: object }
+                selfDestructTimer: { type: integer }
+      responses: { '200': { description: Updated chat } }
+
+  /api/chats/{chatId}/media:
+    get:
+      tags: [Chats]
+      summary: Get media counts
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: chatId, in: path, required: true, schema: { type: string } }
+      responses: { '200': { description: images/videos/docs/audio counts } }
+
+  /api/chats/{chatId}/archive:
+    post:
+      tags: [Chats]
+      summary: Toggle archive chat
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: chatId, in: path, required: true, schema: { type: string } }
+      responses: { '200': { description: isArchived toggled } }
+
+  /api/chats/{chatId}/pin:
+    post:
+      tags: [Chats]
+      summary: Toggle pin chat
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: chatId, in: path, required: true, schema: { type: string } }
+      responses: { '200': { description: isPinned toggled } }
+
+  /api/chats/secret/request:
+    post:
+      tags: [Chats]
+      summary: Request secret chat
+      security: [{ bearer: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetUserId]
+              properties:
+                targetUserId: { type: string }
+      responses: { '200': { description: Secret chat created } }
+
+  /api/chats/secret/handle:
+    post:
+      tags: [Chats]
+      summary: Accept/decline secret chat
+      security: [{ bearer: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [chatId, action]
+              properties:
+                chatId: { type: string }
+                action: { type: string, enum: [accept, decline] }
+      responses: { '200': { description: Handled } }
+
+  /api/chats/folders:
+    get:
+      tags: [Chats]
+      summary: Get chat folders
+      security: [{ bearer: [] }]
+      responses: { '200': { description: Folders array } }
+    post:
+      tags: [Chats]
+      summary: Create folder
+      security: [{ bearer: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                chatIds: { type: array, items: { type: string } }
+      responses: { '200': { description: Created folder } }
+
+  /api/chats/folders/{id}:
+    put:
+      tags: [Chats]
+      summary: Update folder
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                chatIds: { type: array, items: { type: string } }
+      responses: { '200': { description: Updated } }
+    delete:
+      tags: [Chats]
+      summary: Delete folder
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses: { '200': { description: Deleted } }
+
+  # ── SOCIAL ───────────────────────────────────────────
+  /api/social/search:
+    get:
+      tags: [Social]
+      summary: Global search
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string } }
+      responses: { '200': { description: users + posts } }
+
+  /api/social/feed:
+    get:
+      tags: [Social]
+      summary: Get feed
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: cursor, in: query, schema: { type: string } }
+      responses: { '200': { description: Feed posts } }
+
+  /api/social/stories:
+    get:
+      tags: [Social]
+      summary: Get active stories (24h)
+      security: [{ bearer: [] }]
+      responses: { '200': { description: Stories array } }
+
+  /api/social/user/{userId}/posts:
+    get:
+      tags: [Social]
+      summary: Get user posts
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: userId, in: path, required: true, schema: { type: string } }
+      responses: { '200': { description: Posts array } }
+
+  /api/social/user/{userId}/stories:
+    get:
+      tags: [Social]
+      summary: Get user stories
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: userId, in: path, required: true, schema: { type: string } }
+      responses: { '200': { description: Stories array } }
+
+  /api/social/post:
+    post:
+      tags: [Social]
+      summary: Create post
+      security: [{ bearer: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content: { type: string }
+                mediaUrl: { type: string }
+                mediaType: { type: string, enum: [image, video] }
+      responses: { '200': { description: Created post } }
+
+  /api/social/post/{postId}:
+    delete:
+      tags: [Social]
+      summary: Delete post
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: postId, in: path, required: true, schema: { type: string } }
+      responses: { '200': { description: Deleted } }
+    patch:
+      tags: [Social]
+      summary: Edit post
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: postId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content: { type: string }
+      responses: { '200': { description: Edited } }
+
+  /api/social/story:
+    post:
+      tags: [Social]
+      summary: Create story
+      security: [{ bearer: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mediaUrl, mediaType]
+              properties:
+                mediaUrl: { type: string }
+                mediaType: { type: string, enum: [image, video] }
+                content: { type: string }
+      responses: { '200': { description: Created story } }
+
+  /api/social/story/{storyId}:
+    delete:
+      tags: [Social]
+      summary: Delete story
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: storyId, in: path, required: true, schema: { type: string } }
+      responses: { '200': { description: Deleted } }
+
+  /api/social/post/{postId}/like:
+    post:
+      tags: [Social]
+      summary: Toggle like
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: postId, in: path, required: true, schema: { type: string } }
+      responses: { '200': { description: liked true/false } }
+
+  /api/social/post/{postId}/comment:
+    post:
+      tags: [Social]
+      summary: Add comment
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: postId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content: { type: string }
+      responses: { '200': { description: Created comment } }
+
+  /api/social/post/{postId}/save:
+    post:
+      tags: [Social]
+      summary: Toggle save post
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: postId, in: path, required: true, schema: { type: string } }
+      responses: { '200': { description: saved true/false } }
+
+  /api/social/saved-posts:
+    get:
+      tags: [Social]
+      summary: Get saved posts
+      security: [{ bearer: [] }]
+      responses: { '200': { description: Posts array } }
+
+  /api/social/story/{storyId}/view:
+    post:
+      tags: [Social]
+      summary: Mark story as viewed
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: storyId, in: path, required: true, schema: { type: string } }
+      responses: { '200': { description: Viewed } }
+
+  # ── GROUPS ───────────────────────────────────────────
+  /api/groups/create:
+    post:
+      tags: [Groups]
+      summary: Create group
+      security: [{ bearer: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                participantIds: { type: array, items: { type: string } }
+                description: { type: string }
+      responses: { '200': { description: Created group } }
+
+  /api/groups/join/{token}:
+    post:
+      tags: [Groups]
+      summary: Join group via invite link
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses: { '200': { description: Joined } }
+
+  /api/groups/{id}/settings:
+    patch:
+      tags: [Groups]
+      summary: Update group settings (admin)
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                settings: { type: object }
+      responses: { '200': { description: Updated } }
+
+  /api/groups/{id}/member/{targetId}/role:
+    post:
+      tags: [Groups]
+      summary: Change member role
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: targetId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties:
+                role: { type: string, enum: [ADMIN, MEMBER] }
+      responses: { '200': { description: Role updated } }
+
+  /api/groups/{id}/info:
+    get:
+      tags: [Groups]
+      summary: Get full group info
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses: { '200': { description: Group info + media counts } }
+
+  /api/groups/{id}/leave:
+    post:
+      tags: [Groups]
+      summary: Leave group
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses: { '200': { description: Left } }
+
+  /api/groups/{chatId}/invitation/handle:
+    post:
+      tags: [Groups]
+      summary: Handle group invitation
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: chatId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [accept, decline] }
+      responses: { '200': { description: Handled } }
+
+  # ── UPLOAD ───────────────────────────────────────────
+  /api/upload:
+    post:
+      tags: [Upload]
+      summary: Upload file (multipart)
+      security: [{ bearer: [] }]
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Upload result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  url: { type: string }
+                  filename: { type: string }
+                  mimetype: { type: string }
+
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

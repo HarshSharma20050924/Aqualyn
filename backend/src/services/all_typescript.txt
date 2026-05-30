@@ -1,0 +1,1486 @@
+===== ./GroupService.ts =====
+import prisma from '../config/prisma';
+import crypto from 'crypto';
+
+/**
+ * GroupService manages the professional lifecycle of groups,
+ * including roles, settings, and invite-link joining.
+ */
+export class GroupService {
+    
+    /**
+     * Create a new professional group.
+     */
+    static async createGroup(ownerId: string, name: string, participantIds: string[], description?: string) {
+        if (!ownerId || !name) throw new Error('Owner ID and Group Name are required');
+        try {
+            // Find owner's followings to see who is automatically joined
+            const owner = await (prisma as any).user.findUnique({
+                where: { id: ownerId },
+                include: { following: true }
+            });
+            const followingIds = owner?.following.map((f: any) => f.followingId) || [];
+
+            const inviteToken = crypto.randomBytes(8).toString('hex');
+            return await (prisma as any).chat.create({
+                data: {
+                    name,
+                    description,
+                    isGroup: true,
+                    inviteToken,
+                    settings: { canMessage: 'everyone', canInvite: 'all' },
+                    participants: {
+                        create: [
+                            { userId: ownerId, role: 'OWNER', status: 'JOINED' },
+                            ...participantIds.filter(id => id !== ownerId).map(id => {
+                                const isFollowing = followingIds.includes(id);
+                                return {
+                                    userId: id,
+                                    role: 'MEMBER',
+                                    status: isFollowing ? 'JOINED' : 'INVITED'
+                                };
+                            })
+                        ]
+                    }
+                },
+                include: { participants: true }
+            });
+        } catch (error) {
+            console.error('[GroupService] createGroup failed:', error);
+            throw new Error('Failed to create group');
+        }
+    }
+
+    /**
+     * Handle group invitation (accept or decline).
+     */
+    static async handleInvitation(userId: string, chatId: string, action: 'accept' | 'decline') {
+        if (!userId || !chatId) throw new Error('Missing fields');
+        try {
+            if (action === 'accept') {
+                return await (prisma as any).chatParticipant.update({
+                    where: { chatId_userId: { chatId, userId } },
+                    data: { status: 'JOINED' }
+                });
+            } else {
+                return await (prisma as any).chatParticipant.delete({
+                    where: { chatId_userId: { chatId, userId } }
+                });
+            }
+        } catch (error) {
+            console.error('[GroupService] handleInvitation failed:', error);
+            throw error;
+        }
+    }
+
+    static async joinByToken(userId: string, token: string) {
+        if (!userId || !token) throw new Error('Missing user or token');
+        try {
+            const group = await (prisma as any).chat.findUnique({ where: { inviteToken: token } });
+            if (!group) throw new Error('Invalid invite link');
+            if (!group.isGroup) throw new Error('This link is not for a group');
+
+            return await (prisma as any).chatParticipant.upsert({
+                where: { chatId_userId: { chatId: group.id, userId } },
+                update: {},
+                create: { chatId: group.id, userId, role: 'MEMBER' }
+            });
+        } catch (error) {
+            console.error('[GroupService] joinByToken failed:', error);
+            throw error;
+        }
+    }
+
+    static async updateSettings(userId: string, chatId: string, settings: any) {
+        if (!userId || !chatId) throw new Error('Missing fields');
+        try {
+            const participant = await (prisma as any).chatParticipant.findUnique({
+                where: { chatId_userId: { chatId, userId } }
+            });
+            if (!participant || (participant.role !== 'ADMIN' && participant.role !== 'OWNER')) {
+                throw new Error('Unauthorized');
+            }
+            return await (prisma as any).chat.update({
+                where: { id: chatId },
+                data: { settings }
+            });
+        } catch (error) {
+            console.error('[GroupService] updateSettings failed:', error);
+            throw error;
+        }
+    }
+
+    static async updateMemberRole(adminId: string, chatId: string, targetUserId: string, newRole: 'ADMIN' | 'MEMBER') {
+        if (!adminId || !chatId || !targetUserId) throw new Error('Missing fields');
+        try {
+            const admin = await (prisma as any).chatParticipant.findUnique({
+                where: { chatId_userId: { chatId, userId: adminId } }
+            });
+            if (!admin || (admin.role !== 'ADMIN' && admin.role !== 'OWNER')) {
+                throw new Error('Unauthorized');
+            }
+            return await (prisma as any).chatParticipant.update({
+                where: { chatId_userId: { chatId, userId: targetUserId } },
+                data: { role: newRole }
+            });
+        } catch (error) {
+            console.error('[GroupService] updateMemberRole failed:', error);
+            throw error;
+        }
+    }
+}
+
+===== ./SocialService.ts =====
+import prisma from '../config/prisma';
+import { ContentService } from './ContentService';
+import { ActivityService } from './ActivityService';
+import { pubClient } from '../config/redis';
+
+/**
+ * SocialService handles the core logical operations for the Social Feed,
+ * including Post creation, Feed retrieval, and Story management.
+ */
+export class SocialService {
+    
+    /**
+     * Create a new post with optional media.
+     * High-scale Ready: Uses specific selection on return.
+     */
+    static async createPost(userId: string, data: { content?: string, mediaUrl?: string, mediaType?: string }) {
+        if (!userId) throw new Error('User ID is required');
+        if (!data.content && !data.mediaUrl) throw new Error('Post must have content or media');
+
+        try {
+            const post = await (prisma as any).post.create({
+                data: {
+                    authorId: userId,
+                    content: data.content,
+                    mediaUrl: data.mediaUrl,
+                    mediaType: data.mediaType || 'text'
+                },
+                include: {
+                    author: {
+                        select: { id: true, username: true, displayName: true, avatar: true }
+                    }
+                }
+            });
+
+            // 🟢 DISTRIBUTED MENTION LOGIC (Run in background)
+            if (data.content) {
+                ContentService.handlePostMentions(userId, post.id, data.content).catch((e: any) => 
+                    console.error('[SocialService] Mention Error:', e)
+                );
+            }
+
+            // 🔵 REAL-TIME BROADCAST (Background)
+            const followers = await (prisma as any).userFollows.findMany({
+                where: { followingId: userId },
+                select: { followerId: true }
+            });
+            const followerIds = followers.map((f: any) => f.followerId);
+
+            if (followerIds.length > 0) {
+                pubClient.publish('SOCIAL_POST_UPDATE', JSON.stringify({ 
+                    userId, 
+                    postId: post.id, 
+                    post,
+                    followerIds 
+                }));
+            }
+
+            return post;
+        } catch (error) {
+            console.error('[SocialService] createPost failed:', error);
+            throw new Error('Could not create post');
+        }
+    }
+
+    static async deletePost(userId: string, postId: string) {
+        if (!userId || !postId) throw new Error('User ID and Post ID are required');
+        try {
+            const post = await (prisma as any).post.findUnique({ where: { id: postId } });
+            if (!post) throw new Error('Post not found');
+            if (post.authorId !== userId) throw new Error('Not authorized');
+
+            await (prisma as any).post.delete({ where: { id: postId } });
+            return { success: true };
+        } catch (error) {
+            console.error('[SocialService] deletePost failed:', error);
+            throw new Error('Deletion failed');
+        }
+    }
+
+    static async editPost(userId: string, postId: string, content: string) {
+        if (!userId || !postId) throw new Error('User ID and Post ID are required');
+        try {
+            const post = await (prisma as any).post.findUnique({ where: { id: postId } });
+            if (!post) throw new Error('Post not found');
+            if (post.authorId !== userId) throw new Error('Not authorized');
+
+            return await (prisma as any).post.update({
+                where: { id: postId },
+                data: { content },
+                include: {
+                    author: { select: { id: true, username: true, displayName: true, avatar: true } }
+                }
+            });
+        } catch (error) {
+            console.error('[SocialService] editPost failed:', error);
+            throw new Error('Edit failed');
+        }
+    }
+
+    static async getFeed(userId: string, cursor?: string, limit: number = 20) {
+        if (!userId) return [];
+        try {
+            const following = await (prisma as any).userFollows.findMany({
+                where: { followerId: userId },
+                select: { followingId: true }
+            });
+            const followingIds = following.map((f: any) => f.followingId);
+            const authors = [...followingIds, userId];
+
+            return await (prisma as any).post.findMany({
+                where: { authorId: { in: authors } },
+                take: limit,
+                ...(cursor && { skip: 1, cursor: { id: cursor } }),
+                orderBy: { createdAt: 'desc' },
+                include: {
+                    author: {
+                        select: { id: true, username: true, displayName: true, avatar: true }
+                    },
+                    likes: { select: { userId: true } },
+                    comments: {
+                        include: {
+                            user: { select: { id: true, username: true, displayName: true, avatar: true } }
+                        },
+                        orderBy: { createdAt: 'asc' },
+                        take: 5
+                    },
+                    _count: { select: { likes: true, comments: true } }
+                }
+            });
+        } catch (error) {
+            console.error('[SocialService] getFeed failed:', error);
+            return [];
+        }
+    }
+
+    static async createStory(userId: string, data: { mediaUrl: string, mediaType: string, content?: string }) {
+        if (!userId || !data.mediaUrl) throw new Error('User ID and Media URL are required');
+        
+        try {
+            const story = await (prisma as any).story.create({
+                data: {
+                    userId,
+                    mediaUrl: data.mediaUrl,
+                    mediaType: data.mediaType || 'image',
+                    content: data.content
+                },
+                include: {
+                    user: {
+                        select: { id: true, username: true, displayName: true, avatar: true }
+                    }
+                }
+            });
+
+            const followers = await (prisma as any).userFollows.findMany({
+                where: { followingId: userId },
+                select: { followerId: true }
+            });
+            const followerIds = followers.map((f: any) => f.followerId);
+
+            for (const followerId of followerIds) {
+                ActivityService.createActivity({
+                    userId: followerId,
+                    actorId: userId,
+                    type: 'STORY',
+                    storyId: story.id,
+                    text: 'published a new story'
+                }).catch(() => {});
+            }
+
+            pubClient.publish('SOCIAL_STORY_UPDATE', JSON.stringify({ 
+                userId, 
+                storyId: story.id, 
+                story,
+                followerIds 
+            }));
+
+            return story;
+        } catch (error) {
+            console.error('[SocialService] createStory failed:', error);
+            throw new Error('Story creation failed');
+        }
+    }
+
+    static async getActiveStories(userId: string) {
+        if (!userId) return [];
+        try {
+            const following = await (prisma as any).userFollows.findMany({
+                where: { followerId: userId },
+                select: { followingId: true }
+            });
+            const followingIds = following.map((f: any) => f.followingId);
+            const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+            return await (prisma as any).story.findMany({
+                where: {
+                    userId: { in: [...followingIds, userId] },
+                    createdAt: { gte: twentyFourHoursAgo }
+                },
+                orderBy: { createdAt: 'desc' },
+                include: {
+                    user: { select: { id: true, username: true, displayName: true, avatar: true } }
+                }
+            });
+        } catch (error) {
+            console.error('[SocialService] getActiveStories failed:', error);
+            return [];
+        }
+    }
+
+    static async deleteStory(userId: string, storyId: string) {
+        if (!userId || !storyId) throw new Error('User ID and Story ID are required');
+        
+        try {
+            const story = await (prisma as any).story.findUnique({
+                where: { id: storyId }
+            });
+
+            if (!story) throw new Error('Story not found');
+            if (story.userId !== userId) throw new Error('Not authorized to delete this story');
+
+            await (prisma as any).story.delete({
+                where: { id: storyId }
+            });
+
+            return { success: true };
+        } catch (error) {
+            console.error('[SocialService] deleteStory failed:', error);
+            throw new Error('Story deletion failed');
+        }
+    }
+
+    static async getUserPosts(userId: string) {
+        try {
+            return await (prisma as any).post.findMany({
+                where: { authorId: userId },
+                orderBy: { createdAt: 'desc' },
+                include: {
+                    author: { select: { id: true, username: true, displayName: true, avatar: true } },
+                    likes: { select: { userId: true } },
+                    comments: {
+                        include: { user: { select: { id: true, username: true, displayName: true, avatar: true } } },
+                        orderBy: { createdAt: 'asc' }, take: 5
+                    },
+                    _count: { select: { likes: true, comments: true } }
+                }
+            });
+        } catch (error) {
+            console.error('[SocialService] getUserPosts failed:', error);
+            return [];
+        }
+    }
+
+    static async getUserStories(userId: string) {
+        try {
+            const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+            return await (prisma as any).story.findMany({
+                where: { userId, createdAt: { gte: twentyFourHoursAgo } },
+                orderBy: { createdAt: 'desc' },
+                include: { user: { select: { id: true, username: true, displayName: true, avatar: true } } }
+            });
+        } catch (error) {
+            console.error('[SocialService] getUserStories failed:', error);
+            return [];
+        }
+    }
+
+    static async toggleLike(userId: string, postId: string) {
+        if (!userId || !postId) throw new Error('Missing User ID or Post ID');
+        try {
+            const existingLike = await (prisma as any).like.findUnique({
+                where: { userId_postId: { userId, postId } }
+            });
+
+            if (existingLike) {
+                await (prisma as any).like.delete({ where: { id: existingLike.id } });
+                return { liked: false };
+            } else {
+                const like = await (prisma as any).like.create({ data: { userId, postId } });
+                const post = await (prisma as any).post.findUnique({ where: { id: postId }, select: { authorId: true } });
+                
+                if (post && post.authorId !== userId) {
+                    ActivityService.createActivity({
+                        userId: post.authorId,
+                        actorId: userId,
+                        type: 'LIKE',
+                        postId,
+                        text: 'liked your post'
+                    }).catch(() => {});
+                }
+
+                // 🔵 Broadcast Like
+                pubClient.publish('SOCIAL_LIKE_UPDATE', JSON.stringify({ userId, postId, liked: true }));
+                
+                return { liked: true, like };
+            }
+        } catch (error) {
+            console.error('[SocialService] toggleLike failed:', error);
+            throw new Error('Like operation failed');
+        }
+    }
+
+    static async addComment(userId: string, postId: string, content: string) {
+        if (!userId || !postId || !content) throw new Error('Missing required fields for comment');
+        try {
+            const comment = await (prisma as any).comment.create({
+                data: { userId, postId, content },
+                include: {
+                    user: { select: { id: true, username: true, displayName: true, avatar: true } }
+                }
+            });
+
+            const post = await (prisma as any).post.findUnique({ where: { id: postId }, select: { authorId: true } });
+            if (post && post.authorId !== userId) {
+                ActivityService.createActivity({
+                    userId: post.authorId,
+                    actorId: userId,
+                    type: 'COMMENT',
+                    postId,
+                    text: 'commented: ' + (content.length > 20 ? content.substring(0, 17) + '...' : content)
+                }).catch(() => {});
+            }
+
+            // 🔵 Broadcast Comment
+            pubClient.publish('SOCIAL_COMMENT_UPDATE', JSON.stringify({ userId, postId, comment }));
+
+            return comment;
+        } catch (error) {
+            console.error('[SocialService] addComment failed:', error);
+            throw new Error('Comment failed');
+        }
+    }
+}
+
+===== ./SocketService.ts =====
+import { Server, Socket } from 'socket.io';
+import { PresenceService } from './PresenceService';
+import prisma from '../config/prisma';
+import { notificationQueue } from '../config/queues';
+import { subClient, pubClient } from '../config/redis';
+import { ActivityService } from './ActivityService';
+import { ContentService } from './ContentService';
+
+/**
+ * SocketService handles the distributed real-time communication for Aqualyn.
+ * It is responsible for message delivery, user presence, and real-time state sync.
+ */
+export class SocketService {
+    private static io: Server;
+
+    static emitToUser(userId: string, event: string, data: any) {
+        if (this.io) {
+            this.io.to(userId).emit(event, data);
+        }
+    }
+
+    /**
+     * Initializes the Socket.io instance with the provided server.
+     */
+    static init(io: Server) {
+        this.io = io;
+        this.io.on('connection', (socket: Socket) => this.handleConnection(socket));
+        
+        // Listen for Global Distributed Logout events
+        this.setupAuthSubscriptions();
+        
+        console.log('[Socket] SocketService Initialized');
+    }
+
+    /**
+     * Listens for distributed logout signals across all server nodes.
+     */
+    private static setupAuthSubscriptions() {
+        subClient.subscribe('GLOBAL_LOGOUT', (err: any) => {
+            if (err) console.error('[Socket] Redis Global Logout Sub Error:', err);
+        });
+
+        subClient.subscribe('SOCIAL_STORY_UPDATE', (err: any) => {
+            if (err) console.error('[Socket] Redis Social Sub Error:', err);
+        });
+
+        subClient.subscribe('BROADCAST_ACTIVITY', (err: any) => {
+            if (err) console.error('[Socket] Redis Broadcast Activity Error:', err);
+        });
+
+        subClient.subscribe('SOCIAL_POST_UPDATE', (err: any) => {
+            if (err) console.error('[Socket] Redis Social Post Sub Error:', err);
+        });
+
+        subClient.subscribe('SOCIAL_LIKE_UPDATE', (err: any) => {
+            if (err) console.error('[Socket] Redis Social Like Sub Error:', err);
+        });
+
+        subClient.subscribe('SOCIAL_COMMENT_UPDATE', (err: any) => {
+            if (err) console.error('[Socket] Redis Social Comment Sub Error:', err);
+        });
+
+        subClient.on('message', (channel: string, message: string) => {
+            if (channel === 'GLOBAL_LOGOUT') {
+                const { userId } = JSON.parse(message);
+                this.disconnectUser(userId);
+            }
+
+            if (channel === 'SOCIAL_STORY_UPDATE') {
+                const { userId, storyId, story, followerIds } = JSON.parse(message);
+                // Broadcast to every follower's room on this specific node
+                for (const followerId of followerIds) {
+                    this.io.to(followerId).emit('receive_new_story', { 
+                        userId, 
+                        storyId,
+                        story,
+                        timestamp: new Date()
+                    });
+                }
+            }
+
+            if (channel === 'SOCIAL_POST_UPDATE') {
+                const { userId, postId, post, followerIds } = JSON.parse(message);
+                for (const followerId of followerIds) {
+                    this.io.to(followerId).emit('receive_new_post', { 
+                        userId, 
+                        postId,
+                        post,
+                        timestamp: new Date()
+                    });
+                }
+            }
+
+            if (channel === 'BROADCAST_ACTIVITY') {
+                const { userId, activity } = JSON.parse(message);
+                this.io.to(userId).emit('new_notification', activity);
+            }
+
+            if (channel === 'SOCIAL_LIKE_UPDATE') {
+                const { userId, postId, liked } = JSON.parse(message);
+                // In production, we'd typically broadcast this to all online followers or just the author
+                // For simplicity, we broadcast to the author's room which everyone interested in their feed should listen to?
+                // Actually, emitting specifically to followers or the target post's room is better.
+                // For now, let's broadcast globally or to people currently viewed room.
+                this.io.emit('receive_post_like', { userId, postId, liked });
+            }
+
+            if (channel === 'SOCIAL_COMMENT_UPDATE') {
+                const { userId, postId, comment } = JSON.parse(message);
+                this.io.emit('receive_post_comment', { userId, postId, comment });
+            }
+        });
+    }
+
+    /**
+     * Finds and kills all active socket connections for a specific user.
+     */
+    private static disconnectUser(userId: string) {
+        const userRoom = this.io.sockets.adapter.rooms.get(userId);
+        if (userRoom) {
+            for (const socketId of userRoom) {
+                const socket = this.io.sockets.sockets.get(socketId);
+                if (socket) {
+                    console.log(`[Socket] Killing session for user: ${userId}`);
+                    socket.emit('force_logout', { message: 'Session revoked globally' });
+                    socket.disconnect(true);
+                }
+            }
+        }
+    }
+
+    /**
+     * Entry point for every new socket connection.
+     */
+    private static handleConnection(socket: Socket) {
+        console.log(`[Socket] Connection established: ${socket.id}`);
+
+        socket.on('join', async (userId: string) => {
+            if (!userId || userId === 'null' || userId === 'undefined') {
+                console.warn(`[Socket] Attempted join with invalid userId: ${userId}`);
+                return;
+            }
+            socket.data.userId = userId;
+            socket.join(userId);
+            console.log(`[Socket] User ${userId} joined room`);
+
+            // Presence management
+            await PresenceService.setUserOnline(userId);
+            try {
+                await (prisma as any).user.update({ where: { id: userId }, data: { lastLogin: new Date() } });
+            } catch (e) {
+                console.error(`[Socket] Failed to update lastLogin for ${userId}:`, e);
+            }
+        });
+
+        socket.on('heartbeat', async (userId: string) => {
+            // Regularly update Redis TTL to keep user "Online"
+            await PresenceService.heartbeat(userId);
+        });
+
+        socket.on('disconnecting', async () => {
+            const userId = socket.data.userId;
+            if (userId && userId !== 'null' && userId !== 'undefined') {
+                await PresenceService.setUserOffline(userId);
+                // Last Seen persistence
+                try {
+                    await (prisma as any).user.update({ where: { id: userId }, data: { lastLogin: new Date() } });
+                    console.log(`[Socket] User ${userId} disconnected. Presence saved.`);
+                } catch (e) {
+                    console.error(`[Socket] Failed to update disconnect presence for ${userId}:`, e);
+                }
+            }
+        });
+
+        // Delegate specific events to handlers
+        socket.on('send_message', (data: any) => this.handleSendMessage(socket, data));
+        socket.on('typing', (data: any) => this.handleTyping(socket, data));
+        socket.on('mark_as_read', (data: any) => this.handleMarkAsRead(socket, data));
+        socket.on('react_message', (data: any) => this.handleReactMessage(socket, data));
+        socket.on('edit_message', (data: any) => this.handleEditMessage(socket, data));
+        socket.on('delete_message_for_everyone', (data: any) => this.handleDeleteMessageForEveryone(socket, data));
+        socket.on('delete_chat_for_me', (data: any) => this.handleDeleteChatForMe(socket, data));
+        socket.on('delete_message_for_me', (data: any) => this.handleDeleteMessageForMe(socket, data));
+        socket.on('delete_chat_for_everyone', (data: any) => this.handleDeleteChatForEveryone(socket, data));
+        socket.on('invite_to_chat', (data: any) => this.handleInviteToChat(socket, data));
+
+        // --- WebRTC Signaling with CallLog Persistence ---
+        socket.on('call_user', async (data: any) => {
+            try {
+                // Create a CallLog entry when call is initiated
+                const callLog = await (prisma as any).callLog.create({
+                    data: {
+                        callerId: data.from,
+                        calleeId: data.to,
+                        type: data.type || 'VOICE',
+                        status: 'ringing'
+                    }
+                });
+                // Forward call request to target user
+                this.io.to(data.to).emit('incoming_call', {
+                    from: data.from,
+                    callerName: data.callerName,
+                    callerAvatar: data.callerAvatar,
+                    type: data.type,
+                    signal: data.signal,
+                    callLogId: callLog.id
+                });
+                // Also send the callLogId back to the caller
+                socket.emit('call_log_created', { callLogId: callLog.id });
+            } catch (e) {
+                console.error('[Socket] call_user error:', e);
+                this.io.to(data.to).emit('incoming_call', {
+                    from: data.from,
+                    callerName: data.callerName,
+                    callerAvatar: data.callerAvatar,
+                    type: data.type,
+                    signal: data.signal
+                });
+            }
+        });
+
+        socket.on('call_accepted', async (data: any) => {
+            this.io.to(data.to).emit('call_accepted', { signal: data.signal, answer: data.answer });
+            // Update CallLog to active
+            if (data.callLogId) {
+                try {
+                    await (prisma as any).callLog.update({
+                        where: { id: data.callLogId },
+                        data: { status: 'active' }
+                    });
+                } catch (e) { console.error('[Socket] call_accepted log error:', e); }
+            }
+        });
+
+        socket.on('call_rejected', async (data: any) => {
+            this.io.to(data.to).emit('call_rejected', { reason: data.reason });
+            // Update CallLog to rejected
+            if (data.callLogId) {
+                try {
+                    await (prisma as any).callLog.update({
+                        where: { id: data.callLogId },
+                        data: { status: 'rejected', endedAt: new Date() }
+                    });
+                } catch (e) { console.error('[Socket] call_rejected log error:', e); }
+            }
+        });
+
+        socket.on('webrtc_signal', (data: any) => {
+            this.io.to(data.to).emit('webrtc_signal', { signal: data.signal, from: data.from });
+        });
+
+        socket.on('end_call', async (data: any) => {
+            this.io.to(data.to).emit('call_ended');
+            // Update CallLog to ended with duration
+            if (data.callLogId) {
+                try {
+                    const callLog = await (prisma as any).callLog.findUnique({ where: { id: data.callLogId } });
+                    if (callLog) {
+                        const duration = Math.floor((Date.now() - new Date(callLog.startedAt).getTime()) / 1000);
+                        await (prisma as any).callLog.update({
+                            where: { id: data.callLogId },
+                            data: { status: 'ended', endedAt: new Date(), duration }
+                        });
+                    }
+                } catch (e) { console.error('[Socket] end_call log error:', e); }
+            }
+        });
+    }
+
+    private static async handleSendMessage(socket: Socket, data: any) {
+        const { senderId, receiverId, chatId, text, imageUrl, videoUrl } = data;
+        
+        try {
+            let chat = await (prisma as any).chat.findUnique({ where: { id: chatId } });
+            if (!chat) {
+                chat = await (prisma as any).chat.create({
+                    data: {
+                        id: chatId,
+                        isSecret: data.isSecret || false,
+                        participants: { create: [{ userId: senderId }, { userId: receiverId }] }
+                    }
+                });
+            } else {
+                let deletedFor = [ ...(chat.deletedFor as any || []) ];
+                if (deletedFor.includes(senderId)) {
+                    deletedFor = deletedFor.filter((id: string) => id !== senderId);
+                    await (prisma as any).chat.update({ where: { id: chatId }, data: { deletedFor } });
+                }
+            }
+
+            const message = await (prisma as any).message.create({
+                data: {
+                    senderId, chatId, text,
+                    imageUrl: data.imageUrl || null,
+                    videoUrl: data.videoUrl || null,
+                    fileUrl: data.fileUrl || null,
+                    audioUrl: data.audioUrl || null,
+                    gifUrl: data.gifUrl || null,
+                    sharedPostId: data.sharedPostId || null,
+                    sharedStoryId: data.sharedStoryId || null,
+                    isForwarded: data.isForwarded || false,
+                    isHD: data.isHD || false,
+                    fileName: data.fileName || null,
+                    fileSize: data.fileSize || null,
+                    mimeType: data.mimeType || null,
+                    document: data.document,
+                    location: data.location,
+                    contact: data.contact,
+                    payment: data.payment,
+                    schedule: data.schedule,
+                    wallet: data.wallet,
+                    replyToId: data.replyToId,
+                    status: 'sent',
+                    isRead: false
+                }
+            });
+
+            // 🟢 DISTRIBUTED MENTION LOGIC (Run in background)
+            if (text) {
+                ContentService.handleChatMentions(senderId, chatId, text).catch((e: any) => 
+                    console.error('[SocketService] Mention Error:', e)
+                );
+            }
+
+            const sender = await (prisma as any).user.findUnique({
+                where: { id: senderId },
+                select: { displayName: true, avatar: true, username: true }
+            });
+
+            const chatPayload = {
+                id: chat.id,
+                name: chat.name,
+                avatar: chat.avatar,
+                isGroup: chat.isGroup,
+                isSecret: chat.isSecret
+            };
+
+            if (chat.isGroup) {
+                const participants = await (prisma as any).chatParticipant.findMany({
+                    where: { chatId },
+                    select: { userId: true }
+                });
+                for (const p of participants) {
+                    if (p.userId !== senderId) {
+                        this.io.to(p.userId).emit('receive_message', {
+                            ...message,
+                            sender: sender,
+                            chat: chatPayload,
+                            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                        });
+                    }
+                }
+            } else {
+                const recipientStatus = await PresenceService.getUserStatus(receiverId);
+                if (recipientStatus === 'online') {
+                    await (prisma as any).message.update({ where: { id: message.id }, data: { status: 'delivered' } });
+                    message.status = 'delivered';
+                }
+
+                this.io.to(receiverId).emit('receive_message', {
+                    ...message,
+                    sender: sender,
+                    chat: chatPayload,
+                    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                });
+            }
+
+            socket.emit('message_sent_ack', {
+                ...message,
+                sender: sender,
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            });
+
+            // 🔵 Create Activity Notification
+            const activity = await ActivityService.createActivity({
+                userId: receiverId,
+                actorId: senderId,
+                type: 'direct_message',
+                text: text ? (text.length > 50 ? text.substring(0, 50) + '...' : text) : 'Sent a media file'
+            });
+
+            if (activity) {
+                const activityWithActor = {
+                    ...activity,
+                    actor: sender
+                };
+                pubClient.publish('BROADCAST_ACTIVITY', JSON.stringify({ userId: receiverId, activity: activityWithActor }));
+            }
+
+            // 5. Distributed Push Notification (Background)
+            // We offload this to the Queue so the Socket response is instant
+            await notificationQueue.add('send-push', { 
+                userId: receiverId, 
+                senderId, 
+                chatId, 
+                text: text || 'Sent a media file' 
+            });
+
+        } catch (e: any) {
+            console.error('[SocketService] ERROR in send_message:', e.message || e);
+        }
+    }
+
+    private static handleTyping(socket: Socket, data: any) {
+        this.io.to(data.receiverId).emit('user_typing', data);
+    }
+
+    private static async handleMarkAsRead(socket: Socket, data: any) {
+        const { chatId, userId } = data;
+        try {
+            await (prisma as any).message.updateMany({
+                where: { chatId, senderId: { not: userId }, status: { not: 'seen' } },
+                data: { isRead: true, status: 'seen' }
+            });
+            
+            const chat = await (prisma as any).chat.findUnique({
+                where: { id: chatId },
+                include: { participants: true }
+            });
+            const otherParticipant = chat?.participants.find((p: any) => p.userId !== userId);
+            if (otherParticipant) {
+                this.io.to(otherParticipant.userId).emit('messages_seen', { chatId, userId });
+            }
+        } catch (e) {
+            console.error('[SocketService] Mark as read error:', e);
+        }
+    }
+
+    private static async handleReactMessage(socket: Socket, data: any) {
+        const { messageId, emoji, userId, receiverId } = data;
+        try {
+            const message = await (prisma as any).message.findUnique({ where: { id: messageId } });
+            if (message) {
+                const reactions = { ...(message.reactions as any || {}) };
+                const userReactions = reactions[emoji] || [];
+                if (userReactions.includes(userId)) {
+                    reactions[emoji] = userReactions.filter((id: string) => id !== userId);
+                    if (reactions[emoji].length === 0) delete reactions[emoji];
+                } else {
+                    reactions[emoji] = [...userReactions, userId];
+                }
+                await (prisma as any).message.update({ where: { id: messageId }, data: { reactions } });
+                this.io.to(receiverId).emit('message_reacted', { chatId: message.chatId, messageId, emoji, userId });
+            }
+        } catch (e) { console.error('Reaction error:', e); }
+    }
+
+    private static async handleEditMessage(socket: Socket, data: any) {
+        const { messageId, newText, receiverId } = data;
+        try {
+            const message = await (prisma as any).message.update({ where: { id: messageId }, data: { text: newText, isEdited: true } });
+            this.io.to(receiverId).emit('message_edited', { chatId: message.chatId, messageId, newText });
+        } catch (e) { console.error('Edit error:', e); }
+    }
+
+    private static async handleDeleteMessageForEveryone(socket: Socket, data: any) {
+        const { chatId, messageId, receiverId } = data;
+        try {
+            await (prisma as any).message.delete({ where: { id: messageId } });
+            this.io.to(receiverId).emit('message_deleted', { chatId, messageId });
+        } catch (e) { console.error('Delete error:', e); }
+    }
+
+    private static async handleDeleteChatForMe(socket: Socket, data: any) {
+        const { chatId, userId } = data;
+        try {
+            const chat = await (prisma as any).chat.findUnique({ where: { id: chatId } });
+            if (chat) {
+                const deletedFor = [ ...(chat.deletedFor as any || []) ];
+                if (!deletedFor.includes(userId)) deletedFor.push(userId);
+                await (prisma as any).chat.update({ where: { id: chatId }, data: { deletedFor } });
+            }
+        } catch (e) { console.error('Delete chat error:', e); }
+    }
+
+    private static async handleDeleteMessageForMe(socket: Socket, data: any) {
+        const { messageId, userId } = data;
+        try {
+            const message = await (prisma as any).message.findUnique({ where: { id: messageId } });
+            if (message) {
+                const deletedFor = [ ...(message.deletedFor as any || []) ];
+                if (!deletedFor.includes(userId)) deletedFor.push(userId);
+                await (prisma as any).message.update({ where: { id: messageId }, data: { deletedFor } });
+            }
+        } catch (e) { console.error('Delete for me error:', e); }
+    }
+
+    private static async handleDeleteChatForEveryone(socket: Socket, data: any) {
+        const { chatId, receiverId } = data;
+        try {
+            await (prisma as any).chat.delete({ where: { id: chatId } });
+            this.io.to(receiverId).emit('chat_deleted', { chatId });
+        } catch (e) { console.error('Delete for everyone error:', e); }
+    }
+
+    private static async handleInviteToChat(socket: Socket, data: any) {
+        const { chatId, targetUserId, inviterId } = data;
+        try {
+            const inviter = await (prisma as any).user.findUnique({ where: { id: inviterId } });
+            this.io.to(targetUserId).emit('chat_invitation', { 
+                chatId, inviterId, inviterName: inviter?.displayName || inviter?.username || 'Someone' 
+            });
+        } catch (e) { console.error('Invite error:', e); }
+    }
+}
+
+===== ./SearchService.ts =====
+import prisma from '../config/prisma';
+
+/**
+ * SearchService handles discovery across all entities.
+ * Designed for Big Production scale with optimized index usage.
+ */
+export class SearchService {
+    
+    /**
+     * Search for users and posts globally.
+     */
+    static async globalSearch(query: string, currentUserId: string, limit: number = 20) {
+        if (!query || query.length < 2) return { users: [], posts: [] };
+
+        try {
+            // 1. Search Users (Hits Username & DisplayName Indexes)
+            const users = await (prisma as any).user.findMany({
+                where: {
+                    OR: [
+                        { username: { contains: query, mode: 'insensitive' } },
+                        { displayName: { contains: query, mode: 'insensitive' } }
+                    ]
+                },
+                take: limit,
+                select: { id: true, username: true, displayName: true, avatar: true, isPrivate: true }
+            });
+
+            // 2. Search Posts (Hits Post Content Keywords)
+            const posts = await (prisma as any).post.findMany({
+                where: { content: { contains: query, mode: 'insensitive' } },
+                take: limit,
+                include: {
+                    author: { select: { id: true, username: true, displayName: true, avatar: true } }
+                }
+            });
+
+            return { users, posts };
+        } catch (error) {
+            console.error('[SearchService] globalSearch error:', error);
+            return { users: [], posts: [] };
+        }
+    }
+}
+
+===== ./PresenceService.ts =====
+import { redis } from '../config/redis';
+
+/**
+ * PresenceService manages user online/offline status in a distributed way using Redis.
+ * This ensures any server node can check if a user is online, regardless of
+ * which node they are connected to.
+ */
+export class PresenceService {
+    private static PREFIX = 'user:presence:';
+    private static TTL = 60; // 60 seconds (1 minute)
+
+    /**
+     * Mark a user as online in the global Redis store.
+     */
+    static async setUserOnline(userId: string): Promise<void> {
+        const key = `${this.PREFIX}${userId}`;
+        await redis.set(key, 'online', 'EX', this.TTL);
+    }
+
+    /**
+     * Mark a user as offline in the global Redis store.
+     */
+    static async setUserOffline(userId: string): Promise<void> {
+        const key = `${this.PREFIX}${userId}`;
+        await redis.del(key);
+    }
+
+    /**
+     * Check if a user is currently online.
+     */
+    static async getUserStatus(userId: string): Promise<'online' | 'offline'> {
+        const key = `${this.PREFIX}${userId}`;
+        const status = await redis.get(key);
+        return status === 'online' ? 'online' : 'offline';
+    }
+
+    /**
+     * Batch check online status for multiple users (Optimized for Chat Lists).
+     * Returns a Map of userId -> status
+     */
+    static async getPresenceBatch(userIds: string[]): Promise<Record<string, 'online' | 'offline'>> {
+        if (!userIds || userIds.length === 0) return {};
+        try {
+            const keys = userIds.map(id => `${this.PREFIX}${id}`);
+            const results = await redis.mget(...keys);
+            
+            const presenceMap: Record<string, 'online' | 'offline'> = {};
+            userIds.forEach((id, index) => {
+                presenceMap[id] = results[index] === 'online' ? 'online' : 'offline';
+            });
+            return presenceMap;
+        } catch (error) {
+            console.error('[Presence] Batch fetch failed:', error);
+            return {};
+        }
+    }
+
+    static async heartbeat(userId: string): Promise<void> {
+        if (!userId) return;
+        try {
+            await this.setUserOnline(userId);
+        } catch (error) {
+            console.error('[Presence] Heartbeat failed:', error);
+        }
+    }
+}
+
+===== ./CallService.ts =====
+import prisma from '../config/prisma';
+
+export class CallService {
+    static async createCallLog(data: { callerId: string, receiverId: string, type: 'VOICE' | 'VIDEO' }) {
+        return await (prisma as any).callLog.create({
+            data: {
+                ...data,
+                status: 'INITIATED'
+            }
+        });
+    }
+
+    static async updateCallStatus(callId: string, status: 'MISSED' | 'COMPLETED' | 'REJECTED', duration?: number) {
+        return await (prisma as any).callLog.update({
+            where: { id: callId },
+            data: { 
+                status, 
+                duration,
+                endedAt: new Date()
+            }
+        });
+    }
+
+    static async getUserCallHistory(userId: string) {
+        return await (prisma as any).callLog.findMany({
+            where: {
+                OR: [
+                    { callerId: userId },
+                    { receiverId: userId }
+                ]
+            },
+            orderBy: { startedAt: 'desc' },
+            include: {
+                caller: { select: { id: true, username: true, displayName: true, avatar: true } },
+                receiver: { select: { id: true, username: true, displayName: true, avatar: true } }
+            }
+        });
+    }
+}
+
+===== ./ContentService.ts =====
+import prisma from '../config/prisma';
+import { GroupService } from './GroupService';
+
+/**
+ * ContentService handles the parsing of mentions, links, and hashtags
+ * across the entire Aqualyn social ecosystem.
+ */
+export class ContentService {
+    
+    /**
+     * Parse @usernames from a string and find their database IDs.
+     */
+    static async parseMentions(text: string): Promise<string[]> {
+        if (!text) return [];
+        try {
+            const mentionRegex = /@([a-zA-Z0-9._]+)/g;
+            const matches = [...text.matchAll(mentionRegex)];
+            const usernames = matches.map(match => match[1]);
+
+            if (usernames.length === 0) return [];
+
+            const users = await (prisma as any).user.findMany({
+                where: { username: { in: usernames } },
+                select: { id: true }
+            });
+            return users.map((u: any) => u.id);
+        } catch (error) {
+            console.error('[Content] Mention parsing failed:', error);
+            return [];
+        }
+    }
+
+    static async handlePostMentions(actorId: string, postId: string, text: string) {
+        if (!actorId || !postId || !text) return;
+        try {
+            const mentionIds = await this.parseMentions(text);
+            for (const userId of mentionIds) {
+                if (userId === actorId) continue;
+                await (prisma as any).activity.create({
+                    data: { userId, actorId, type: 'MENTION', postId }
+                });
+            }
+        } catch (error) {
+            console.error('[Content] Post mention handling failed:', error);
+        }
+    }
+
+    static async handleChatMentions(actorId: string, chatId: string, text: string) {
+        if (!actorId || !chatId || !text) return;
+        try {
+            const mentionIds = await this.parseMentions(text);
+            const participants = await (prisma as any).chatParticipant.findMany({
+                where: { chatId },
+                select: { userId: true }
+            });
+            const existingUserIds = participants.map((p: any) => p.userId);
+
+            for (const userId of mentionIds) {
+                if (!existingUserIds.includes(userId)) {
+                    await (prisma as any).activity.create({
+                        data: {
+                            userId, actorId, type: 'MENTION',
+                            text: `Mentioned you in a chat.`
+                        }
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('[Content] Chat mention handling failed:', error);
+        }
+    }
+}
+
+===== ./AuthService.ts =====
+import { redis, pubClient } from '../config/redis';
+import jwt from 'jsonwebtoken';
+import prisma from '../config/prisma';
+const JWT_SECRET = process.env.JWT_SECRET || '07f4aa247bb2789d402af105e7fc416e57aebb266facfb2c30ad2843a86e4e61';
+
+/**
+ * AuthService handles distributed token lifecycle and session invalidation.
+ * In a 100k+ system, we use a Redis Denylist to revoke stateless JWTs.
+ */
+export class AuthService {
+    private static REVOKE_PREFIX = 'revoked:token:';
+
+    /**
+     * Revoke a token globally. We store it in Redis until its natural expiry.
+     * This ensures the token cannot be used again on any node in the cluster.
+     */
+    static async logout(userId: string, token: string): Promise<void> {
+        try {
+            // 1. Decode token to find its expiry
+            const decoded: any = jwt.verify(token, JWT_SECRET);
+            const expiry = decoded.exp - Math.floor(Date.now() / 1000);
+
+            if (expiry > 0) {
+                // 2. Add to Redis Denylist with TTL
+                const key = `${this.REVOKE_PREFIX}${token}`;
+                await redis.set(key, '1', 'EX', expiry);
+            }
+
+            // 3. Remove session from DB
+            try {
+                await (prisma as any).session.deleteMany({ where: { token } });
+            } catch (dbErr) {
+                console.error('[AuthService] Session DB delete warning:', dbErr);
+            }
+
+            // 4. Global Kill Signal (Socket Disconnect)
+            // Broadcast to all backend servers via Redis Pub/Sub
+            await pubClient.publish('GLOBAL_LOGOUT', JSON.stringify({ userId, token }));
+            
+            console.log(`[Auth] Global Logout for User ${userId}`);
+        } catch (e) {
+            console.error('[AuthService] Logout Error:', e);
+        }
+    }
+
+    /**
+     * Check if a token has been revoked by any server in the cluster.
+     */
+    static async isRevoked(token: string): Promise<boolean> {
+        const key = `${this.REVOKE_PREFIX}${token}`;
+        const result = await redis.get(key);
+        return result === '1';
+    }
+}
+
+===== ./SettingsService.ts =====
+import prisma from '../config/prisma';
+import { pubClient } from '../config/redis';
+
+/**
+ * SettingsService handles the persistence and sync of user preferences.
+ * Uses a JSON merge strategy to ensure non-destructive updates.
+ */
+export class SettingsService {
+    
+    /**
+     * Get the current settings for a user.
+     */
+    static async getSettings(userId: string) {
+        const user = await (prisma as any).user.findUnique({
+            where: { id: userId },
+            select: { settings: true }
+        });
+        return user?.settings || {};
+    }
+
+    /**
+     * Update user settings with a partial object (Deep Merge).
+     */
+    static async updateSettings(userId: string, newSettings: any) {
+        try {
+            // 1. Fetch current settings
+            const user = await (prisma as any).user.findUnique({
+                where: { id: userId },
+                select: { settings: true }
+            });
+
+            const currentSettings = user?.settings && typeof user.settings === 'object' ? user.settings : {};
+            
+            // 2. Deep Merge logic
+            const mergedSettings = this.deepMerge(currentSettings, newSettings);
+
+            // 3. Persist
+            const updatedUser = await (prisma as any).user.update({
+                where: { id: userId },
+                data: { settings: mergedSettings },
+                select: { settings: true }
+            });
+
+            // 4. Global Broadcast (Sync with all devices)
+            await pubClient.publish('SETTINGS_SYNC', JSON.stringify({ userId, settings: mergedSettings }));
+
+            return updatedUser.settings;
+        } catch (e) {
+            console.error('[SettingsService] Sync error:', e);
+            throw new Error('Failed to update settings');
+        }
+    }
+
+    /**
+     * Simple deep merge helper
+     */
+    private static deepMerge(target: any, source: any) {
+        const output = { ...target };
+        if (typeof source === 'object' && source !== null) {
+            Object.keys(source).forEach(key => {
+                if (typeof source[key] === 'object' && source[key] !== null && target[key]) {
+                    output[key] = this.deepMerge(target[key], source[key]);
+                } else {
+                    output[key] = source[key];
+                }
+            });
+        }
+        return output;
+    }
+
+    /**
+     * Calculate storage usage breakdown for a user.
+     */
+    static async getStorageUsage(userId: string) {
+        const messages = await (prisma as any).message.findMany({
+            where: { senderId: userId, NOT: { fileSize: null } },
+            select: { fileSize: true, mimeType: true }
+        });
+
+        const breakdown = {
+            images: 0,
+            videos: 0,
+            audio: 0,
+            documents: 0,
+            total: 0
+        };
+
+        messages.forEach((msg: any) => {
+            const size = msg.fileSize || 0;
+            breakdown.total += size;
+            
+            if (msg.mimeType?.startsWith('image/')) breakdown.images += size;
+            else if (msg.mimeType?.startsWith('video/')) breakdown.videos += size;
+            else if (msg.mimeType?.startsWith('audio/')) breakdown.audio += size;
+            else breakdown.documents += size;
+        });
+
+        return breakdown;
+    }
+
+    /**
+     * List active sessions for a user.
+     */
+    static async getActiveSessions(userId: string) {
+        return await (prisma as any).session.findMany({
+            where: { userId },
+            select: { id: true, device: true, createdAt: true, expiresAt: true }
+        });
+    }
+
+    /**
+     * Revoke a specific session.
+     */
+    static async revokeSession(userId: string, sessionId: string) {
+        return await (prisma as any).session.deleteMany({
+            where: { id: sessionId, userId }
+        });
+    }
+}
+
+===== ./ActivityService.ts =====
+import prisma from '../config/prisma';
+
+/**
+ * ActivityService handles the retrieval and management of social notifications
+ * and interactions (Likes, Mentions, Follows).
+ */
+export class ActivityService {
+    
+    /**
+     * Get the activity tab data for a user.
+     * High-scale Ready: Uses Cursor Pagination.
+     */
+    static async getActivities(userId: string, cursor?: string, limit: number = 20) {
+        if (!userId) return [];
+        try {
+            return await (prisma as any).activity.findMany({
+                where: { userId },
+                take: limit,
+                ...(cursor && { skip: 1, cursor: { id: cursor } }),
+                orderBy: { createdAt: 'desc' },
+                include: {
+                    actor: { select: { id: true, username: true, displayName: true, avatar: true } }
+                }
+            });
+        } catch (error) {
+            console.error('[ActivityService] getActivities failed:', error);
+            return [];
+        }
+    }
+
+    static async markRead(userId: string, activityIds: string[]) {
+        if (!userId || !activityIds.length) return;
+        try {
+            return await (prisma as any).activity.updateMany({
+                where: { id: { in: activityIds }, userId },
+                data: { isRead: true }
+            });
+        } catch (error) {
+            console.error('[ActivityService] markRead failed:', error);
+        }
+    }
+
+    static async createActivity(data: { userId: string, actorId: string, type: string, postId?: string, storyId?: string, text?: string }) {
+        if (!data.userId || !data.actorId || data.userId === data.actorId) return;
+        try {
+            return await (prisma as any).activity.create({ data });
+        } catch (error) {
+            console.error('[ActivityService] createActivity failed:', error);
+        }
+    }
+}
+
+export class ForwardService {
+    static async sharePostToChat(senderId: string, postId: string, chatId: string) {
+        if (!senderId || !postId || !chatId) throw new Error('Missing sharing params');
+        try {
+            return await (prisma as any).message.create({
+                data: { chatId, senderId, sharedPostId: postId, text: "Shared a post." }
+            });
+        } catch (error) {
+            console.error('[ForwardService] sharePostToChat failed:', error);
+            throw new Error('Failed to share post');
+        }
+    }
+
+    static async shareStoryToChat(senderId: string, storyId: string, chatId: string) {
+        if (!senderId || !storyId || !chatId) throw new Error('Missing sharing params');
+        try {
+            return await (prisma as any).message.create({
+                data: { chatId, senderId, sharedStoryId: storyId, text: "Shared a story." }
+            });
+        } catch (error) {
+            console.error('[ForwardService] shareStoryToChat failed:', error);
+            throw new Error('Failed to share story');
+        }
+    }
+
+    static async reactToStory(userId: string, storyId: string, emoji: string) {
+        if (!userId || !storyId || !emoji) throw new Error('Missing reaction params');
+        try {
+            const story = await (prisma as any).story.findUnique({
+                where: { id: storyId },
+                select: { reactions: true }
+            });
+            if (!story) throw new Error('Story not found');
+
+            const reactions = (story.reactions as any) || {};
+            const currentEmojiUsers = reactions[emoji] || [];
+
+            let newUsers;
+            if (currentEmojiUsers.includes(userId)) {
+                newUsers = currentEmojiUsers.filter((id: string) => id !== userId);
+            } else {
+                newUsers = [...currentEmojiUsers, userId];
+            }
+
+            return await (prisma as any).story.update({
+                where: { id: storyId },
+                data: { reactions: { ...reactions, [emoji]: newUsers } }
+            });
+        } catch (error) {
+            console.error('[ForwardService] reactToStory failed:', error);
+            throw new Error('Reaction failed');
+        }
+    }
+}
+

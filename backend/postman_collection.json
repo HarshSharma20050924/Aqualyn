@@ -1,0 +1,867 @@
+{
+  "info": {
+    "name": "Aqualyn API Collection",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Postman Collection for all Aqualyn backend endpoints, including Auth, Users, Chats, Social Feed, Groups, and Upload services."
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Send OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"+1234567890\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/send-otp",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "send-otp"]
+            }
+          }
+        },
+        {
+          "name": "Verify OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"+1234567890\",\n  \"otp\": \"123456\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/verify-otp",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "verify-otp"]
+            }
+          }
+        },
+        {
+          "name": "Sync Profile",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"displayName\": \"Harsh Sharma\",\n  \"username\": \"harsh_7742\",\n  \"dob\": \"2000-01-01\",\n  \"avatar\": \"\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/sync",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "sync"]
+            }
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/sync-token",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "sync-token"]
+            }
+          }
+        },
+        {
+          "name": "Get Current Profile",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "profile"]
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "logout"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "User",
+      "item": [
+        {
+          "name": "Get Settings",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/user/settings",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "user", "settings"]
+            }
+          }
+        },
+        {
+          "name": "Update Settings",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isPrivate\": false,\n  \"searchByPhone\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/user/settings",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "user", "settings"]
+            }
+          }
+        },
+        {
+          "name": "Get Active Sessions",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/user/sessions",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "user", "sessions"]
+            }
+          }
+        },
+        {
+          "name": "Revoke Session",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/user/sessions/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "user", "sessions", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "session-uuid"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Storage Usage",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/user/storage-usage",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "user", "storage-usage"]
+            }
+          }
+        },
+        {
+          "name": "Follow User",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"targetUserId\": \"user-uuid-to-follow\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/user/follow",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "user", "follow"]
+            }
+          }
+        },
+        {
+          "name": "Unfollow User",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"targetUserId\": \"user-uuid-to-unfollow\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/user/unfollow",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "user", "unfollow"]
+            }
+          }
+        },
+        {
+          "name": "Handle Follow Request",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"requestId\": \"request-uuid\",\n  \"action\": \"accept\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/user/follow-request/handle",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "user", "follow-request", "handle"]
+            }
+          }
+        },
+        {
+          "name": "Get Notifications",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/user/notifications",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "user", "notifications"]
+            }
+          }
+        },
+        {
+          "name": "Mark Notifications Read",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/user/notifications/read",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "user", "notifications", "read"]
+            }
+          }
+        },
+        {
+          "name": "Get User Profile",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/user/profile/:userId",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "user", "profile", ":userId"],
+              "variable": [
+                {
+                  "key": "userId",
+                  "value": "user-uuid"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Toggle Block User",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"targetUserId\": \"user-uuid\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/user/block",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "user", "block"]
+            }
+          }
+        },
+        {
+          "name": "Sync Contacts",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phones\": [\"+1234567890\", \"+0987654321\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/user/contacts/sync",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "user", "contacts", "sync"]
+            }
+          }
+        },
+        {
+          "name": "Verify PIN",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pin\": \"1234\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/user/pin/verify",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "user", "pin", "verify"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Chats",
+      "item": [
+        {
+          "name": "Get Chats",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/chats",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "chats"]
+            }
+          }
+        },
+        {
+          "name": "Get Chat Messages",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/chats/:chatId/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "chats", ":chatId", "messages"],
+              "variable": [
+                {
+                  "key": "chatId",
+                  "value": "chat-uuid"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Send Message",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Hello world!\",\n  \"replyToId\": null\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/chats/:chatId/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "chats", ":chatId", "messages"],
+              "variable": [
+                {
+                  "key": "chatId",
+                  "value": "chat-uuid"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Request Secret Chat",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"targetUserId\": \"user-uuid\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/chats/secret/request",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "chats", "secret", "request"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Social",
+      "item": [
+        {
+          "name": "Get Feed",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/social/feed?cursor=",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "social", "feed"],
+              "query": [
+                {
+                  "key": "cursor",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Active Stories",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/social/stories",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "social", "stories"]
+            }
+          }
+        },
+        {
+          "name": "Create Post",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Checking out the new update!\",\n  \"mediaUrl\": \"https://example.com/media.jpg\",\n  \"mediaType\": \"image\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/social/post",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "social", "post"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Groups",
+      "item": [
+        {
+          "name": "Create Group",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Dev Team\",\n  \"participantIds\": [\"user-uuid-1\", \"user-uuid-2\"],\n  \"description\": \"Aqualyn Android and Backend developers\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/groups/create",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "groups", "create"]
+            }
+          }
+        },
+        {
+          "name": "Get Group Info",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/groups/:id/info",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "groups", ":id", "info"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "group-uuid"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Upload",
+      "item": [
+        {
+          "name": "Upload File",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": ""
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/upload",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "upload"]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "jwtToken",
+      "value": "YOUR_JWT_TOKEN",
+      "type": "string"
+    }
+  ]
+}

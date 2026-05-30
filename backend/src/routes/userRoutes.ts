@@ -56,8 +56,6 @@ router.get('/storage-usage', async (req: any, res: any) => {
 
 router.post('/export', async (req: any, res: any) => {
     try {
-        // Mocking export for now - in real life this would trigger a background job
-        // to ZIP everything and then upload to a safe location / email it.
         res.json({ success: true, message: 'Data export initiated. You will be notified when it is ready for download.' });
     } catch (e) {
         res.status(500).json({ error: 'Failed to initiate export' });
@@ -151,7 +149,7 @@ router.get('/blocked', async (req: any, res: any) => {
     }
 });
 
-// 7. UPDATE TOP-LEVEL PRIVACY (Used by specific toggles)
+// 7. UPDATE TOP-LEVEL PRIVACY
 router.patch('/privacy', async (req: any, res: any) => {
     const userId = req.user.id;
     const { invitationSettings, showPhoneTo, searchByPhone, isPrivate } = req.body;
@@ -175,7 +173,7 @@ router.patch('/privacy', async (req: any, res: any) => {
 // 8. UPLOAD AVATAR
 router.post('/upload-avatar', async (req: any, res: any) => {
     const userId = req.user.id;
-    const { avatar } = req.body; // Expecting base64 or URL for now
+    const { avatar } = req.body;
     if (!avatar) return res.status(400).json({ error: 'Avatar data required' });
     try {
         const updated = await (prisma as any).user.update({
@@ -189,18 +187,17 @@ router.post('/upload-avatar', async (req: any, res: any) => {
     }
 });
 
-// 9. CONTACT SYNC
+// 9. CONTACT SYNC (Crash-protected exclusion logic)
 router.post('/contacts/sync', async (req: any, res: any) => {
     const { phones } = req.body;
     if (!phones || !Array.isArray(phones)) return res.status(400).json({ error: 'Phones array required' });
     
     try {
-        // Find users with these phones who allow search by phone
         const matches = await (prisma as any).user.findMany({
             where: {
                 phone: { in: phones },
                 searchByPhone: true,
-                NOT: { id: req.user.id }
+                ...(req.user && req.user.id ? { NOT: { id: req.user.id } } : {})
             },
             select: {
                 id: true, username: true, displayName: true,

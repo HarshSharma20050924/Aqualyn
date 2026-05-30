@@ -1,0 +1,91 @@
+===== ./prisma.ts =====
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
+
+export default prisma;
+
+===== ./firebaseAdmin.ts =====
+import admin from 'firebase-admin';
+import dotenv from 'dotenv';
+dotenv.config();
+
+let serviceAccount: any;
+try {
+    if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+        serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+    } else {
+        serviceAccount = {
+            projectId: process.env.FIREBASE_PROJECT_ID,
+            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+            privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+        };
+    }
+} catch (e: any) {
+    console.error('[Firebase] JSON Config Parse Error!', e.message);
+    serviceAccount = {};
+}
+
+if (!admin.apps.length) {
+    try {
+        admin.initializeApp({
+            credential: admin.credential.cert(serviceAccount),
+        });
+        console.log('[Firebase] Admin SDK Ready | Project:', serviceAccount.project_id || serviceAccount.projectId);
+    } catch (e: any) {
+        console.error('[Firebase] Init Error:', e.message);
+    }
+}
+
+export default admin;
+
+===== ./queues.ts =====
+import { Queue } from 'bullmq';
+import { redis } from './redis';
+
+/**
+ * QueueService is the central place to register and manage distributed task queues.
+ * All background work (Push Notifications, Media Resizing, Emails) must go through here.
+ */
+export const notificationQueue = new Queue('notification-queue', { 
+    connection: redis.duplicate(), // Create a dedicated Redis connection for the Queue
+    defaultJobOptions: {
+        attempts: 3, // Retry failed notifications 3 times automatically
+        backoff: {
+            type: 'exponential',
+            delay: 1000, // Wait 1s, then 2s, then 4s...
+        },
+        removeOnComplete: true, // Cleanup Redis memory once done
+    }
+});
+
+console.log('[BullMQ] Notification Queue Initialized');
+
+===== ./redis.ts =====
+import Redis from 'ioredis';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
+
+const redisConfig = {
+  maxRetriesPerRequest: null,
+  enableReadyCheck: true,
+  retryStrategy(times: number) {
+    const delay = Math.min(times * 50, 2000);
+    return delay;
+  },
+};
+
+// Singleton clients for different concerns
+export const redis = new Redis(REDIS_URL, redisConfig);
+export const pubClient = new Redis(REDIS_URL, redisConfig);
+export const subClient = pubClient.duplicate();
+
+redis.on('error', (err) => console.error('[Redis] Event Error:', err));
+pubClient.on('error', (err) => console.error('[Redis] Pub Error:', err));
+subClient.on('error', (err) => console.error('[Redis] Sub Error:', err));
+
+redis.on('connect', () => console.log('[Redis] Connected'));
+
