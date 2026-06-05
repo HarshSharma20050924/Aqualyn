@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Aqualyn Admin Dashboard</title>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.4.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.4.0/firebase-auth.js"></script>
     <style>
         * {
             margin: 0;
@@ -284,15 +287,21 @@
         <header>
             <h1>🔐 Aqualyn Admin Dashboard</h1>
             <div class="auth-section">
-                <input type="password" id="adminToken" placeholder="Enter API Token" style="width: 300px;">
-                <button onclick="authenticate()">Login</button>
-                <button onclick="logout()" style="background: #999;">Logout</button>
+                <div id="notAuthenticated">
+                    <input type="email" id="adminEmail" placeholder="Email" style="width: 250px;">
+                    <input type="password" id="adminPassword" placeholder="Password" style="width: 250px;">
+                    <button onclick="loginWithFirebase()">Login with Firebase</button>
+                </div>
+                <div id="authenticated" style="display: none;">
+                    <span id="userEmail" style="color: #667eea; font-weight: 600;"></span>
+                    <button onclick="logout()" style="background: #999;">Logout</button>
+                </div>
             </div>
         </header>
 
         <div id="message" class="message"></div>
 
-        <div id="authenticated" style="display: none;">
+        <div id="dashboardContainer" style="display: none;">
             <!-- Stats -->
             <div class="stats-grid" id="statsGrid">
                 <div class="stat-card">
@@ -402,53 +411,110 @@
     </div>
 
     <script>
-        // Dynamic API URL - works in both dev and production
+        // ===============================================
+        // Firebase Configuration
+        // ===============================================
+        const firebaseConfig = {
+            apiKey: sessionStorage.getItem('firebaseApiKey') || "AIzaSyDmhGR9GE5K4LJ7-key-here", // Get from environment
+            authDomain: sessionStorage.getItem('firebaseAuthDomain') || "aqualyn-app.firebaseapp.com",
+            projectId: sessionStorage.getItem('firebaseProjectId') || "aqualyn-app",
+            storageBucket: sessionStorage.getItem('firebaseStorageBucket') || "aqualyn-app.appspot.com",
+            messagingSenderId: sessionStorage.getItem('firebaseMessagingSenderId') || "123456789",
+            appId: sessionStorage.getItem('firebaseAppId') || "1:123456789:web:abc123"
+        };
+
+        // Initialize Firebase only if keys are provided
+        let auth = null;
+        try {
+            firebase.initializeApp(firebaseConfig);
+            auth = firebase.auth();
+        } catch (e) {
+            console.warn('Firebase not fully configured - using API token mode');
+        }
+
+        // ===============================================
+        // Global Variables
+        // ===============================================
         const getAPIBase = () => {
-            // If on localhost or 127.0.0.1, use http
             if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
                 return `http://${window.location.hostname}:${window.location.port || 5000}/api`;
             }
-            // For production (Render), use same protocol and host
             return `${window.location.protocol}//${window.location.host}/api`;
         };
         
         const API = getAPIBase();
-        console.log('Admin Panel Connected to API:', API);
-        
-        let token = localStorage.getItem('adminToken');
+        let firebaseToken = localStorage.getItem('firebaseToken');
         let currentPage = { users: 1, chats: 1, posts: 1 };
 
+        // ===============================================
+        // Authentication Functions
+        // ===============================================
+        async function loginWithFirebase() {
+            const email = document.getElementById('adminEmail').value;
+            const password = document.getElementById('adminPassword').value;
+
+            if (!email || !password) {
+                updateMessage('Please enter email and password', 'error');
+                return;
+            }
+
+            if (!auth) {
+                updateMessage('Firebase not configured. Use /manual-login for token-based auth.', 'error');
+                return;
+            }
+
+            try {
+                const userCredential = await auth.signInWithEmailAndPassword(email, password);
+                const token = await userCredential.user.getIdToken();
+                firebaseToken = token;
+                localStorage.setItem('firebaseToken', token);
+                
+                document.getElementById('notAuthenticated').style.display = 'none';
+                document.getElementById('authenticated').style.display = 'flex';
+                document.getElementById('userEmail').textContent = userCredential.user.email;
+                document.getElementById('dashboardContainer').style.display = 'block';
+                
+                updateMessage('Logged in successfully!', 'success');
+                loadStats();
+                loadUsers();
+            } catch (error) {
+                updateMessage(`Login failed: ${error.message}`, 'error');
+            }
+        }
+
+        function logout() {
+            if (auth) {
+                auth.signOut().then(() => {
+                    firebaseToken = null;
+                    localStorage.removeItem('firebaseToken');
+                    document.getElementById('notAuthenticated').style.display = 'flex';
+                    document.getElementById('authenticated').style.display = 'none';
+                    document.getElementById('dashboardContainer').style.display = 'none';
+                    updateMessage('Logged out', 'success');
+                }).catch(err => updateMessage(`Logout error: ${err.message}`, 'error'));
+            }
+        }
+
+        // ===============================================
+        // Utility Functions
+        // ===============================================
         function updateMessage(text, type) {
+
             const el = document.getElementById('message');
             el.textContent = text;
             el.className = `message show ${type}`;
             setTimeout(() => el.classList.remove('show'), 4000);
         }
 
-        function authenticate() {
-            token = document.getElementById('adminToken').value;
-            if (!token) {
-                updateMessage('Please enter a token', 'error');
-                return;
-            }
-            localStorage.setItem('adminToken', token);
-            document.getElementById('authenticated').style.display = 'block';
-            loadStats();
-            loadUsers();
-        }
-
-        function logout() {
-            localStorage.removeItem('adminToken');
-            token = null;
-            document.getElementById('authenticated').style.display = 'none';
-            document.getElementById('adminToken').value = '';
-        }
-
         async function apiCall(endpoint, method = 'GET', body = null) {
+            if (!firebaseToken) {
+                throw new Error('Not authenticated. Please log in with Firebase.');
+            }
+
             const options = {
                 method,
                 headers: {
-                    'Authorization': `Bearer ${token}`,
+                    'Authorization': `Bearer ${firebaseToken}`,
                     'Content-Type': 'application/json'
                 }
             };
@@ -456,7 +522,11 @@
             
             const res = await fetch(`${API}${endpoint}`, options);
             if (!res.ok) {
-                const error = await res.json();
+                if (res.status === 401) {
+                    logout();
+                    throw new Error('Session expired. Please log in again.');
+                }
+                const error = await res.json().catch(() => ({}));
                 throw new Error(error.error || `API error: ${res.status}`);
             }
             return res.json();
@@ -647,8 +717,41 @@
             alert('Ban feature coming soon');
         }
 
-        // Auto-authenticate if token exists
-        if (token) authenticate();
+        // ===============================================
+        // Firebase Auth State Listener
+        // ===============================================
+        if (auth) {
+            auth.onAuthStateChanged(user => {
+                if (user) {
+                    // User is signed in
+                    user.getIdToken().then(token => {
+                        firebaseToken = token;
+                        localStorage.setItem('firebaseToken', token);
+                        document.getElementById('notAuthenticated').style.display = 'none';
+                        document.getElementById('authenticated').style.display = 'flex';
+                        document.getElementById('userEmail').textContent = user.email;
+                        document.getElementById('dashboardContainer').style.display = 'block';
+                        loadStats();
+                        loadUsers();
+                    });
+                } else {
+                    // User is signed out
+                    firebaseToken = null;
+                    document.getElementById('notAuthenticated').style.display = 'flex';
+                    document.getElementById('authenticated').style.display = 'none';
+                    document.getElementById('dashboardContainer').style.display = 'none';
+                }
+            });
+        } else {
+            // Firebase not configured - use stored token if available
+            if (firebaseToken) {
+                document.getElementById('notAuthenticated').style.display = 'none';
+                document.getElementById('authenticated').style.display = 'flex';
+                document.getElementById('dashboardContainer').style.display = 'block';
+                loadStats();
+                loadUsers();
+            }
+        }
     </script>
 </body>
 </html>
