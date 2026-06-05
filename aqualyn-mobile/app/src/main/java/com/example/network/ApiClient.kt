@@ -614,6 +614,7 @@ interface AqualynApiService {
 // ========================================
 
 object AqualynApi {
+    // ✅ BACKEND: Render Production
     private var baseUrl = "https://aqualyn.onrender.com/"
 
     fun setBaseUrl(url: String) {
@@ -647,7 +648,7 @@ object AqualynApi {
         .build()
 
     private var retrofit = retrofit2.Retrofit.Builder()
-        .baseUrl(if (baseUrl.startsWith("http")) baseUrl else "https://aqualyn.onrender.com/")
+        .baseUrl("https://aqualyn.onrender.com/")
         .client(okHttpClient)
         .addConverterFactory(retrofit2.converter.moshi.MoshiConverterFactory.create(moshi))
         .build()

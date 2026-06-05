@@ -10,6 +10,7 @@ import chatRoutes from './routes/chatRoutes';
 import socialRoutes from './routes/socialRoutes';
 import groupRoutes from './routes/groupRoutes';
 import uploadRoutes from './routes/uploadRoutes';
+import adminRoutes from './routes/adminRoutes';
 import path from 'path';
 import { Server } from 'socket.io';
 import { createServer } from 'http';
@@ -103,6 +104,7 @@ app.use('/api/chats', chatRoutes);
 app.use('/api/social', socialRoutes);
 app.use('/api/groups', groupRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/admin', adminRoutes);
 
 app.get('/api/health', (req, res) => {
     res.json({ status: 'Aqualyn server is running' });
