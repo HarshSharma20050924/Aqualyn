@@ -50,8 +50,10 @@ const corsOptions = {
 };
 
 export const io = new Server(server, {
-    origin: allowedOrigins,
-    credentials: true
+    cors: {
+        origin: allowedOrigins,
+        credentials: true
+    }
 });
 
 // Setup Distributed Redis Adapter
