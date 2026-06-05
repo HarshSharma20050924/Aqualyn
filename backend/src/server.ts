@@ -28,18 +28,30 @@ const allowedOrigins = [
     'http://localhost:3000', 
     'http://127.0.0.1:3000',
     'http://localhost',
-    'https://aqualyn.onrender.com'
+    'https://aqualyn.onrender.com',
+    'https://aqualyn-admin.vercel.app'
 ];
 
 if (process.env.FRONTEND_URL) {
     allowedOrigins.push(process.env.FRONTEND_URL);
 }
 
+const corsOptions = {
+    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+        if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+};
+
 export const io = new Server(server, {
-    cors: { 
-        origin: allowedOrigins,
-        credentials: true
-    }
+    origin: allowedOrigins,
+    credentials: true
 });
 
 // Setup Distributed Redis Adapter
@@ -50,12 +62,7 @@ SocketService.init(io);
 app.use(cookieParser());
 
 
-app.use(cors({
-    origin: allowedOrigins,
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
-}));
+app.use(cors(corsOptions));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
