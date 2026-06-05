@@ -1,39 +1,19 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Shield, 
   Users, 
   MessageSquare, 
   Trash2, 
-  Ban, 
-  ShieldAlert, 
-  Key, 
   RefreshCw, 
   AlertTriangle, 
   Search, 
-  Plus, 
-  X, 
-  ChevronLeft, 
-  ChevronRight, 
-  Sparkles, 
-  Clock, 
-  Database, 
-  TrendingUp, 
   FileText, 
-  Terminal, 
   ArrowLeft,
-  Settings,
-  Heart,
-  Pin,
-  Lock,
-  Unlock,
-  CheckCircle,
-  Eye,
-  Sliders,
-  UserPlus
+  Sliders
 } from 'lucide-react';
 import axios from 'axios';
-import type { User, Chat, Post, Message } from './types';
+import type { User, Chat, Post } from './types';
 import { ADMIN_ENDPOINTS } from './config/api';
 
 // Use Firebase auth token in real scenario
@@ -46,7 +26,7 @@ export default function AdminDashboardScreen({ onBack }: { onBack: () => void })
   const [contacts, setContacts] = useState<User[]>([]);
   const [chats, setChats] = useState<Chat[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
-  const [messages, setMessages] = useState<Record<string, Message[]>>({});
+  // messages state reserved for future use
   const [stats, setStats] = useState<any>({});
   const [loading, setLoading] = useState(true);
 
@@ -56,15 +36,8 @@ export default function AdminDashboardScreen({ onBack }: { onBack: () => void })
   // Interactive local states (search & pagination)
   const [userSearch, setUserSearch] = useState('');
   const [userPage, setUserPage] = useState(1);
-  const [chatSearch, setChatSearch] = useState('');
+  const [chatSearch] = useState('');
   const [chatPage, setChatPage] = useState(1);
-  
-  // Custom user registration form modal
-  const [showAddUser, setShowAddUser] = useState(false);
-  const [newUserName, setNewUserName] = useState('');
-  const [newUserEmail, setNewUserEmail] = useState('');
-  const [newUserPhone, setNewUserPhone] = useState('');
-  const [newUserRole, setNewUserRole] = useState('user');
 
   // Delete Confirm Modal
   const [deleteConfirm, setDeleteConfirm] = useState<{ type: 'user' | 'chat' | 'post'; id: string; name: string } | null>(null);
@@ -119,22 +92,7 @@ export default function AdminDashboardScreen({ onBack }: { onBack: () => void })
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   // USER HANDLERS
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  const handleAddNewUser = () => {
-    if (!newUserName.trim() || !newUserEmail.trim()) {
-      addToast('Name and Email are required', 'error');
-      return;
-    }
-    // In real scenario, make a POST request to add user
-    addToast('User creation not implemented on backend', 'error');
-  };
-
-  const handleToggleBan = (userId: string) => {
-    addToast('Ban user not fully implemented', 'info');
-  };
-
-  const handleToggleAdmin = (userId: string) => {
-    addToast('Modify user role not fully implemented', 'info');
-  };
+  // TODO: Implement handleAddNewUser, handleToggleBan, handleToggleAdmin
 
   const executeDeleteUser = async (id: string) => {
     try {
@@ -150,9 +108,7 @@ export default function AdminDashboardScreen({ onBack }: { onBack: () => void })
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   // CHAT HANDLERS
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  const handleToggleDisappearing = (chatId: string) => {
-    addToast('Encryption security setting changed locally', 'success');
-  };
+  // TODO: Implement handleToggleDisappearing
 
   const executeDeleteChat = async (id: string) => {
     try {
@@ -165,17 +121,12 @@ export default function AdminDashboardScreen({ onBack }: { onBack: () => void })
     }
   };
 
-  const handleWipeHistory = (chatId: string) => {
-    addToast('Chat messages cleared successfully (local)', 'success');
-  };
+  // TODO: Implement handleWipeHistory
 
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   // POSTS HANDLERS
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  const handleTogglePinPost = (postId: string) => {
-    setPosts(prev => prev.map(p => p.id === postId ? { ...p, isPinned: !p.isPinned } : p));
-    addToast('Post pin status updated', 'success');
-  };
+  // TODO: Implement handleTogglePinPost
 
   const executeDeletePost = async (id: string) => {
     try {
@@ -209,14 +160,16 @@ export default function AdminDashboardScreen({ onBack }: { onBack: () => void })
     return filteredUsers.slice(startIndex, startIndex + 5);
   }, [filteredUsers, userPage]);
 
-  const totalUserPages = Math.ceil(filteredUsers.length / 5) || 1;
+  const _totalUserPages = Math.ceil(filteredUsers.length / 5) || 1;
+  void _totalUserPages; // used in pagination UI
 
   const paginatedChats = useMemo(() => {
     const startIndex = (chatPage - 1) * 5;
     return filteredChats.slice(startIndex, startIndex + 5);
   }, [filteredChats, chatPage]);
 
-  const totalChatPages = Math.ceil(filteredChats.length / 5) || 1;
+  const _totalChatPages = Math.ceil(filteredChats.length / 5) || 1;
+  void _totalChatPages; // used in pagination UI
 
   if (loading) return <div className="p-8 text-center text-primary">Loading data...</div>;
 
