@@ -26,7 +26,9 @@ const allowedOrigins = [
     'http://localhost:5173', 
     'http://127.0.0.1:5173', 
     'http://localhost:3000', 
-    'http://127.0.0.1:3000'
+    'http://127.0.0.1:3000',
+    'http://localhost',
+    'https://aqualyn.onrender.com'
 ];
 
 if (process.env.FRONTEND_URL) {
@@ -59,6 +61,16 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Serve Static Files
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+app.use(express.static(path.join(__dirname, '../public')));
+
+// Admin Panel Route
+app.get('/admin-panel.html', (req, res) => {
+    res.sendFile(path.join(__dirname, '../admin-panel.html'));
+});
+
+app.get('/admin', (req, res) => {
+    res.sendFile(path.join(__dirname, '../admin-panel.html'));
+});
 
 // Users Search API
 app.get('/api/users/search', async (req, res) => {

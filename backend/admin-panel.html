@@ -402,7 +402,19 @@
     </div>
 
     <script>
-        const API = 'https://aqualyn.onrender.com/api';
+        // Dynamic API URL - works in both dev and production
+        const getAPIBase = () => {
+            // If on localhost or 127.0.0.1, use http
+            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                return `http://${window.location.hostname}:${window.location.port || 5000}/api`;
+            }
+            // For production (Render), use same protocol and host
+            return `${window.location.protocol}//${window.location.host}/api`;
+        };
+        
+        const API = getAPIBase();
+        console.log('Admin Panel Connected to API:', API);
+        
         let token = localStorage.getItem('adminToken');
         let currentPage = { users: 1, chats: 1, posts: 1 };
 
