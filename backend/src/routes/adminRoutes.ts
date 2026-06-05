@@ -2,8 +2,101 @@ import { Router } from 'express';
 import { verifyToken } from '../middleware/auth';
 import prisma from '../config/prisma';
 import { redis } from '../config/redis';
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcrypt';
+
+const JWT_SECRET = process.env.JWT_SECRET || '07f4aa247bb2789d402af105e7fc416e57aebb266facfb2c30ad2843a86e4e61';
 
 const router = Router();
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 🛠️ ADMIN SETUP
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+router.post('/setup', async (req: any, res: any) => {
+    try {
+        const { email, password, name } = req.body;
+        
+        // 1. Check if an admin already exists
+        const existingAdmin = await (prisma as any).user.findFirst({
+            where: { role: 'admin' }
+        });
+        
+        if (existingAdmin) {
+            return res.status(403).json({ error: 'Admin already exists. Please login.' });
+        }
+        
+        if (!email || !password || password.length < 6) {
+            return res.status(400).json({ error: 'Valid email and a password (min 6 chars) are required.' });
+        }
+        
+        // 2. Hash password and create admin
+        const hashedPassword = await bcrypt.hash(password, 10);
+        
+        const adminUser = await (prisma as any).user.create({
+            data: {
+                email,
+                password: hashedPassword,
+                displayName: name || 'System Admin',
+                role: 'admin',
+                isPrivate: false
+            }
+        });
+        
+        // 3. Generate Token
+        const token = jwt.sign(
+            { id: adminUser.id, email: adminUser.email, role: adminUser.role },
+            JWT_SECRET,
+            { expiresIn: '7d' }
+        );
+        
+        res.status(201).json({ success: true, message: 'Admin created', token });
+    } catch (e) {
+        console.error('[Admin] Setup error:', e);
+        res.status(500).json({ error: 'Failed to setup admin' });
+    }
+});
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 🔐 ADMIN LOGIN
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+router.post('/login', async (req: any, res: any) => {
+    try {
+        const { email, password } = req.body;
+        
+        if (!email || !password) {
+            return res.status(400).json({ error: 'Email and password required' });
+        }
+        
+        // Find admin by email and role
+        const adminUser = await (prisma as any).user.findFirst({
+            where: { email, role: 'admin' }
+        });
+        
+        if (!adminUser || !adminUser.password) {
+            return res.status(401).json({ error: 'Invalid admin credentials' });
+        }
+        
+        // Verify password
+        const isMatch = await bcrypt.compare(password, adminUser.password);
+        if (!isMatch) {
+            return res.status(401).json({ error: 'Invalid admin credentials' });
+        }
+        
+        // Generate Token
+        const token = jwt.sign(
+            { id: adminUser.id, email: adminUser.email, role: adminUser.role },
+            JWT_SECRET,
+            { expiresIn: '7d' }
+        );
+        
+        res.json({ success: true, token, user: { id: adminUser.id, email: adminUser.email, name: adminUser.displayName } });
+    } catch (e) {
+        console.error('[Admin] Login error:', e);
+        res.status(500).json({ error: 'Failed to process admin login' });
+    }
+});
+
+
 
 // ✅ ADMIN MIDDLEWARE: Only allow admin users
 const isAdmin = async (req: any, res: any, next: any) => {

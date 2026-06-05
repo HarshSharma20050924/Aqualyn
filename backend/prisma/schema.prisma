@@ -13,6 +13,7 @@ model User {
   username      String?   @unique
   email         String?   @unique
   phone         String?   @unique
+  password      String?   // Added for Admin/Custom auth
   showPhoneTo   String    @default("everyone")
   searchByPhone Boolean   @default(true)
   displayName   String?
