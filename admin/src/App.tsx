@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import AdminDashboardScreen from './AdminDashboardScreen';
+import { ADMIN_ENDPOINTS } from './config/api';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -15,7 +16,7 @@ function App() {
     const token = localStorage.getItem('firebaseToken');
     if (token) {
       // Quick validation: try hitting a protected endpoint
-      fetch('/api/admin/stats', {
+      fetch(ADMIN_ENDPOINTS.STATS, {
         headers: { Authorization: `Bearer ${token}` }
       })
         .then(res => {
@@ -56,7 +57,7 @@ function App() {
     }
 
     try {
-      const endpoint = isSetupMode ? '/api/admin/setup' : '/api/admin/login';
+      const endpoint = isSetupMode ? ADMIN_ENDPOINTS.SETUP : ADMIN_ENDPOINTS.LOGIN;
       const payload = isSetupMode ? { email, password, name } : { email, password };
 
       const response = await fetch(endpoint, {

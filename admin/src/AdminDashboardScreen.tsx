@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 import type { User, Chat, Post, Message } from './types';
+import { ADMIN_ENDPOINTS } from './config/api';
 
 // Use Firebase auth token in real scenario
 const getAuthHeaders = () => {
@@ -72,16 +73,16 @@ export default function AdminDashboardScreen({ onBack }: { onBack: () => void })
     try {
       setLoading(true);
       const headers = getAuthHeaders();
-      const statsRes = await axios.get('/api/admin/stats', { headers });
+      const statsRes = await axios.get(ADMIN_ENDPOINTS.STATS, { headers });
       setStats(statsRes.data);
 
-      const usersRes = await axios.get('/api/admin/users?limit=100', { headers });
+      const usersRes = await axios.get(`${ADMIN_ENDPOINTS.USERS}?limit=100`, { headers });
       setContacts(usersRes.data.users || []);
 
-      const chatsRes = await axios.get('/api/admin/chats?limit=100', { headers });
+      const chatsRes = await axios.get(`${ADMIN_ENDPOINTS.CHATS}?limit=100`, { headers });
       setChats(chatsRes.data.chats || []);
 
-      const postsRes = await axios.get('/api/admin/posts?limit=100', { headers });
+      const postsRes = await axios.get(`${ADMIN_ENDPOINTS.POSTS}?limit=100`, { headers });
       setPosts(postsRes.data.posts || []);
     } catch (error: any) {
       console.error('Error fetching admin data:', error);
@@ -137,7 +138,7 @@ export default function AdminDashboardScreen({ onBack }: { onBack: () => void })
 
   const executeDeleteUser = async (id: string) => {
     try {
-      await axios.delete(`/api/admin/users/${id}`, { headers: getAuthHeaders() });
+      await axios.delete(ADMIN_ENDPOINTS.DELETE_USER(id), { headers: getAuthHeaders() });
       setContacts(prev => prev.filter(u => u.id !== id));
       addToast('User account pruned', 'success');
       setDeleteConfirm(null);
@@ -155,7 +156,7 @@ export default function AdminDashboardScreen({ onBack }: { onBack: () => void })
 
   const executeDeleteChat = async (id: string) => {
     try {
-      await axios.delete(`/api/admin/chats/${id}`, { headers: getAuthHeaders() });
+      await axios.delete(ADMIN_ENDPOINTS.DELETE_CHAT(id), { headers: getAuthHeaders() });
       setChats(prev => prev.filter(c => c.id !== id));
       addToast('Chat session destroyed', 'success');
       setDeleteConfirm(null);
@@ -178,7 +179,7 @@ export default function AdminDashboardScreen({ onBack }: { onBack: () => void })
 
   const executeDeletePost = async (id: string) => {
     try {
-      await axios.delete(`/api/admin/posts/${id}`, { headers: getAuthHeaders() });
+      await axios.delete(ADMIN_ENDPOINTS.DELETE_POST(id), { headers: getAuthHeaders() });
       setPosts(prev => prev.filter(p => p.id !== id));
       addToast('Post removed', 'success');
       setDeleteConfirm(null);
