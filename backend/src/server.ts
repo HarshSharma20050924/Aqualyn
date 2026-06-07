@@ -4,13 +4,13 @@ dotenv.config();
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
-import authRoutes from './routes/authRoutes';
-import userRoutes from './routes/userRoutes';
-import chatRoutes from './routes/chatRoutes';
-import socialRoutes from './routes/socialRoutes';
-import groupRoutes from './routes/groupRoutes';
-import uploadRoutes from './routes/uploadRoutes';
-import adminRoutes from './routes/adminRoutes';
+import authRoutes from './modules/auth/auth.route';
+import userRoutes from './modules/user/user.route';
+import chatRoutes from './modules/chat/chat.route';
+import socialRoutes from './modules/social/social.route';
+import groupRoutes from './modules/group/group.route';
+import uploadRoutes from './modules/upload/upload.route';
+import adminRoutes from './modules/admin/admin.route';
 import path from 'path';
 import { Server } from 'socket.io';
 import { createServer } from 'http';
@@ -130,6 +130,10 @@ app.use('/api/admin', adminRoutes);
 app.get('/api/health', (req, res) => {
     res.json({ status: 'Aqualyn server is running' });
 });
+
+// Use global error handler
+import { errorHandler } from './core/middlewares/error.middleware';
+app.use(errorHandler);
 
 // All Socket.io logic has been moved to SocketService.ts
 // to support a high-concurrency distributed architecture.

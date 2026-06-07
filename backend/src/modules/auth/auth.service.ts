@@ -1,6 +1,6 @@
-import { redis, pubClient } from '../config/redis';
+import { redis, pubClient } from '../../config/redis';
 import jwt from 'jsonwebtoken';
-import prisma from '../config/prisma';
+import prisma from '../../config/prisma';
 const JWT_SECRET = process.env.JWT_SECRET || '07f4aa247bb2789d402af105e7fc416e57aebb266facfb2c30ad2843a86e4e61';
 
 /**

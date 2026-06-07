@@ -1,7 +1,7 @@
-import prisma from '../config/prisma';
-import { ContentService } from './ContentService';
-import { ActivityService } from './ActivityService';
-import { pubClient } from '../config/redis';
+import prisma from '../../config/prisma';
+import { ContentService } from '../../services/ContentService';
+import { ActivityService } from '../../services/ActivityService';
+import { pubClient } from '../../config/redis';
 
 /**
  * SocialService handles the core logical operations for the Social Feed,
@@ -328,5 +328,129 @@ export class SocialService {
             console.error('[SocialService] addComment failed:', error);
             throw new Error('Comment failed');
         }
+    }
+    static async getComments(postId: string, cursor?: string, limit: number = 20) {
+        return await (prisma as any).comment.findMany({
+            where: { postId, parentId: null },
+            take: limit,
+            ...(cursor && { skip: 1, cursor: { id: cursor } }),
+            orderBy: { createdAt: 'asc' },
+            include: {
+                user: { select: { id: true, username: true, displayName: true, avatar: true } },
+                replies: {
+                    include: {
+                        user: { select: { id: true, username: true, displayName: true, avatar: true } },
+                        _count: { select: { likes: true } }
+                    },
+                    orderBy: { createdAt: 'asc' },
+                    take: 3
+                },
+                _count: { select: { likes: true, replies: true } }
+            }
+        });
+    }
+
+    static async replyToComment(userId: string, postId: string, parentId: string, content: string) {
+        if (!content) throw new Error('Reply content is required');
+        const parent = await (prisma as any).comment.findUnique({ where: { id: parentId } });
+        if (!parent || parent.postId !== postId) throw new Error('Parent comment not found');
+
+        const reply = await (prisma as any).comment.create({
+            data: { userId, postId, parentId, content },
+            include: {
+                user: { select: { id: true, username: true, displayName: true, avatar: true } }
+            }
+        });
+
+        // Notify parent comment author
+        if (parent.userId !== userId) {
+            ActivityService.createActivity({
+                userId: parent.userId,
+                actorId: userId,
+                type: 'COMMENT',
+                postId,
+                text: 'replied: ' + (content.length > 20 ? content.substring(0, 17) + '...' : content)
+            }).catch(() => {});
+        }
+
+        return reply;
+    }
+
+    static async getPostLikes(postId: string, cursor?: string, limit: number = 30) {
+        const likes = await (prisma as any).like.findMany({
+            where: { postId },
+            take: limit,
+            ...(cursor && { skip: 1, cursor: { id: cursor } }),
+            orderBy: { createdAt: 'desc' },
+            include: {
+                user: { select: { id: true, username: true, displayName: true, avatar: true, bio: true } }
+            }
+        });
+        return likes.map((l: any) => l.user);
+    }
+
+    static async getStoryViews(userId: string, storyId: string) {
+        // Only the story owner can see views
+        const story = await (prisma as any).story.findUnique({ where: { id: storyId } });
+        if (!story) throw new Error('Story not found');
+        if (story.userId !== userId) throw new Error('Only the story owner can see views');
+
+        return await (prisma as any).storyView.findMany({
+            where: { storyId },
+            orderBy: { viewedAt: 'desc' },
+            include: {
+                user: { select: { id: true, username: true, displayName: true, avatar: true } }
+            }
+        });
+    }
+
+    static async toggleCommentLike(userId: string, commentId: string) {
+        if (!commentId) throw new Error('Comment ID is required');
+        const existing = await (prisma as any).commentLike.findUnique({
+            where: { userId_commentId: { userId, commentId } }
+        });
+        if (existing) {
+            await (prisma as any).commentLike.delete({ where: { id: existing.id } });
+            return { liked: false };
+        } else {
+            await (prisma as any).commentLike.create({ data: { userId, commentId } });
+            return { liked: true };
+        }
+    }
+
+    static async toggleSavePost(userId: string, postId: string) {
+        const existing = await (prisma as any).savedPost.findUnique({
+            where: { userId_postId: { userId, postId } }
+        });
+        if (existing) {
+            await (prisma as any).savedPost.delete({ where: { id: existing.id } });
+            return { saved: false };
+        } else {
+            await (prisma as any).savedPost.create({ data: { userId, postId } });
+            return { saved: true };
+        }
+    }
+
+    static async getSavedPosts(userId: string) {
+        const saved = await (prisma as any).savedPost.findMany({
+            where: { userId },
+            include: {
+                post: {
+                    include: { author: { select: { id: true, username: true, displayName: true, avatar: true } } }
+                }
+            },
+            orderBy: { savedAt: 'desc' }
+        });
+        return saved.map((s: any) => s.post);
+    }
+
+    static async viewStory(userId: string, storyId: string) {
+        const existing = await (prisma as any).storyView.findUnique({
+            where: { storyId_userId: { storyId, userId } }
+        });
+        if (!existing) {
+            await (prisma as any).storyView.create({ data: { storyId, userId } });
+        }
+        return { success: true };
     }
 }

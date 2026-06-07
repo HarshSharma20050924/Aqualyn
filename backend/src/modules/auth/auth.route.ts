@@ -1,10 +1,11 @@
 import { Router } from 'express';
-import { verifyToken } from '../middleware/auth';
-import { loginOrRegister, getProfile, sendOtp, verifyOtp, syncToken } from '../controllers/authController';
+import { verifyToken } from '../../middleware/auth';
+import { login, register, getProfile, sendOtp, verifyOtp, syncToken } from './auth.controller';
 
 const router = Router();
 
-router.post('/sync', verifyToken, loginOrRegister);
+router.post('/login', verifyToken, login);
+router.post('/register', verifyToken, register);
 router.post('/sync-token', verifyToken, syncToken);
 router.get('/profile', verifyToken, getProfile);
 router.post('/send-otp', sendOtp);

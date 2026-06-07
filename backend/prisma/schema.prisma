@@ -40,11 +40,13 @@ model User {
   posts       Post[]
   stories     Story[]
   likes       Like[]
+  commentLikes CommentLike[]
   comments    Comment[]
   
   chatParticipants ChatParticipant[]
   folders          ChatFolder[]
   messages         Message[]
+  messageReactions MessageReaction[]
   savedPosts       SavedPost[]
   storyViews       StoryView[]
   notifications    Notification[] @relation("userNotifications")
@@ -182,7 +184,7 @@ model Message {
   isEdited    Boolean  @default(false)
   isRead      Boolean  @default(false)
   isPinned    Boolean  @default(false)
-  reactions   Json?    @default("{}")
+  reactions   MessageReaction[]
   deletedFor  Json?    @default("[]")
   createdAt   DateTime @default(now())
   
@@ -221,11 +223,13 @@ model Story {
   reactions Json     @default("{}") // e.g {"❤️": ["user1"]}
   hiddenFrom String[] @default([]) // Array of User IDs
   createdAt DateTime @default(now())
+  expiresAt DateTime?
 
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   views     StoryView[]
 
   @@index([userId, createdAt(sort: Desc)])
+  @@index([expiresAt])
 }
 
 model StoryView {
@@ -272,12 +276,29 @@ model Comment {
   userId    String
   postId    String
   content   String
+  parentId  String?
   createdAt DateTime @default(now())
 
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  parent    Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  replies   Comment[] @relation("CommentReplies")
+  likes     CommentLike[]
 
   @@index([postId, createdAt])
+}
+
+model CommentLike {
+  id        String   @id @default(uuid())
+  userId    String
+  commentId String
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, commentId])
+  @@index([commentId])
 }
 
 model Activity {
@@ -315,12 +336,15 @@ model Report {
   reporterId String
   reportedId String
   reason     String?
+  status     String   @default("pending") // pending, resolved, dismissed
+  adminNotes String?
   createdAt  DateTime @default(now())
 
   reporter   User @relation("reporter", fields: [reporterId], references: [id], onDelete: Cascade)
   reported   User @relation("reported", fields: [reportedId], references: [id], onDelete: Cascade)
 
   @@index([reportedId])
+  @@index([status])
 }
 
 model MutedChat {
@@ -356,10 +380,26 @@ model CallLog {
   startedAt DateTime @default(now())
   endedAt   DateTime?
   duration  Int?     // seconds
+  roomId    String?  @unique
+  agoraToken String?
 
   caller    User @relation("callerCalls", fields: [callerId], references: [id], onDelete: Cascade)
   callee    User @relation("calleeCalls", fields: [calleeId], references: [id], onDelete: Cascade)
 
   @@index([callerId, startedAt(sort: Desc)])
   @@index([calleeId, startedAt(sort: Desc)])
+}
+
+model MessageReaction {
+  id        String   @id @default(uuid())
+  messageId String
+  userId    String
+  emoji     String
+  createdAt DateTime @default(now())
+
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+  @@index([messageId])
 }

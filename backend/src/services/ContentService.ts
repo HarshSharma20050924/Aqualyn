@@ -1,5 +1,5 @@
 import prisma from '../config/prisma';
-import { GroupService } from './GroupService';
+import { GroupService } from '../modules/group/group.service';
 
 /**
  * ContentService handles the parsing of mentions, links, and hashtags

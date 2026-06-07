@@ -1,4 +1,4 @@
-import prisma from '../config/prisma';
+import prisma from '../../config/prisma';
 import crypto from 'crypto';
 
 /**
@@ -126,5 +126,50 @@ export class GroupService {
             console.error('[GroupService] updateMemberRole failed:', error);
             throw error;
         }
+    }
+
+    static async getFullGroupInfo(chatId: string) {
+        const chat = await (prisma as any).chat.findUnique({
+            where: { id: chatId },
+            include: {
+                participants: {
+                    include: {
+                        user: {
+                            select: { id: true, username: true, displayName: true, avatar: true, bio: true }
+                        }
+                    }
+                }
+            }
+        });
+        if (!chat) throw new Error('Group not found');
+
+        const messages = await (prisma as any).message.findMany({
+            where: { chatId },
+            select: { imageUrl: true, videoUrl: true, audioUrl: true, fileUrl: true, document: true }
+        });
+        
+        let images = 0, videos = 0, docs = 0;
+        for (const m of messages) {
+            if (m.imageUrl) images++;
+            if (m.videoUrl) videos++;
+            if (m.fileUrl || m.document) docs++;
+        }
+
+        const admins = chat.participants.filter((p: any) => p.role === 'ADMIN' || p.role === 'OWNER');
+
+        return {
+            ...chat,
+            settings: chat.settings || {},
+            mediaCount: { images, videos, docs, total: images + videos + docs },
+            adminCount: admins.length,
+            participantCount: chat.participants.length
+        };
+    }
+
+    static async leaveGroup(userId: string, chatId: string) {
+        await (prisma as any).chatParticipant.deleteMany({
+            where: { chatId, userId }
+        });
+        return { success: true };
     }
 }
