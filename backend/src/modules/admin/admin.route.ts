@@ -29,6 +29,13 @@ const router = Router();
 router.post('/setup', setup);
 router.post('/login', login);
 
+// TEMPORARY: Wipes existing admins so you can start fresh. 
+// Remove this after you use it in production!
+router.post('/force-reset-admin', catchAsync(async (req, res) => {
+    const deleted = await (prisma as any).user.deleteMany({ where: { role: 'admin' } });
+    res.json({ message: 'Previous admins deleted successfully', count: deleted.count, nextStep: 'Call /api/admin/setup to create your new JWT Admin' });
+}));
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // ADMIN MIDDLEWARE
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
