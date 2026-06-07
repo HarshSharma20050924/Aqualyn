@@ -26,6 +26,10 @@ import {
 const router = Router();
 
 router.use(verifyToken);
+router.use((req: any, res: any, next: any) => {
+    if (!req.user?.id) return res.status(403).json({ error: 'Profile setup incomplete' });
+    next();
+});
 
 /**
  * SOCIAL & FEED ENDPOINTS
