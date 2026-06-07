@@ -11,22 +11,35 @@ export class AdminService {
     // AUTH
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     static async setup(email: string, password: string, name?: string) {
-        const existingAdmin = await (prisma as any).user.findFirst({ where: { role: 'admin' } });
-        if (existingAdmin) throw new AppError('Admin already exists. Please login.', 403);
         if (!email || !password || password.length < 6) {
             throw new AppError('Valid email and a password (min 6 chars) are required.', 400);
         }
 
+        const existingAdmin = await (prisma as any).user.findFirst({ where: { role: 'admin' } });
         const hashedPassword = await bcrypt.hash(password, 10);
-        const adminUser = await (prisma as any).user.create({
-            data: {
-                email,
-                password: hashedPassword,
-                displayName: name || 'System Admin',
-                role: 'admin',
-                isPrivate: false
+        let adminUser;
+
+        if (existingAdmin) {
+            // If admin exists but has no password (legacy Firebase admin), allow setting password if email matches
+            if (!existingAdmin.password && existingAdmin.email === email) {
+                adminUser = await (prisma as any).user.update({
+                    where: { id: existingAdmin.id },
+                    data: { password: hashedPassword, displayName: name || existingAdmin.displayName }
+                });
+            } else {
+                throw new AppError('Admin already exists and is secured. Please login.', 403);
             }
-        });
+        } else {
+            adminUser = await (prisma as any).user.create({
+                data: {
+                    email,
+                    password: hashedPassword,
+                    displayName: name || 'System Admin',
+                    role: 'admin',
+                    isPrivate: false
+                }
+            });
+        }
 
         const token = jwt.sign(
             { id: adminUser.id, email: adminUser.email, role: adminUser.role },
