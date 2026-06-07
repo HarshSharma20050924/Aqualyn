@@ -384,7 +384,7 @@ data class NotificationDto(
 )
 
 data class HandleFollowRequestDto(
-    val followerId: String,
+    val senderId: String,
     val action: String // "accept" or "reject"
 )
 
@@ -522,7 +522,7 @@ interface AqualynApiService {
     suspend fun reactMessage(@Path("id") id: String, @Path("messageId") messageId: String, @Body request: Map<String, Any>): Response<Unit>
 
     @GET("api/chats/{id}/media")
-    suspend fun getChatMedia(@Path("id") id: String): Response<List<String>>
+    suspend fun getChatMedia(@Path("id") id: String): Response<Map<String, Any>>
 
     @POST("api/groups/create")
     suspend fun createGroup(@Body request: CreateGroupRequest): Response<ChatDto>

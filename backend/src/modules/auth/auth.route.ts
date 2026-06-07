@@ -6,6 +6,7 @@ const router = Router();
 
 router.post('/login', verifyToken, login);
 router.post('/register', verifyToken, register);
+router.post('/sync', verifyToken, require('./auth.controller').sync);
 router.post('/sync-token', verifyToken, syncToken);
 router.get('/profile', verifyToken, getProfile);
 router.post('/send-otp', sendOtp);

@@ -262,6 +262,23 @@ export const login = catchAsync(async (req: Request, res: Response, next: NextFu
     res.status(200).json({ message: 'Login successful', user: updatedUser, token: newToken });
 });
 
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// UNIFIED SYNC (used by frontend webapp + Kotlin mobile)
+// Routes to login if user exists, register if new
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+export const sync = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const decodedToken = (req as any).user;
+    if (!decodedToken) return next(new AppError('Unauthorized: Decoded token missing', 401));
+
+    if (decodedToken.id) {
+        // User exists in DB → delegate to login flow
+        return login(req, res, next);
+    } else {
+        // New user → delegate to register flow
+        return register(req, res, next);
+    }
+});
+
 export const getProfile = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const decodedToken = (req as any).user;
     if (!decodedToken || !decodedToken.id) return next(new AppError('Unauthorized', 401));

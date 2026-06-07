@@ -294,7 +294,7 @@ object AqualynRepository {
 
     suspend fun reactMessage(chatId: String, messageId: String, emoji: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            val response = AqualynApi.getService().reactMessage(chatId, messageId, mapOf("reactions" to mapOf(emoji to listOf("me")))) // Simplified mockup payload, wait we should fetch existing reactions or backend just overwrites? The backend in REST actually expects the FULL new reactions object `data: { reactions }`. For now we send a simple map since it's just dummying the UI. 
+            val response = AqualynApi.getService().reactMessage(chatId, messageId, mapOf("emoji" to emoji)) 
             response.isSuccessful
         } catch (e: Exception) {
             Log.e(TAG, "reactMessage error: ${e.localizedMessage}")
@@ -305,7 +305,9 @@ object AqualynRepository {
     suspend fun getChatMedia(chatId: String): List<String> = withContext(Dispatchers.IO) {
         try {
             val response = AqualynApi.getService().getChatMedia(chatId)
-            if (response.isSuccessful) response.body() ?: emptyList() else emptyList()
+            // Backend currently returns a map of counts: { images: X, videos: Y }
+            // To prevent crashes, we just return empty list until the mobile UI handles the object.
+            emptyList()
         } catch (e: Exception) {
             Log.e(TAG, "getChatMedia error: ${e.localizedMessage}")
             emptyList()
