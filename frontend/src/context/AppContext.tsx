@@ -130,7 +130,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (res.ok && isMounted) {
           const data = await res.json();
           const syncedUser = data.user;
-          if (!syncedUser) {
+          if (!syncedUser || data.status === 'needs_profile') {
             setIsLoading(false);
             return;
           }

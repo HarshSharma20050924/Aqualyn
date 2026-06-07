@@ -16,9 +16,9 @@ import axios from 'axios';
 import type { User, Chat, Post } from './types';
 import { ADMIN_ENDPOINTS } from './config/api';
 
-// Use Firebase auth token in real scenario
+// Use JWT admin token for all API calls
 const getAuthHeaders = () => {
-  const token = localStorage.getItem('firebaseToken') || '';
+  const token = localStorage.getItem('adminToken') || '';
   return { Authorization: `Bearer ${token}` };
 };
 
@@ -61,7 +61,7 @@ export default function AdminDashboardScreen({ onBack }: { onBack: () => void })
       console.error('Error fetching admin data:', error);
       if (error.response?.status === 401 || error.response?.status === 403) {
         alert('Session expired or unauthorized. Please login again.');
-        localStorage.removeItem('firebaseToken');
+        localStorage.removeItem('adminToken');
         onBack();
       } else {
         alert('Failed to load real data. Please check authentication and backend connection.');

@@ -13,7 +13,7 @@ function App() {
 
   // On mount: check if there's a valid token in localStorage
   useEffect(() => {
-    const token = localStorage.getItem('firebaseToken');
+    const token = localStorage.getItem('adminToken');
     if (token) {
       // Quick validation: try hitting a protected endpoint
       fetch(ADMIN_ENDPOINTS.STATS, {
@@ -24,11 +24,11 @@ function App() {
             setIsAuthenticated(true);
           } else {
             // Token is stale/invalid — clear it
-            localStorage.removeItem('firebaseToken');
+            localStorage.removeItem('adminToken');
           }
         })
         .catch(() => {
-          localStorage.removeItem('firebaseToken');
+          localStorage.removeItem('adminToken');
         })
         .finally(() => setIsLoading(false));
     } else {
@@ -37,7 +37,7 @@ function App() {
   }, []);
 
   const handleLogout = () => {
-    localStorage.removeItem('firebaseToken');
+    localStorage.removeItem('adminToken');
     setIsAuthenticated(false);
     setError('');
   };
@@ -69,9 +69,9 @@ function App() {
       const data = await response.json();
 
       if (response.ok && data.token) {
-        localStorage.setItem('firebaseToken', data.token);
+        localStorage.setItem('adminToken', data.token);
         setIsAuthenticated(true);
-      } else if (data.error === 'Admin already exists. Please login.') {
+      } else if (response.status === 403) {
         setError('An admin already exists. Please use the Login form.');
         setIsSetupMode(false);
       } else {
@@ -137,7 +137,7 @@ function App() {
             type="submit"
             className="bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-lg font-bold mt-2 transition-colors"
           >
-            {isSetupMode ? '🚀 Create Admin Account' : '🔐 Login'}
+            {isSetupMode ? 'Create Admin Account' : 'Login'}
           </button>
 
           <p className="text-sm text-center text-gray-400 mt-4">
