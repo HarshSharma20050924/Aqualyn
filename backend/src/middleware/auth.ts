@@ -63,9 +63,16 @@ export const verifyToken = async (req: Request, res: Response, next: NextFunctio
             return res.status(401).json({ error: 'Unauthorized: Malformed token payload' });
         }
         
-        const isRevoked = await (require('../services/AuthService')).AuthService.isRevoked(token);
-        if (isRevoked) {
-            return res.status(401).json({ error: 'Unauthorized: Session revoked' });
+        // Revocation check — fail-open if Redis is unavailable
+        try {
+            const { AuthService } = require('../modules/auth/auth.service');
+            const isRevoked = await AuthService.isRevoked(token);
+            if (isRevoked) {
+                return res.status(401).json({ error: 'Unauthorized: Session revoked' });
+            }
+        } catch (revokeErr) {
+            // Redis/AuthService unavailable — allow request through
+            console.warn('[Auth] Revocation check skipped (Redis may be offline)');
         }
         
         (req as any).user = decodedToken;
