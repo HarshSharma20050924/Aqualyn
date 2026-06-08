@@ -1,0 +1,4729 @@
+=== FILE: ./tests/DistributedChat.test.ts ===
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { SocketService } from '../src/services/SocketService';
+import { PresenceService } from '../src/services/PresenceService';
+import prisma from '../src/config/prisma';
+import { notificationQueue } from '../src/config/queues';
+
+// Mock dependencies
+vi.mock('../src/config/prisma', () => ({
+    default: {
+        chat: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
+        message: { create: vi.fn(), update: vi.fn() },
+        user: { findUnique: vi.fn() }
+    }
+}));
+
+vi.mock('../src/services/PresenceService', () => ({
+    PresenceService: {
+        setUserOnline: vi.fn(),
+        getUserStatus: vi.fn(),
+        setUserOffline: vi.fn()
+    }
+}));
+
+vi.mock('../src/config/queues', () => ({
+    notificationQueue: { add: vi.fn() }
+}));
+
+describe('Distributed Chat Pipeline', () => {
+    const mockSocket: any = {
+        id: 'socket-1',
+        join: vi.fn(),
+        emit: vi.fn(),
+        rooms: new Set(['user-1']),
+        on: vi.fn()
+    };
+    
+    const mockIo: any = {
+        on: vi.fn(),
+        to: vi.fn(() => ({ emit: vi.fn() }))
+    };
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        SocketService.init(mockIo);
+    });
+
+    it('should complete the full message pipeline (DB -> Redis -> Queue)', async () => {
+        const messageData = {
+            senderId: 'user-1',
+            receiverId: 'user-2',
+            chatId: 'chat-abc',
+            text: 'Hello Cloud!'
+        };
+
+        // Mock return values
+        (prisma as any).chat.findUnique.mockResolvedValue({ id: 'chat-abc' });
+        (prisma as any).message.create.mockResolvedValue({ id: 'msg-99', ...messageData });
+        (prisma as any).user.findUnique.mockResolvedValue({ displayName: 'Test User' });
+        (PresenceService.getUserStatus as any).mockResolvedValue('online');
+
+        // Execute the handler (manually triggering the private method logic for testing)
+        await (SocketService as any).handleSendMessage(mockSocket, messageData);
+
+        // VERIFICATION 1: Database Persistence
+        expect(prisma.message.create).toHaveBeenCalled();
+        
+        // VERIFICATION 2: Distributed Presence Check
+        expect(PresenceService.getUserStatus).toHaveBeenCalledWith('user-2');
+
+        // VERIFICATION 3: Distributed Emit (to whole cluster)
+        expect(mockIo.to).toHaveBeenCalledWith('user-2');
+
+        // VERIFICATION 4: Background Worker Dispatch
+        expect(notificationQueue.add).toHaveBeenCalledWith('send-push', expect.objectContaining({
+            userId: 'user-2',
+            text: 'Hello Cloud!'
+        }));
+    });
+});
+
+
+=== FILE: ./tests/PresenceService.test.ts ===
+import { describe, it, expect, beforeEach, afterAll, vi } from 'vitest';
+import { PresenceService } from '../src/services/PresenceService';
+
+// Mock Redis for the test
+vi.mock('../src/config/redis', () => {
+    const mockData: Record<string, string> = {};
+    return {
+        redis: {
+            set: vi.fn(async (key: string, val: string) => { mockData[key] = val; }),
+            get: vi.fn(async (key: string) => mockData[key] || null),
+            del: vi.fn(async (key: string) => { delete mockData[key]; }),
+            expire: vi.fn(async () => {}),
+        },
+    };
+});
+
+describe('PresenceService', () => {
+    const userId = 'user-123';
+
+    it('should set the user as online in Redis', async () => {
+        await PresenceService.setUserOnline(userId);
+        const status = await PresenceService.getUserStatus(userId);
+        expect(status).toBe('online');
+    });
+
+    it('should set the user as offline in Redis', async () => {
+        await PresenceService.setUserOnline(userId);
+        await PresenceService.setUserOffline(userId);
+        const status = await PresenceService.getUserStatus(userId);
+        expect(status).toBe('offline');
+    });
+
+    it('should return offline for unknown user', async () => {
+        const status = await PresenceService.getUserStatus('unknown');
+        expect(status).toBe('offline');
+    });
+});
+
+
+=== FILE: ./src/core/middlewares/validation.middleware.ts ===
+import { Request, Response, NextFunction } from 'express';
+import { AnyZodObject, ZodError } from 'zod';
+import { AppError } from '../exceptions/AppError';
+
+export const validate = (schema: AnyZodObject) => {
+    return async (req: Request, res: Response, next: NextFunction) => {
+        try {
+            await schema.parseAsync({
+                body: req.body,
+                query: req.query,
+                params: req.params,
+            });
+            next();
+        } catch (error) {
+            if (error instanceof ZodError) {
+                const message = error.errors.map((e) => `${e.path.join('.')}: ${e.message}`).join(', ');
+                return next(new AppError(message, 400));
+            }
+            next(error);
+        }
+    };
+};
+
+
+=== FILE: ./src/core/middlewares/error.middleware.ts ===
+import { Request, Response, NextFunction } from 'express';
+import { AppError } from '../exceptions/AppError';
+import { ZodError } from 'zod';
+
+export const errorHandler = (err: any, req: Request, res: Response, next: NextFunction) => {
+    let error = { ...err };
+    error.message = err.message;
+
+    // Log error for dev
+    console.error(err);
+
+    // Zod Validation Error
+    if (err instanceof ZodError) {
+        const message = err.errors.map((e) => `${e.path.join('.')}: ${e.message}`).join(', ');
+        error = new AppError(message, 400);
+    }
+
+    // Prisma Errors (Example handling)
+    if (err.code === 'P2002') {
+        const message = 'Duplicate field value entered';
+        error = new AppError(message, 400);
+    }
+    
+    if (err.code === 'P2025') {
+        const message = 'Record not found';
+        error = new AppError(message, 404);
+    }
+
+    const statusCode = error.statusCode || 500;
+    const message = error.message || 'Server Error';
+
+    res.status(statusCode).json({
+        success: false,
+        error: message,
+        ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
+    });
+};
+
+
+=== FILE: ./src/core/utils/catchAsync.ts ===
+import { Request, Response, NextFunction } from 'express';
+
+export const catchAsync = (fn: Function) => {
+    return (req: Request, res: Response, next: NextFunction) => {
+        Promise.resolve(fn(req, res, next)).catch(next);
+    };
+};
+
+
+=== FILE: ./src/core/exceptions/AppError.ts ===
+export class AppError extends Error {
+    public readonly statusCode: number;
+    public readonly isOperational: boolean;
+
+    constructor(message: string, statusCode: number, isOperational = true) {
+        super(message);
+        this.statusCode = statusCode;
+        this.isOperational = isOperational;
+
+        Error.captureStackTrace(this, this.constructor);
+    }
+}
+
+
+=== FILE: ./src/middleware/auth.ts ===
+import { Request, Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
+import admin from '../config/firebaseAdmin';
+import prisma from '../config/prisma'; // Imported prisma to handle local user lookups
+
+const JWT_SECRET = process.env.JWT_SECRET || '07f4aa247bb2789d402af105e7fc416e57aebb266facfb2c30ad2843a86e4e61';
+
+export const verifyToken = async (req: Request, res: Response, next: NextFunction) => {
+    // CHECK COOKIE FIRST, THEN HEADER
+    const token = req.cookies.token || (req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.split(' ')[1] : null);
+    
+    if (!token) {
+        return res.status(401).json({ error: 'Unauthorized: Missing token' });
+    }
+    
+    try {
+        let decodedToken: any;
+        
+        // Try native JWT first
+        try {
+            decodedToken = jwt.verify(token, JWT_SECRET) as any;
+        } catch (nativeErr) {
+            // If native fails, try Firebase (for Google Sign-in flow)
+            try {
+                const firebaseUser = await admin.auth().verifyIdToken(token);
+                
+                // Query local database for the matching user
+                let localUser = await (prisma as any).user.findFirst({
+                    where: {
+                        OR: [
+                            { email: firebaseUser.email }
+                        ]
+                    }
+                });
+
+                // Optional Fallback: Auto-provision a user if they exist in Firebase but not in DB yet
+                if (!localUser && firebaseUser.email) {
+                    localUser = await (prisma as any).user.create({
+                        data: {
+                            email: firebaseUser.email,
+                            displayName: firebaseUser.name || 'New User',
+                            phone: firebaseUser.phone_number || null,
+                            searchByPhone: true,
+                            isPrivate: false
+                        }
+                    });
+                }
+
+                decodedToken = {
+                    uid: firebaseUser.uid,
+                    email: firebaseUser.email,
+                    phone_number: firebaseUser.phone_number,
+                    id: localUser ? localUser.id : null // Automatically populates database ID
+                };
+            } catch (firebaseErr: any) {
+                console.error('[Auth] Native & Firebase verification failed');
+                throw new Error('Invalid token');
+            }
+        }
+        
+        // Ensure either id (existing user) or uid (registration) is present
+        if (!decodedToken.id && !decodedToken.uid) {
+            return res.status(401).json({ error: 'Unauthorized: Malformed token payload' });
+        }
+        
+        // Revocation check — fail-open if Redis is unavailable
+        try {
+            const { AuthService } = require('../modules/auth/auth.service');
+            const isRevoked = await AuthService.isRevoked(token);
+            if (isRevoked) {
+                return res.status(401).json({ error: 'Unauthorized: Session revoked' });
+            }
+        } catch (revokeErr) {
+            // Redis/AuthService unavailable — allow request through
+            console.warn('[Auth] Revocation check skipped (Redis may be offline)');
+        }
+        
+        (req as any).user = decodedToken;
+        next();
+    } catch (error: any) {
+        return res.status(401).json({ error: 'Unauthorized: Token verification failed' });
+    }
+};
+
+=== FILE: ./src/workers/NotificationWorker.ts ===
+import { Worker, Job } from 'bullmq';
+import { redis } from '../config/redis';
+
+/**
+ * The NotificationWorker is responsible for processing background push notification jobs.
+ * This runs on its own thread and does not block the main Socket/API thread.
+ */
+export const notificationWorker = new Worker('notification-queue', async (job: Job) => {
+    const { userId, text, chatId, senderId } = job.data;
+    
+    // Logic for Firebase / FCM (Firebase Cloud Messaging) integration goes here
+    console.log(`[Worker] Sending notification to User ${userId} for message from ${senderId}: "${text}"`);
+    
+    // Simulation:
+    // await fcm.send({ token: userToken, notification: { body: text }, data: { chatId } });
+    
+    return { success: true, timestamp: new Date() };
+
+}, { 
+    connection: redis.duplicate(), // Use a dedicated connection for the worker
+    concurrency: 5 // Process 5 notifications simultaneously per worker instance
+});
+
+notificationWorker.on('completed', (job) => {
+    console.log(`[Worker] Job ${job.id} completed successfully.`);
+});
+
+notificationWorker.on('failed', (job, err) => {
+    console.log(`[Worker] Job ${job?.id} failed with error: ${err.message}`);
+    // BullMQ will automatically retry this based on the retry strategy in queues.ts
+});
+
+console.log('[BullMQ] Notification Worker Started');
+
+
+=== FILE: ./src/modules/user/user.controller.ts ===
+import { Request, Response, NextFunction } from 'express';
+import { catchAsync } from '../../core/utils/catchAsync';
+import { SettingsService } from '../../services/SettingsService';
+import { UserService } from './user.service';
+
+export const getSettings = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const settings = await SettingsService.getSettings(req.user.id);
+    res.json(settings);
+});
+
+export const updateSettings = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const updatedSettings = await SettingsService.updateSettings(req.user.id, req.body);
+    res.json({ success: true, settings: updatedSettings });
+});
+
+export const getSessions = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const sessions = await SettingsService.getActiveSessions(req.user.id);
+    res.json(sessions);
+});
+
+export const revokeSession = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    await SettingsService.revokeSession(req.user.id, req.params.id);
+    res.json({ success: true });
+});
+
+export const getStorageUsage = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const usage = await SettingsService.getStorageUsage(req.user.id);
+    res.json(usage);
+});
+
+export const exportData = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    res.json({ success: true, message: 'Data export initiated. You will be notified when it is ready for download.' });
+});
+
+export const getProfile = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const profile = await UserService.getProfile(req.params.userId);
+    res.json(profile);
+});
+
+export const blockUser = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const result = await UserService.blockUser(req.user.id, req.body.targetUserId);
+    res.json(result);
+});
+
+export const reportUser = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const result = await UserService.reportUser(req.user.id, req.body.targetUserId, req.body.reason);
+    res.json(result);
+});
+
+export const getBlockedUsers = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const blocked = await UserService.getBlockedUsers(req.user.id);
+    res.json(blocked);
+});
+
+export const updatePrivacy = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const updated = await UserService.updatePrivacy(req.user.id, req.body);
+    res.json(updated);
+});
+
+export const uploadAvatar = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const result = await UserService.uploadAvatar(req.user.id, req.body.avatar);
+    res.json(result);
+});
+
+export const syncContacts = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const matches = await UserService.syncContacts(req.user.id, req.body.phones);
+    res.json(matches);
+});
+
+export const getCallHistory = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 30;
+    const history = await UserService.getCallHistory(req.user.id, page, limit);
+    res.json(history);
+});
+
+export const setPin = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const result = await UserService.setPin(req.user.id, req.body.pin);
+    res.json(result);
+});
+
+export const verifyPin = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const result = await UserService.verifyPin(req.user.id, req.body.pin);
+    res.json(result);
+});
+
+export const followUser = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const result = await UserService.followUser(req.user.id, req.body.targetUserId);
+    res.json(result);
+});
+
+export const unfollowUser = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const result = await UserService.unfollowUser(req.user.id, req.body.targetUserId);
+    res.json(result);
+});
+
+export const handleFollowRequest = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const result = await UserService.handleFollowRequest(req.user.id, req.body.requestId, req.body.senderId, req.body.action);
+    res.json(result);
+});
+
+export const getNotifications = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const notifications = await UserService.getNotifications(req.user.id);
+    res.json(notifications);
+});
+
+export const markNotificationsRead = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const result = await UserService.markNotificationsRead(req.user.id);
+    res.json(result);
+});
+
+export const getFollowersList = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const followers = await UserService.getFollowersList(req.params.userId);
+    res.json(followers);
+});
+
+export const getFollowingList = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const following = await UserService.getFollowingList(req.params.userId);
+    res.json(following);
+});
+
+export const startCall = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const call = await UserService.startCall(req.user.id, req.body.calleeId, req.body.type);
+    res.json({ success: true, call });
+});
+
+export const endCall = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const call = await UserService.endCall(req.user.id, req.params.callId, req.body.status);
+    res.json({ success: true, call });
+});
+
+export const getActivityFeed = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const cursor = req.query.cursor as string | undefined;
+    const activities = await UserService.getActivityFeed(req.user.id, cursor);
+    res.json(activities);
+});
+
+export const markActivityRead = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const result = await UserService.markActivityRead(req.user.id, req.body.activityIds);
+    res.json(result);
+});
+
+
+
+=== FILE: ./src/modules/user/user.service.ts ===
+import prisma from '../../config/prisma';
+import { io } from '../../server';
+import { AppError } from '../../core/exceptions/AppError';
+
+export class UserService {
+    static async getProfile(userId: string) {
+        const profile = await (prisma as any).user.findUnique({
+            where: { id: userId },
+            select: { 
+                id: true, username: true, displayName: true,
+                avatar: true, largeAvatar: true, bio: true, 
+                isPrivate: true, lastLogin: true,
+                invitationSettings: true,
+                _count: { select: { followers: true, following: true } },
+                followers: { select: { followerId: true } },
+                following: { select: { followingId: true } }
+            }
+        });
+        if (!profile) throw new AppError('Profile not found', 404);
+        return profile;
+    }
+
+    static async blockUser(userId: string, targetUserId: string) {
+        if (!targetUserId) throw new AppError('targetUserId required', 400);
+        const existing = await (prisma as any).blockedUser.findUnique({
+            where: { blockerId_blockedId: { blockerId: userId, blockedId: targetUserId } }
+        });
+        if (existing) {
+            await (prisma as any).blockedUser.delete({ where: { id: existing.id } });
+            return { blocked: false, message: 'User unblocked' };
+        } else {
+            await (prisma as any).blockedUser.create({
+                data: { blockerId: userId, blockedId: targetUserId }
+            });
+            return { blocked: true, message: 'User blocked' };
+        }
+    }
+
+    static async reportUser(userId: string, targetUserId: string, reason: string) {
+        if (!targetUserId) throw new AppError('targetUserId required', 400);
+        await (prisma as any).report.create({
+            data: { reporterId: userId, reportedId: targetUserId, reason: reason || null }
+        });
+        return { success: true, message: 'Report submitted' };
+    }
+
+    static async getBlockedUsers(userId: string) {
+        const blocked = await (prisma as any).blockedUser.findMany({
+            where: { blockerId: userId },
+            select: { blockedId: true }
+        });
+        return blocked.map((b: any) => b.blockedId);
+    }
+
+    static async updatePrivacy(userId: string, data: any) {
+        return await (prisma as any).user.update({
+            where: { id: userId },
+            data: {
+                invitationSettings: data.invitationSettings !== undefined ? data.invitationSettings : undefined,
+                showPhoneTo: data.showPhoneTo !== undefined ? data.showPhoneTo : undefined,
+                searchByPhone: data.searchByPhone !== undefined ? data.searchByPhone : undefined,
+                isPrivate: data.isPrivate !== undefined ? data.isPrivate : undefined
+            }
+        });
+    }
+
+    static async uploadAvatar(userId: string, avatar: string) {
+        if (!avatar) throw new AppError('Avatar data required', 400);
+        const updated = await (prisma as any).user.update({
+            where: { id: userId },
+            data: { avatar }
+        });
+        return { success: true, avatar: updated.avatar };
+    }
+
+    static async syncContacts(userId: string, phones: string[]) {
+        if (!phones || !Array.isArray(phones)) throw new AppError('Phones array required', 400);
+        return await (prisma as any).user.findMany({
+            where: {
+                phone: { in: phones },
+                searchByPhone: true,
+                ...(userId ? { NOT: { id: userId } } : {})
+            },
+            select: {
+                id: true, username: true, displayName: true,
+                avatar: true, phone: true
+            }
+        });
+    }
+
+    static async getCallHistory(userId: string, page: number, limit: number) {
+        const skip = (page - 1) * limit;
+        const calls = await (prisma as any).callLog.findMany({
+            where: { OR: [{ callerId: userId }, { calleeId: userId }] },
+            orderBy: { startedAt: 'desc' },
+            skip,
+            take: limit,
+            include: {
+                caller: { select: { id: true, displayName: true, username: true, avatar: true } },
+                callee: { select: { id: true, displayName: true, username: true, avatar: true } }
+            }
+        });
+        const total = await (prisma as any).callLog.count({
+            where: { OR: [{ callerId: userId }, { calleeId: userId }] }
+        });
+        return { calls, total, page, limit };
+    }
+
+    static async setPin(userId: string, pin: string) {
+        if (!pin) throw new AppError('PIN required', 400);
+        await (prisma as any).user.update({
+            where: { id: userId },
+            data: { appLockPin: pin }
+        });
+        return { success: true, message: 'PIN set successfully' };
+    }
+
+    static async verifyPin(userId: string, pin: string) {
+        if (!pin) throw new AppError('PIN required', 400);
+        const user = await (prisma as any).user.findUnique({
+            where: { id: userId },
+            select: { appLockPin: true }
+        });
+        if (!user || user.appLockPin !== pin) {
+            throw new AppError('Invalid PIN', 401);
+        }
+        return { success: true, message: 'PIN verified' };
+    }
+
+    static async followUser(currentUserId: string, targetUserId: string) {
+        if (!targetUserId) throw new AppError('targetUserId required', 400);
+        if (currentUserId === targetUserId) throw new AppError('Cannot follow yourself', 400);
+
+        const currentUser = await (prisma as any).user.findUnique({ where: { id: currentUserId } });
+        if (!currentUser) throw new AppError('User not found', 404);
+
+        const targetUser = await prisma.user.findUnique({ where: { id: targetUserId } });
+        if (!targetUser) throw new AppError('Target user not found', 404);
+
+        if (targetUser.isPrivate) {
+            await (prisma as any).followRequest.upsert({
+                where: { senderId_receiverId: { senderId: currentUserId, receiverId: targetUserId } },
+                update: { status: 'pending' },
+                create: { senderId: currentUserId, receiverId: targetUserId }
+            });
+            const notification = await (prisma as any).notification.create({
+                data: {
+                    userId: targetUserId,
+                    actorId: currentUserId,
+                    type: 'follow_request',
+                    text: `${currentUser.displayName || (currentUser as any).username} requested to follow you.`
+                },
+                include: { actor: true }
+            });
+            io.to(targetUserId).emit('new_notification', notification);
+            return { status: 'requested' };
+        } else {
+            await (prisma as any).userFollows.upsert({
+                where: { followerId_followingId: { followerId: currentUserId, followingId: targetUserId } },
+                update: {},
+                create: { followerId: currentUserId, followingId: targetUserId }
+            });
+            const notification = await (prisma as any).notification.create({
+                data: {
+                    userId: targetUserId,
+                    actorId: currentUserId,
+                    type: 'follow',
+                    text: `${currentUser.displayName || (currentUser as any).username} started following you.`
+                },
+                include: { actor: true }
+            });
+            io.to(targetUserId).emit('new_notification', notification);
+            return { status: 'following' };
+        }
+    }
+
+    static async unfollowUser(currentUserId: string, targetUserId: string) {
+        if (!targetUserId) throw new AppError('targetUserId required', 400);
+        await (prisma as any).userFollows.deleteMany({
+            where: { followerId: currentUserId, followingId: targetUserId }
+        });
+        await (prisma as any).followRequest.deleteMany({
+            where: { senderId: currentUserId, receiverId: targetUserId }
+        });
+        return { status: 'unfollowed' };
+    }
+
+    static async handleFollowRequest(currentUserId: string, requestId?: string, senderId?: string, action?: string) {
+        if (!action) throw new AppError('action required', 400);
+        const currentUser = await (prisma as any).user.findUnique({ where: { id: currentUserId } });
+        if (!currentUser) throw new AppError('User not found', 404);
+
+        let request;
+        if (requestId) {
+            request = await (prisma as any).followRequest.findUnique({ where: { id: requestId } });
+        } else if (senderId) {
+            request = await (prisma as any).followRequest.findFirst({
+                where: { senderId: senderId, receiverId: currentUserId, status: 'pending' }
+            });
+        }
+
+        if (!request || request.receiverId !== currentUserId) {
+            throw new AppError('Follow request not found', 404);
+        }
+
+        if (action === 'accept') {
+            await (prisma as any).userFollows.upsert({
+                where: { followerId_followingId: { followerId: request.senderId, followingId: currentUserId } },
+                update: {},
+                create: { followerId: request.senderId, followingId: currentUserId }
+            });
+            await (prisma as any).followRequest.update({
+                where: { id: request.id },
+                data: { status: 'accepted' }
+            });
+            const notification = await (prisma as any).notification.create({
+                data: {
+                    userId: request.senderId,
+                    actorId: currentUserId,
+                    type: 'follow_accept',
+                    text: `${currentUser.displayName || (currentUser as any).username} accepted your follow request.`
+                },
+                include: { actor: true }
+            });
+            io.to(request.senderId).emit('new_notification', notification);
+        } else {
+            await (prisma as any).followRequest.update({
+                where: { id: request.id },
+                data: { status: 'rejected' }
+            });
+        }
+        return { status: action + 'ed' };
+    }
+
+    static async getNotifications(userId: string) {
+        return await (prisma as any).notification.findMany({
+            where: { userId },
+            include: {
+                actor: { select: { id: true, username: true, displayName: true, avatar: true } }
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 50
+        });
+    }
+
+    static async markNotificationsRead(userId: string) {
+        await (prisma as any).notification.updateMany({
+            where: { userId, isRead: false },
+            data: { isRead: true }
+        });
+        return { status: 'success' };
+    }
+
+    static async getFollowersList(userId: string) {
+        const followers = await (prisma as any).userFollows.findMany({
+            where: { followingId: userId },
+            include: {
+                follower: { select: { id: true, username: true, displayName: true, avatar: true, bio: true } }
+            }
+        });
+        return followers.map((f: any) => f.follower);
+    }
+
+    static async getFollowingList(userId: string) {
+        const following = await (prisma as any).userFollows.findMany({
+            where: { followerId: userId },
+            include: {
+                following: { select: { id: true, username: true, displayName: true, avatar: true, bio: true } }
+            }
+        });
+        return following.map((f: any) => f.following);
+    }
+
+    static async startCall(callerId: string, calleeId: string, type: string) {
+        if (!calleeId) throw new AppError('calleeId required', 400);
+        if (!type || !['VOICE', 'VIDEO'].includes(type)) throw new AppError('type must be VOICE or VIDEO', 400);
+
+        const callee = await prisma.user.findUnique({ where: { id: calleeId } });
+        if (!callee) throw new AppError('Callee not found', 404);
+
+        const roomId = `call_${callerId}_${calleeId}_${Date.now()}`;
+
+        const call = await (prisma as any).callLog.create({
+            data: {
+                callerId,
+                calleeId,
+                type,
+                status: 'initiated',
+                roomId
+            },
+            include: {
+                caller: { select: { id: true, displayName: true, username: true, avatar: true } },
+                callee: { select: { id: true, displayName: true, username: true, avatar: true } }
+            }
+        });
+
+        // Notify the callee via Socket
+        io.to(calleeId).emit('incoming_call', call);
+
+        return call;
+    }
+
+    static async endCall(userId: string, callId: string, status?: string) {
+        if (!callId) throw new AppError('callId required', 400);
+
+        const call = await (prisma as any).callLog.findUnique({ where: { id: callId } });
+        if (!call) throw new AppError('Call not found', 404);
+        if (call.callerId !== userId && call.calleeId !== userId) {
+            throw new AppError('Not a participant in this call', 403);
+        }
+
+        const endedAt = new Date();
+        const duration = Math.round((endedAt.getTime() - new Date(call.startedAt).getTime()) / 1000);
+
+        const updated = await (prisma as any).callLog.update({
+            where: { id: callId },
+            data: {
+                status: status || 'ended',
+                endedAt,
+                duration
+            },
+            include: {
+                caller: { select: { id: true, displayName: true, username: true, avatar: true } },
+                callee: { select: { id: true, displayName: true, username: true, avatar: true } }
+            }
+        });
+
+        // Notify the other participant
+        const otherUserId = userId === call.callerId ? call.calleeId : call.callerId;
+        io.to(otherUserId).emit('call_ended', updated);
+
+        return updated;
+    }
+
+    static async getActivityFeed(userId: string, cursor?: string, limit: number = 20) {
+        return await (prisma as any).activity.findMany({
+            where: { userId },
+            take: limit,
+            ...(cursor && { skip: 1, cursor: { id: cursor } }),
+            orderBy: { createdAt: 'desc' },
+            include: {
+                actor: { select: { id: true, username: true, displayName: true, avatar: true } }
+            }
+        });
+    }
+
+    static async markActivityRead(userId: string, activityIds: string[]) {
+        if (!activityIds || !activityIds.length) throw new AppError('activityIds required', 400);
+        await (prisma as any).activity.updateMany({
+            where: { id: { in: activityIds }, userId },
+            data: { isRead: true }
+        });
+        return { success: true };
+    }
+}
+
+
+=== FILE: ./src/modules/user/user.schema.ts ===
+import { z } from 'zod';
+
+
+=== FILE: ./src/modules/user/user.route.ts ===
+import { Router } from 'express';
+import { verifyToken } from '../../middleware/auth';
+import {
+    getSettings,
+    updateSettings,
+    getSessions,
+    revokeSession,
+    getStorageUsage,
+    exportData,
+    getProfile,
+    blockUser,
+    reportUser,
+    getBlockedUsers,
+    updatePrivacy,
+    uploadAvatar,
+    syncContacts,
+    getCallHistory,
+    setPin,
+    verifyPin,
+    followUser,
+    unfollowUser,
+    handleFollowRequest,
+    getNotifications,
+    markNotificationsRead,
+    getFollowersList,
+    getFollowingList,
+    startCall,
+    endCall,
+    getActivityFeed,
+    markActivityRead
+} from './user.controller';
+
+const router = Router();
+
+router.use(verifyToken);
+router.use((req: any, res: any, next: any) => {
+    if (!req.user?.id) return res.status(403).json({ error: 'Profile setup incomplete' });
+    next();
+});
+
+// 1. SETTINGS API
+router.get('/settings', getSettings);
+router.patch('/settings', updateSettings);
+router.get('/sessions', getSessions);
+router.delete('/sessions/:id', revokeSession);
+router.get('/storage-usage', getStorageUsage);
+router.post('/export', exportData);
+
+// 2. SOCIAL API
+router.post('/follow', followUser);
+router.post('/unfollow', unfollowUser);
+router.post('/follow-request/handle', handleFollowRequest);
+router.get('/notifications', getNotifications);
+router.post('/notifications/read', markNotificationsRead);
+
+// 3. ACTIVITY FEED
+router.get('/activity', getActivityFeed);
+router.post('/activity/read', markActivityRead);
+
+// 4. FOLLOWERS / FOLLOWING (before dynamic :userId routes)
+router.get('/:userId/followers', getFollowersList);
+router.get('/:userId/following', getFollowingList);
+
+// 5. PROFILE API
+router.get('/profile/:userId', getProfile);
+
+// 6. BLOCK / UNBLOCK
+router.post('/block', blockUser);
+router.get('/blocked', getBlockedUsers);
+
+// 7. REPORT USER
+router.post('/report', reportUser);
+
+// 8. UPDATE TOP-LEVEL PRIVACY
+router.patch('/privacy', updatePrivacy);
+
+// 9. UPLOAD AVATAR
+router.post('/upload-avatar', uploadAvatar);
+
+// 10. CONTACT SYNC
+router.post('/contacts/sync', syncContacts);
+
+// 11. CALL MANAGEMENT
+router.get('/call-history', getCallHistory);
+router.post('/calls/start', startCall);
+router.patch('/calls/:callId/end', endCall);
+
+// 12. APP LOCK PIN
+router.post('/pin/set', setPin);
+router.post('/pin/verify', verifyPin);
+
+export default router;
+
+=== FILE: ./src/modules/group/group.controller.ts ===
+import { Request, Response, NextFunction } from 'express';
+import { catchAsync } from '../../core/utils/catchAsync';
+import { AppError } from '../../core/exceptions/AppError';
+import { GroupService } from './group.service';
+
+export const createGroup = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const { name, participantIds, description } = req.body;
+    const group = await GroupService.createGroup(req.user.id, name, participantIds || [], description);
+    res.json({ success: true, group });
+});
+
+export const joinByToken = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const membership = await GroupService.joinByToken(req.user.id, req.params.token);
+    res.json({ success: true, membership });
+});
+
+export const updateSettings = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const group = await GroupService.updateSettings(req.user.id, req.params.id, req.body.settings);
+    res.json({ success: true, group });
+});
+
+export const updateMemberRole = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const result = await GroupService.updateMemberRole(req.user.id, req.params.id, req.params.targetId, req.body.role);
+    res.json({ success: true, result });
+});
+
+export const getGroupInfo = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const info = await GroupService.getFullGroupInfo(req.params.id);
+    res.json(info);
+});
+
+export const leaveGroup = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    await GroupService.leaveGroup(req.user.id, req.params.id);
+    res.json({ success: true, message: 'Left the group' });
+});
+
+export const handleInvitation = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const result = await GroupService.handleInvitation(req.user.id, req.params.chatId, req.body.action);
+    res.json({ success: true, result });
+});
+
+
+=== FILE: ./src/modules/group/group.schema.ts ===
+import { z } from 'zod';
+
+
+=== FILE: ./src/modules/group/group.service.ts ===
+import prisma from '../../config/prisma';
+import crypto from 'crypto';
+
+/**
+ * GroupService manages the professional lifecycle of groups,
+ * including roles, settings, and invite-link joining.
+ */
+export class GroupService {
+    
+    /**
+     * Create a new professional group.
+     */
+    static async createGroup(ownerId: string, name: string, participantIds: string[], description?: string) {
+        if (!ownerId || !name) throw new Error('Owner ID and Group Name are required');
+        try {
+            // Find owner's followings to see who is automatically joined
+            const owner = await (prisma as any).user.findUnique({
+                where: { id: ownerId },
+                include: { following: true }
+            });
+            const followingIds = owner?.following.map((f: any) => f.followingId) || [];
+
+            const inviteToken = crypto.randomBytes(8).toString('hex');
+            return await (prisma as any).chat.create({
+                data: {
+                    name,
+                    description,
+                    isGroup: true,
+                    inviteToken,
+                    settings: { canMessage: 'everyone', canInvite: 'all' },
+                    participants: {
+                        create: [
+                            { userId: ownerId, role: 'OWNER', status: 'JOINED' },
+                            ...participantIds.filter(id => id !== ownerId).map(id => {
+                                const isFollowing = followingIds.includes(id);
+                                return {
+                                    userId: id,
+                                    role: 'MEMBER',
+                                    status: isFollowing ? 'JOINED' : 'INVITED'
+                                };
+                            })
+                        ]
+                    }
+                },
+                include: { participants: true }
+            });
+        } catch (error) {
+            console.error('[GroupService] createGroup failed:', error);
+            throw new Error('Failed to create group');
+        }
+    }
+
+    /**
+     * Handle group invitation (accept or decline).
+     */
+    static async handleInvitation(userId: string, chatId: string, action: 'accept' | 'decline') {
+        if (!userId || !chatId) throw new Error('Missing fields');
+        try {
+            if (action === 'accept') {
+                return await (prisma as any).chatParticipant.update({
+                    where: { chatId_userId: { chatId, userId } },
+                    data: { status: 'JOINED' }
+                });
+            } else {
+                return await (prisma as any).chatParticipant.delete({
+                    where: { chatId_userId: { chatId, userId } }
+                });
+            }
+        } catch (error) {
+            console.error('[GroupService] handleInvitation failed:', error);
+            throw error;
+        }
+    }
+
+    static async joinByToken(userId: string, token: string) {
+        if (!userId || !token) throw new Error('Missing user or token');
+        try {
+            const group = await (prisma as any).chat.findUnique({ where: { inviteToken: token } });
+            if (!group) throw new Error('Invalid invite link');
+            if (!group.isGroup) throw new Error('This link is not for a group');
+
+            return await (prisma as any).chatParticipant.upsert({
+                where: { chatId_userId: { chatId: group.id, userId } },
+                update: {},
+                create: { chatId: group.id, userId, role: 'MEMBER' }
+            });
+        } catch (error) {
+            console.error('[GroupService] joinByToken failed:', error);
+            throw error;
+        }
+    }
+
+    static async updateSettings(userId: string, chatId: string, settings: any) {
+        if (!userId || !chatId) throw new Error('Missing fields');
+        try {
+            const participant = await (prisma as any).chatParticipant.findUnique({
+                where: { chatId_userId: { chatId, userId } }
+            });
+            if (!participant || (participant.role !== 'ADMIN' && participant.role !== 'OWNER')) {
+                throw new Error('Unauthorized');
+            }
+            return await (prisma as any).chat.update({
+                where: { id: chatId },
+                data: { settings }
+            });
+        } catch (error) {
+            console.error('[GroupService] updateSettings failed:', error);
+            throw error;
+        }
+    }
+
+    static async updateMemberRole(adminId: string, chatId: string, targetUserId: string, newRole: 'ADMIN' | 'MEMBER') {
+        if (!adminId || !chatId || !targetUserId) throw new Error('Missing fields');
+        try {
+            const admin = await (prisma as any).chatParticipant.findUnique({
+                where: { chatId_userId: { chatId, userId: adminId } }
+            });
+            if (!admin || (admin.role !== 'ADMIN' && admin.role !== 'OWNER')) {
+                throw new Error('Unauthorized');
+            }
+            return await (prisma as any).chatParticipant.update({
+                where: { chatId_userId: { chatId, userId: targetUserId } },
+                data: { role: newRole }
+            });
+        } catch (error) {
+            console.error('[GroupService] updateMemberRole failed:', error);
+            throw error;
+        }
+    }
+
+    static async getFullGroupInfo(chatId: string) {
+        const chat = await (prisma as any).chat.findUnique({
+            where: { id: chatId },
+            include: {
+                participants: {
+                    include: {
+                        user: {
+                            select: { id: true, username: true, displayName: true, avatar: true, bio: true }
+                        }
+                    }
+                }
+            }
+        });
+        if (!chat) throw new Error('Group not found');
+
+        const messages = await (prisma as any).message.findMany({
+            where: { chatId },
+            select: { imageUrl: true, videoUrl: true, audioUrl: true, fileUrl: true, document: true }
+        });
+        
+        let images = 0, videos = 0, docs = 0;
+        for (const m of messages) {
+            if (m.imageUrl) images++;
+            if (m.videoUrl) videos++;
+            if (m.fileUrl || m.document) docs++;
+        }
+
+        const admins = chat.participants.filter((p: any) => p.role === 'ADMIN' || p.role === 'OWNER');
+
+        return {
+            ...chat,
+            settings: chat.settings || {},
+            mediaCount: { images, videos, docs, total: images + videos + docs },
+            adminCount: admins.length,
+            participantCount: chat.participants.length
+        };
+    }
+
+    static async leaveGroup(userId: string, chatId: string) {
+        await (prisma as any).chatParticipant.deleteMany({
+            where: { chatId, userId }
+        });
+        return { success: true };
+    }
+}
+
+
+=== FILE: ./src/modules/group/group.route.ts ===
+import { Router } from 'express';
+import { verifyToken } from '../../middleware/auth';
+import {
+    createGroup,
+    joinByToken,
+    updateSettings,
+    updateMemberRole,
+    getGroupInfo,
+    leaveGroup,
+    handleInvitation
+} from './group.controller';
+
+const router = Router();
+
+router.use(verifyToken);
+
+/**
+ * GROUP CREATION & MANAGEMENT ENDPOINTS
+ */
+
+// 1. CREATE GROUP
+router.post('/create', createGroup);
+
+// 2. JOIN VIA LINK
+router.post('/join/:token', joinByToken);
+
+// 3. UPDATE SETTINGS (RBAC Enforced)
+router.patch('/:id/settings', updateSettings);
+
+// 4. MANAGE ROLES (Promote/Demote)
+router.post('/:id/member/:targetId/role', updateMemberRole);
+
+// 5. GET FULL GROUP INFO
+router.get('/:id/info', getGroupInfo);
+
+// 6. LEAVE GROUP
+router.post('/:id/leave', leaveGroup);
+
+// 7. HANDLE GROUP INVITATION (Accept / Decline)
+router.post('/:chatId/invitation/handle', handleInvitation);
+
+export default router;
+
+
+=== FILE: ./src/modules/chat/chat.schema.ts ===
+import { z } from 'zod';
+
+
+=== FILE: ./src/modules/chat/chat.controller.ts ===
+import { Request, Response, NextFunction } from 'express';
+import { catchAsync } from '../../core/utils/catchAsync';
+import { AppError } from '../../core/exceptions/AppError';
+import { ChatService } from './chat.service';
+
+export const getChats = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const chats = await ChatService.getChats(req.user.id);
+    res.json(chats);
+});
+
+export const getMessages = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const messages = await ChatService.getMessages(req.params.chatId, req.user.id);
+    res.json(messages);
+});
+
+export const sendMessage = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const message = await ChatService.sendMessage(
+        req.user.id, 
+        req.params.chatId, 
+        req.body.content, 
+        req.body.replyToId
+    );
+    res.json(message);
+});
+
+export const deleteMessage = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    await ChatService.deleteMessage(req.user.id, req.params.messageId);
+    res.json({ message: 'Message deleted successfully' });
+});
+
+export const updateReactions = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const result = await ChatService.updateReactions(req.params.messageId, req.user.id, req.body.emoji);
+    res.json({ success: true, ...result });
+});
+
+export const toggleMuteChat = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const result = await ChatService.toggleMuteChat(req.user.id, req.params.chatId);
+    res.json(result);
+});
+
+export const updateChatSettings = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const chat = await ChatService.updateChatSettings(
+        req.params.chatId, 
+        req.body.settings, 
+        req.body.selfDestructTimer
+    );
+    res.json({ success: true, chat });
+});
+
+export const getChatMedia = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const media = await ChatService.getChatMedia(req.params.chatId);
+    res.json(media);
+});
+
+export const requestSecretChat = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    if (!req.body.targetUserId) return next(new AppError('targetUserId required', 400));
+    const result = await ChatService.requestSecretChat(req.user.id, req.body.targetUserId);
+    res.json({ success: true, ...result });
+});
+
+export const handleSecretChat = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const { chatId, action } = req.body;
+    if (!chatId || !action) return next(new AppError('chatId and action required', 400));
+    
+    const result = await ChatService.handleSecretChat(req.user.id, chatId, action);
+    res.json({ success: true, status: result.status });
+});
+
+export const getFolders = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const folders = await ChatService.getFolders(req.user.id);
+    res.json(folders);
+});
+
+export const createFolder = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    if (!req.body.name) return next(new AppError('Folder name required', 400));
+    const folder = await ChatService.createFolder(req.user.id, req.body.name, req.body.chatIds);
+    res.json(folder);
+});
+
+export const updateFolder = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const folder = await ChatService.updateFolder(
+        req.user.id, 
+        req.params.id, 
+        req.body.name, 
+        req.body.chatIds
+    );
+    res.json(folder);
+});
+
+export const deleteFolder = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    await ChatService.deleteFolder(req.user.id, req.params.id);
+    res.json({ success: true, message: 'Folder deleted' });
+});
+
+export const archiveChat = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const result = await ChatService.archiveChat(req.user.id, req.params.chatId);
+    res.json({ success: true, isArchived: result.isArchived });
+});
+
+export const pinChat = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const result = await ChatService.pinChat(req.user.id, req.params.chatId);
+    res.json({ success: true, isPinned: result.isPinned });
+});
+
+export const pinMessage = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const result = await ChatService.pinMessage(req.params.chatId, req.params.messageId);
+    res.json({ success: true, isPinned: result.isPinned });
+});
+
+
+=== FILE: ./src/modules/chat/chat.route.ts ===
+import { Router } from 'express';
+import { verifyToken } from '../../middleware/auth';
+import {
+    getChats,
+    getMessages,
+    sendMessage,
+    deleteMessage,
+    updateReactions,
+    toggleMuteChat,
+    updateChatSettings,
+    getChatMedia,
+    requestSecretChat,
+    handleSecretChat,
+    getFolders,
+    createFolder,
+    updateFolder,
+    deleteFolder,
+    archiveChat,
+    pinChat,
+    pinMessage
+} from './chat.controller';
+
+const router = Router();
+
+router.use(verifyToken);
+router.use((req: any, res: any, next: any) => {
+    if (!req.user?.id) return res.status(403).json({ error: 'Profile setup incomplete' });
+    next();
+});
+
+// Folders (Specific routes first)
+router.get('/folders', getFolders);
+router.post('/folders', createFolder);
+router.put('/folders/:id', updateFolder);
+router.delete('/folders/:id', deleteFolder);
+
+// Secret Chats
+router.post('/secret/request', requestSecretChat);
+router.post('/secret/handle', handleSecretChat);
+
+// Chat list
+router.get('/', getChats);
+
+// Messages
+router.get('/:chatId/messages', getMessages);
+router.post('/:chatId/messages', sendMessage);
+router.delete('/:chatId/messages/:messageId', deleteMessage);
+router.post('/:chatId/messages/:messageId/reactions', updateReactions);
+router.post('/:chatId/messages/:messageId/pin', pinMessage);
+
+// Chat Actions
+router.post('/:chatId/mute', toggleMuteChat);
+router.patch('/:chatId/settings', updateChatSettings);
+router.get('/:chatId/media', getChatMedia);
+router.post('/:chatId/archive', archiveChat);
+router.post('/:chatId/pin', pinChat);
+
+export default router;
+
+
+=== FILE: ./src/modules/chat/chat.service.ts ===
+import prisma from '../../config/prisma';
+import { SocketService } from '../../services/SocketService';
+import { AppError } from '../../core/exceptions/AppError';
+
+export class ChatService {
+    static async getChats(userId: string) {
+        const chats = await (prisma as any).chat.findMany({
+            where: {
+                participants: { some: { userId } }
+            },
+            select: {
+                id: true, name: true, isGroup: true, isSecret: true,
+                avatar: true, deletedFor: true, updatedAt: true,
+                selfDestructTimer: true,
+                participants: {
+                    select: {
+                        userId: true, role: true, status: true,
+                        isArchived: true, isPinned: true,
+                        user: {
+                            select: { id: true, username: true, displayName: true, avatar: true }
+                        }
+                    }
+                },
+                messages: {
+                    orderBy: { createdAt: 'desc' },
+                    take: 1,
+                    select: { text: true, createdAt: true }
+                }
+            },
+            orderBy: { updatedAt: 'desc' }
+        });
+
+        const unreadCounts = await (prisma as any).message.groupBy({
+            by: ['chatId'],
+            where: {
+                chatId: { in: chats.map((c: any) => c.id) },
+                isRead: false,
+                senderId: { not: userId }
+            },
+            _count: { id: true }
+        });
+
+        const countsMap = new Map(unreadCounts.map((item: any) => [item.chatId, item._count.id]));
+
+        const mutedChats = await (prisma as any).mutedChat.findMany({
+            where: { userId, chatId: { in: chats.map((c: any) => c.id) } },
+            select: { chatId: true }
+        });
+        const mutedSet = new Set(mutedChats.map((m: any) => m.chatId));
+
+        const activeChats = chats.filter((c: any) => {
+            const deletedFor = c.deletedFor as any || [];
+            return !deletedFor.includes(userId);
+        });
+
+        return activeChats.map((c: any) => {
+            const myParticipant = c.participants.find((p: any) => p.userId === userId);
+            const otherParticipant = c.participants.find((p: any) => p.userId !== userId);
+            return {
+                id: c.id,
+                name: c.name || otherParticipant?.user.displayName || otherParticipant?.user.username || 'User',
+                avatar: c.isGroup ? c.avatar : otherParticipant?.user.avatar,
+                lastMessage: c.messages[0]?.text || '',
+                lastMessageTime: c.messages[0]?.createdAt 
+                    ? new Date(c.messages[0].createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    : 'Recent',
+                isGroup: c.isGroup,
+                isSecret: c.isSecret,
+                unreadCount: countsMap.get(c.id) || 0,
+                selfDestructTimer: c.selfDestructTimer,
+                participantIds: c.participants.map((p: any) => p.userId),
+                isMuted: mutedSet.has(c.id),
+                myStatus: myParticipant?.status || 'JOINED',
+                myRole: myParticipant?.role || 'MEMBER',
+                isArchived: myParticipant?.isArchived || false,
+                isPinned: myParticipant?.isPinned || false
+            };
+        });
+    }
+
+    static async getMessages(chatId: string, userId: string) {
+        const messages = await (prisma as any).message.findMany({
+            where: { chatId },
+            orderBy: { createdAt: 'asc' },
+            take: 100,
+            select: {
+                id: true, chatId: true, senderId: true, text: true, 
+                imageUrl: true, videoUrl: true, fileUrl: true, 
+                audioUrl: true, document: true, location: true,
+                contact: true, payment: true, schedule: true,
+                wallet: true, replyToId: true, status: true,
+                isEdited: true, isRead: true, isPinned: true, reactions: true,
+                deletedFor: true, createdAt: true
+            }
+        });
+        
+        return messages
+            .filter((m: any) => {
+                const deletedFor = m.deletedFor as any || [];
+                return !deletedFor.includes(userId);
+            })
+            .map((m: any) => ({
+                ...m,
+                timestamp: new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            }));
+    }
+
+    static async sendMessage(userId: string, chatId: string, content: string, replyToId?: string) {
+        const message = await (prisma as any).message.create({
+            data: {
+                text: content,
+                senderId: userId,
+                chatId: chatId,
+                replyToId: replyToId
+            }
+        });
+        
+        return {
+            ...message,
+            timestamp: new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+    }
+
+    static async deleteMessage(userId: string, messageId: string) {
+        const message = await (prisma as any).message.findUnique({
+            where: { id: messageId }
+        });
+        
+        if (!message) throw new AppError('Message not found', 404);
+        
+        const deletedFor = message.deletedFor || [];
+        if (!deletedFor.includes(userId)) {
+            deletedFor.push(userId);
+            await (prisma as any).message.update({
+                where: { id: messageId },
+                data: { deletedFor }
+            });
+        }
+        return { success: true };
+    }
+
+    static async updateReactions(messageId: string, userId: string, emoji: string) {
+        const existing = await (prisma as any).messageReaction.findUnique({
+            where: { messageId_userId_emoji: { messageId, userId, emoji } }
+        });
+        if (existing) {
+            await (prisma as any).messageReaction.delete({ where: { id: existing.id } });
+            return { added: false, emoji };
+        } else {
+            await (prisma as any).messageReaction.create({
+                data: { messageId, userId, emoji }
+            });
+            return { added: true, emoji };
+        }
+    }
+
+    static async toggleMuteChat(userId: string, chatId: string) {
+        const existing = await (prisma as any).mutedChat.findUnique({
+            where: { userId_chatId: { userId, chatId } }
+        });
+        if (existing) {
+            await (prisma as any).mutedChat.delete({ where: { id: existing.id } });
+            return { muted: false };
+        } else {
+            await (prisma as any).mutedChat.create({
+                data: { userId, chatId }
+            });
+            return { muted: true };
+        }
+    }
+
+    static async updateChatSettings(chatId: string, settings: any, selfDestructTimer?: number) {
+        const chat = await (prisma as any).chat.findUnique({ 
+            where: { id: chatId },
+            include: { participants: true }
+        });
+        if (!chat) throw new AppError('Chat not found', 404);
+        
+        const updatedChat = await (prisma as any).chat.update({
+            where: { id: chatId },
+            data: {
+                ...(settings !== undefined && { settings: { ...(chat.settings as object || {}), ...settings } }),
+                ...(selfDestructTimer !== undefined && { selfDestructTimer })
+            }
+        });
+
+        chat.participants.forEach((p: any) => {
+            SocketService.emitToUser(p.userId, 'chat_updated', updatedChat);
+        });
+
+        return updatedChat;
+    }
+
+    static async getChatMedia(chatId: string) {
+        const messages = await (prisma as any).message.findMany({
+            where: { chatId },
+            select: { imageUrl: true, videoUrl: true, audioUrl: true, fileUrl: true, document: true }
+        });
+        
+        let images = 0, videos = 0, docs = 0, audio = 0;
+        for (const m of messages) {
+            if (m.imageUrl) images++;
+            if (m.videoUrl) videos++;
+            if (m.audioUrl) audio++;
+            if (m.fileUrl || m.document) docs++;
+        }
+        
+        return { images, videos, docs, audio, total: images + videos + docs + audio };
+    }
+
+    static async requestSecretChat(userId: string, targetUserId: string) {
+        const existingSecret = await (prisma as any).chat.findFirst({
+            where: {
+                isSecret: true,
+                isGroup: false,
+                AND: [
+                    { participants: { some: { userId: userId } } },
+                    { participants: { some: { userId: targetUserId } } }
+                ]
+            },
+            include: {
+                participants: {
+                    include: {
+                        user: { select: { id: true, username: true, displayName: true, avatar: true } }
+                    }
+                }
+            }
+        });
+
+        if (existingSecret) {
+            return {
+                chat: {
+                    id: existingSecret.id,
+                    name: existingSecret.name || existingSecret.participants.find((p: any) => p.userId !== userId)?.user.displayName || 'Secret Chat',
+                    avatar: existingSecret.participants.find((p: any) => p.userId !== userId)?.user.avatar,
+                    lastMessage: '',
+                    lastMessageTime: 'Recent',
+                    isGroup: false,
+                    isSecret: true,
+                    unreadCount: 0,
+                    selfDestructTimer: existingSecret.selfDestructTimer,
+                    participantIds: existingSecret.participants.map((p: any) => p.userId),
+                    isMuted: false,
+                    myStatus: existingSecret.participants.find((p: any) => p.userId === userId)?.status || 'JOINED',
+                    myRole: existingSecret.participants.find((p: any) => p.userId === userId)?.role || 'MEMBER'
+                },
+                alreadyExists: true
+            };
+        }
+
+        const chat = await (prisma as any).chat.create({
+            data: {
+                isSecret: true,
+                isGroup: false,
+                settings: { secure: true },
+                participants: {
+                    create: [
+                        { userId: userId, role: 'MEMBER', status: 'JOINED' },
+                        { userId: targetUserId, role: 'MEMBER', status: 'INVITED' }
+                    ]
+                }
+            },
+            include: {
+                participants: {
+                    include: {
+                        user: { select: { id: true, username: true, displayName: true, avatar: true } }
+                    }
+                }
+            }
+        });
+
+        return {
+            chat: {
+                id: chat.id,
+                name: chat.name || chat.participants.find((p: any) => p.userId !== userId)?.user.displayName || 'Secret Chat',
+                avatar: chat.participants.find((p: any) => p.userId !== userId)?.user.avatar,
+                lastMessage: '',
+                lastMessageTime: 'Recent',
+                isGroup: false,
+                isSecret: true,
+                unreadCount: 0,
+                selfDestructTimer: chat.selfDestructTimer,
+                participantIds: chat.participants.map((p: any) => p.userId),
+                isMuted: false,
+                myStatus: 'JOINED',
+                myRole: 'MEMBER'
+            }
+        };
+    }
+
+    static async handleSecretChat(userId: string, chatId: string, action: string) {
+        const participant = await (prisma as any).chatParticipant.findFirst({
+            where: { chatId, userId }
+        });
+
+        if (!participant) throw new AppError('Secret chat invitation not found', 404);
+
+        if (action === 'accept') {
+            await (prisma as any).chatParticipant.update({
+                where: { id: participant.id },
+                data: { status: 'JOINED' }
+            });
+            return { status: 'JOINED' };
+        } else {
+            await (prisma as any).chat.delete({
+                where: { id: chatId }
+            });
+            return { status: 'DECLINED' };
+        }
+    }
+
+    static async getFolders(userId: string) {
+        return await (prisma as any).chatFolder.findMany({
+            where: { userId },
+            orderBy: { createdAt: 'asc' }
+        });
+    }
+
+    static async createFolder(userId: string, name: string, chatIds: string[]) {
+        return await (prisma as any).chatFolder.create({
+            data: { userId, name, chatIds: chatIds || [] }
+        });
+    }
+
+    static async updateFolder(userId: string, folderId: string, name?: string, chatIds?: string[]) {
+        const folder = await (prisma as any).chatFolder.findFirst({
+            where: { id: folderId, userId }
+        });
+        if (!folder) throw new AppError('Folder not found', 404);
+        
+        return await (prisma as any).chatFolder.update({
+            where: { id: folderId },
+            data: { 
+                name: name !== undefined ? name : folder.name, 
+                chatIds: chatIds !== undefined ? chatIds : folder.chatIds 
+            }
+        });
+    }
+
+    static async deleteFolder(userId: string, folderId: string) {
+        await (prisma as any).chatFolder.deleteMany({
+            where: { id: folderId, userId }
+        });
+        return { success: true };
+    }
+
+    static async archiveChat(userId: string, chatId: string) {
+        const participant = await (prisma as any).chatParticipant.findFirst({
+            where: { chatId, userId }
+        });
+        if (!participant) throw new AppError('Chat not found', 404);
+        
+        const updated = await (prisma as any).chatParticipant.update({
+            where: { id: participant.id },
+            data: { isArchived: !participant.isArchived }
+        });
+        return { isArchived: updated.isArchived };
+    }
+
+    static async pinChat(userId: string, chatId: string) {
+        const participant = await (prisma as any).chatParticipant.findFirst({
+            where: { chatId, userId }
+        });
+        if (!participant) throw new AppError('Chat not found', 404);
+        
+        const updated = await (prisma as any).chatParticipant.update({
+            where: { id: participant.id },
+            data: { isPinned: !participant.isPinned }
+        });
+        return { isPinned: updated.isPinned };
+    }
+
+    static async pinMessage(chatId: string, messageId: string) {
+        const message = await (prisma as any).message.findUnique({
+            where: { id: messageId }
+        });
+        if (!message) throw new AppError('Message not found', 404);
+        
+        const updated = await (prisma as any).message.update({
+            where: { id: messageId },
+            data: { isPinned: !message.isPinned }
+        });
+        
+        (SocketService as any).io.to(chatId).emit('message_pinned', { chatId, messageId, isPinned: updated.isPinned });
+        
+        return { isPinned: updated.isPinned };
+    }
+}
+
+
+=== FILE: ./src/modules/upload/upload.controller.ts ===
+import { Request, Response, NextFunction } from 'express';
+import { catchAsync } from '../../core/utils/catchAsync';
+import { AppError } from '../../core/exceptions/AppError';
+import { UploadService } from './upload.service';
+
+export const uploadFile = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    if (!req.file) {
+        return next(new AppError('No file uploaded', 400));
+    }
+
+    const result = await UploadService.uploadFile(req.file);
+    res.json({ success: true, ...result });
+});
+
+
+=== FILE: ./src/modules/upload/upload.schema.ts ===
+import { z } from 'zod';
+
+
+=== FILE: ./src/modules/upload/upload.service.ts ===
+import { put } from '@vercel/blob';
+import sharp from 'sharp';
+
+export class UploadService {
+    static async uploadFile(file: any) {
+        let fileBuffer = file.buffer;
+        let fileName = file.originalname;
+
+        // Optimize if it's an image
+        if (file.mimetype.startsWith('image/')) {
+            try {
+                const optimizedBuffer = await sharp(file.buffer)
+                    .rotate() // Auto-rotate based on EXIF
+                    .resize(1200, 1200, { fit: 'inside', withoutEnlargement: true }) // Limit size for feed
+                    .jpeg({ quality: 80, mozjpeg: true }) // High quality compression
+                    .toBuffer();
+                
+                fileBuffer = optimizedBuffer;
+                // Rename to .jpg for consistency since we converted
+                fileName = fileName.replace(/\.[^/.]+$/, "") + ".jpg";
+            } catch (err) {
+                console.error('[UploadService] Sharp optimization failed, using original:', err);
+            }
+        }
+
+        const token = process.env.BLOB_READ_WRITE_TOKEN;
+        if (!token) {
+            throw new Error('Server misconfiguration: missing blob token');
+        }
+
+        const blob = await put(fileName, fileBuffer, {
+            access: 'public',
+            addRandomSuffix: true,
+            token
+        });
+
+        return {
+            url: blob.url,
+            filename: blob.pathname,
+            mimetype: file.mimetype
+        };
+    }
+}
+
+
+=== FILE: ./src/modules/upload/upload.route.ts ===
+import { Router } from 'express';
+import multer from 'multer';
+import { verifyToken } from '../../middleware/auth';
+import { uploadFile } from './upload.controller';
+
+const router = Router();
+
+const storage = multer.memoryStorage();
+const upload = multer({ 
+    storage,
+    limits: { fileSize: 50 * 1024 * 1024 } // 50MB
+});
+
+router.post('/', verifyToken, upload.single('file'), uploadFile);
+
+export default router;
+
+
+=== FILE: ./src/modules/auth/auth.route.ts ===
+import { Router } from 'express';
+import { verifyToken } from '../../middleware/auth';
+import { login, register, getProfile, sendOtp, verifyOtp, syncToken } from './auth.controller';
+
+const router = Router();
+
+router.post('/login', verifyToken, login);
+router.post('/register', verifyToken, register);
+router.post('/sync', verifyToken, require('./auth.controller').sync);
+router.post('/sync-token', verifyToken, syncToken);
+router.get('/profile', verifyToken, getProfile);
+router.post('/send-otp', sendOtp);
+router.post('/verify-otp', verifyOtp);
+
+
+router.post('/logout', verifyToken, async (req: any, res: any) => {
+    try {
+        const userId = req.user.uid;
+        // In verifyToken middleware we already extracted the token
+        // Let's get it again or pass it through req
+        const token = req.cookies.token || (req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.split(' ')[1] : null);
+        
+        if (token) {
+            const { AuthService } = require('../services/AuthService');
+            await AuthService.logout(userId, token);
+        }
+
+        res.clearCookie('token', {
+            httpOnly: true,
+            secure: true,
+            sameSite: 'none'
+        });
+        res.json({ success: true, message: 'Logged out successfully' });
+    } catch (e) {
+        console.error('[AuthRoute] Logout failed:', e);
+        res.status(500).json({ error: 'Logout process failed on server' });
+    }
+});
+
+export default router;
+
+
+
+=== FILE: ./src/modules/auth/auth.controller.ts ===
+import { Request, Response, NextFunction } from 'express';
+import prisma from '../../config/prisma';
+import { redis } from '../../config/redis';
+import jwt from 'jsonwebtoken';
+import { v4 as uuidv4 } from 'uuid';
+import { catchAsync } from '../../core/utils/catchAsync';
+import { AppError } from '../../core/exceptions/AppError';
+
+const JWT_SECRET = process.env.JWT_SECRET || '07f4aa247bb2789d402af105e7fc416e57aebb266facfb2c30ad2843a86e4e61';
+
+export const sendOtp = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const { identifier } = req.body;
+    if (!identifier) return next(new AppError('Identifier is required', 400));
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    await redis.set(`otp:${identifier}`, otp, 'EX', 300); // 5 min expiry
+    
+    console.log(`[Auth] Generated OTP for ${identifier}: ${otp}`);
+
+    const isEmail = identifier.includes('@');
+    const user = await (prisma as any).user.findFirst({
+        where: isEmail ? { email: identifier } : { phone: identifier }
+    });
+
+    res.status(200).json({ 
+        message: 'OTP sent successfully', 
+        otp,
+        isExisting: !!user
+    });
+});
+
+export const verifyOtp = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const { identifier, otp } = req.body;
+    if (!identifier || !otp) return next(new AppError('Missing required fields', 400));
+
+    const storedOtp = await redis.get(`otp:${identifier}`);
+    if (!storedOtp || storedOtp !== otp) {
+        return next(new AppError('Invalid or expired OTP', 400));
+    }
+
+    await redis.del(`otp:${identifier}`);
+
+    const isEmail = identifier.includes('@');
+    let user = await (prisma as any).user.findFirst({
+        where: isEmail ? { email: identifier } : { phone: identifier }
+    });
+
+    const uid = user ? user.firebaseUid : `native-${uuidv4()}`;
+
+    const token = jwt.sign(
+        { 
+            id: user ? user.id : null, 
+            uid,
+            email: isEmail ? identifier : (user?.email || null),
+            phone_number: !isEmail ? identifier : (user?.phone || null)
+        },
+        JWT_SECRET,
+        { expiresIn: '30d' }
+    );
+    
+    if (user) {
+        await (prisma as any).session.upsert({
+            where: { token },
+            update: { expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) },
+            create: {
+                userId: user.id,
+                token,
+                device: req.headers['user-agent'] || 'unknown',
+                expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+            }
+        });
+    }
+    
+    res.cookie('token', token, {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'none',
+        maxAge: 30 * 24 * 60 * 60 * 1000
+    });
+
+    res.status(200).json({ token, isExisting: !!user });
+});
+
+export const syncToken = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const decodedToken = (req as any).user;
+    if (!decodedToken || !decodedToken.id) {
+        return next(new AppError('Unauthorized: Invalid token', 401));
+    }
+
+    const user = await (prisma as any).user.findFirst({
+        where: { id: decodedToken.id },
+        include: { followers: true, following: true }
+    });
+
+    if (!user) return next(new AppError('User not found', 404));
+
+    const newToken = jwt.sign(
+        { id: user.id, uid: user.firebaseUid, email: user.email, phone_number: user.phone },
+        JWT_SECRET,
+        { expiresIn: '30d' }
+    );
+
+    res.cookie('token', newToken, {
+        httpOnly: true, secure: true, sameSite: 'none', maxAge: 30 * 24 * 60 * 60 * 1000
+    });
+
+    await (prisma as any).session.upsert({
+        where: { token: newToken },
+        update: { expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) },
+        create: {
+            userId: user.id, token: newToken, device: req.headers['user-agent'] || 'unknown',
+            expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+        }
+    });
+
+    res.status(200).json({ token: newToken, user });
+});
+
+export const register = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const decodedToken = (req as any).user;
+    if (!decodedToken) return next(new AppError('Unauthorized: Decoded token missing', 401));
+
+    if (decodedToken.id) {
+        return next(new AppError('User is already registered. Please login instead.', 400));
+    }
+
+    const { uid, email, phone_number, picture } = decodedToken;
+    const { displayName: inputName, dob, avatar: inputAvatar, username: inputUsername } = req.body;
+
+    if (!inputName || !dob) {
+        return res.status(200).json({ 
+            message: 'Registration required', 
+            status: 'needs_profile',
+            user: { email: email || null, phone: phone_number || null, avatar: picture || null } 
+        });
+    }
+
+    // Check for identifier conflict
+    const existingUser = await (prisma as any).user.findFirst({
+        where: {
+            OR: [
+                ...(email ? [{ email }] : []),
+                ...(phone_number ? [{ phone: phone_number }] : []),
+                ...(req.body.phone && req.body.phone !== phone_number ? [{ phone: req.body.phone }] : [])
+            ].filter(Boolean)
+        }
+    });
+
+    if (existingUser) {
+        return next(new AppError('Identifier already associated with another account', 409));
+    }
+
+    // Generate unique username
+    let generatedUsername = inputUsername;
+    if (!generatedUsername) {
+        const base = (email?.split('@')[0] || inputName.toLowerCase().replace(/\s+/g, '_')).substring(0, 15);
+        generatedUsername = `${base}_${Math.floor(1000 + Math.random() * 9000)}`;
+    }
+
+    // Check if username taken
+    const usernameTaken = await (prisma as any).user.findFirst({ where: { username: generatedUsername } });
+    if (usernameTaken) return next(new AppError('Username is already taken', 409));
+
+    const userData: any = {
+        username: generatedUsername,
+        email: email || null,
+        phone: phone_number || req.body.phone || null,
+        displayName: inputName,
+        avatar: inputAvatar || picture || `https://api.dicebear.com/7.x/initials/svg?seed=${inputName}`,
+        largeAvatar: inputAvatar || picture || `https://api.dicebear.com/7.x/initials/svg?seed=${inputName}`,
+        dob: new Date(dob),
+        lastLogin: new Date(),
+        firebaseUid: uid,
+        settings: {}
+    };
+
+    const user = await (prisma as any).user.create({
+        data: userData,
+        include: { followers: true, following: true }
+    });
+
+    const newToken = jwt.sign(
+        { id: user.id, uid: user.firebaseUid, email: user.email, phone_number: user.phone },
+        JWT_SECRET,
+        { expiresIn: '30d' }
+    );
+
+    await (prisma as any).session.create({
+        data: {
+            userId: user.id,
+            token: newToken,
+            device: req.headers['user-agent'] || 'unknown',
+            expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+        }
+    });
+
+    res.cookie('token', newToken, {
+        httpOnly: true, secure: true, sameSite: 'none', maxAge: 30 * 24 * 60 * 60 * 1000
+    });
+
+    res.status(201).json({ message: 'User registered successfully', user, token: newToken });
+});
+
+export const login = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const decodedToken = (req as any).user;
+    if (!decodedToken) return next(new AppError('Unauthorized: Decoded token missing', 401));
+
+    if (!decodedToken.id) {
+        return next(new AppError('User not registered. Please register first.', 404));
+    }
+
+    const { id } = decodedToken;
+    const { displayName: inputName, dob, avatar: inputAvatar, username: inputUsername } = req.body;
+
+    let user = await (prisma as any).user.findUnique({ where: { id } });
+    if (!user) return next(new AppError('User not found', 404));
+
+    const updateData: any = { lastLogin: new Date() };
+
+    if (inputName) updateData.displayName = inputName;
+    if (dob) updateData.dob = new Date(dob);
+    if (inputUsername && inputUsername !== user.username) {
+        const taken = await (prisma as any).user.findFirst({ where: { username: inputUsername } });
+        if (taken) return next(new AppError('Username already taken', 409));
+        updateData.username = inputUsername;
+    }
+    if (inputAvatar) {
+        updateData.avatar = inputAvatar;
+        updateData.largeAvatar = inputAvatar;
+    }
+
+    const updatedUser = await (prisma as any).user.update({
+        where: { id: user.id },
+        data: updateData,
+        include: { followers: true, following: true }
+    });
+
+    const newToken = jwt.sign(
+        { id: updatedUser.id, uid: updatedUser.firebaseUid, email: updatedUser.email, phone_number: updatedUser.phone },
+        JWT_SECRET,
+        { expiresIn: '30d' }
+    );
+
+    await (prisma as any).session.upsert({
+        where: { token: newToken },
+        update: {
+            device: req.headers['user-agent'] || 'unknown',
+            expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+        },
+        create: {
+            userId: updatedUser.id,
+            token: newToken,
+            device: req.headers['user-agent'] || 'unknown',
+            expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+        }
+    });
+
+    res.cookie('token', newToken, {
+        httpOnly: true, secure: true, sameSite: 'none', maxAge: 30 * 24 * 60 * 60 * 1000
+    });
+
+    res.status(200).json({ message: 'Login successful', user: updatedUser, token: newToken });
+});
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// UNIFIED SYNC (used by frontend webapp + Kotlin mobile)
+// Routes to login if user exists, register if new
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+export const sync = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const decodedToken = (req as any).user;
+    if (!decodedToken) return next(new AppError('Unauthorized: Decoded token missing', 401));
+
+    if (decodedToken.id) {
+        // User exists in DB → delegate to login flow
+        return login(req, res, next);
+    } else {
+        // New user → delegate to register flow
+        return register(req, res, next);
+    }
+});
+
+export const getProfile = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const decodedToken = (req as any).user;
+    if (!decodedToken || !decodedToken.id) return next(new AppError('Unauthorized', 401));
+
+    const user = await (prisma as any).user.findUnique({
+        where: { id: decodedToken.id },
+        select: { 
+            id: true, username: true, displayName: true,
+            avatar: true, largeAvatar: true, bio: true, 
+            email: true, phone: true, dob: true,
+            isPrivate: true, searchByPhone: true,
+            showPhoneTo: true, lastLogin: true,
+            _count: { select: { followers: true, following: true } },
+            followers: { select: { followerId: true } },
+            following: { select: { followingId: true } }
+        },
+    });
+
+    if (!user) return next(new AppError('User profile not found', 404));
+
+    res.status(200).json(user);
+});
+
+
+=== FILE: ./src/modules/auth/auth.schema.ts ===
+import { z } from 'zod';
+
+
+=== FILE: ./src/modules/auth/auth.service.ts ===
+import { redis, pubClient } from '../../config/redis';
+import jwt from 'jsonwebtoken';
+import prisma from '../../config/prisma';
+const JWT_SECRET = process.env.JWT_SECRET || '07f4aa247bb2789d402af105e7fc416e57aebb266facfb2c30ad2843a86e4e61';
+
+/**
+ * AuthService handles distributed token lifecycle and session invalidation.
+ * In a 100k+ system, we use a Redis Denylist to revoke stateless JWTs.
+ */
+export class AuthService {
+    private static REVOKE_PREFIX = 'revoked:token:';
+
+    /**
+     * Revoke a token globally. We store it in Redis until its natural expiry.
+     * This ensures the token cannot be used again on any node in the cluster.
+     */
+    static async logout(userId: string, token: string): Promise<void> {
+        try {
+            // 1. Decode token to find its expiry
+            const decoded: any = jwt.verify(token, JWT_SECRET);
+            const expiry = decoded.exp - Math.floor(Date.now() / 1000);
+
+            if (expiry > 0) {
+                // 2. Add to Redis Denylist with TTL
+                const key = `${this.REVOKE_PREFIX}${token}`;
+                await redis.set(key, '1', 'EX', expiry);
+            }
+
+            // 3. Remove session from DB
+            try {
+                await (prisma as any).session.deleteMany({ where: { token } });
+            } catch (dbErr) {
+                console.error('[AuthService] Session DB delete warning:', dbErr);
+            }
+
+            // 4. Global Kill Signal (Socket Disconnect)
+            // Broadcast to all backend servers via Redis Pub/Sub
+            await pubClient.publish('GLOBAL_LOGOUT', JSON.stringify({ userId, token }));
+            
+            console.log(`[Auth] Global Logout for User ${userId}`);
+        } catch (e) {
+            console.error('[AuthService] Logout Error:', e);
+        }
+    }
+
+    /**
+     * Check if a token has been revoked by any server in the cluster.
+     */
+    static async isRevoked(token: string): Promise<boolean> {
+        const key = `${this.REVOKE_PREFIX}${token}`;
+        const result = await redis.get(key);
+        return result === '1';
+    }
+}
+
+
+=== FILE: ./src/modules/social/social.route.ts ===
+import { Router } from 'express';
+import { verifyToken } from '../../middleware/auth';
+import {
+    globalSearch,
+    getFeed,
+    getActiveStories,
+    getUserPosts,
+    getUserStories,
+    createPost,
+    deletePost,
+    editPost,
+    createStory,
+    deleteStory,
+    toggleLike,
+    addComment,
+    toggleSavePost,
+    getSavedPosts,
+    viewStory,
+    getComments,
+    replyToComment,
+    getPostLikes,
+    getStoryViews,
+    toggleCommentLike
+} from './social.controller';
+
+const router = Router();
+
+router.use(verifyToken);
+router.use((req: any, res: any, next: any) => {
+    if (!req.user?.id) return res.status(403).json({ error: 'Profile setup incomplete' });
+    next();
+});
+
+/**
+ * SOCIAL & FEED ENDPOINTS
+ */
+
+// 1. GLOBAL SEARCH (Users + Posts)
+router.get('/search', globalSearch);
+
+// 2. GET SOCIAL FEED (Posts from following)
+router.get('/feed', getFeed);
+
+// 3. GET ACTIVE STORIES (24h)
+router.get('/stories', getActiveStories);
+
+// 3b. GET USER POSTS
+router.get('/user/:userId/posts', getUserPosts);
+
+// 3c. GET USER STORIES
+router.get('/user/:userId/stories', getUserStories);
+
+// 9. GET SAVED POSTS (before dynamic :postId routes)
+router.get('/saved-posts', getSavedPosts);
+
+/**
+ * CREATION & MODIFICATION ENDPOINTS
+ */
+
+// 4. CREATE POST
+router.post('/post', createPost);
+
+// 4b. DELETE POST
+router.delete('/post/:postId', deletePost);
+
+// 4c. EDIT POST
+router.patch('/post/:postId', editPost);
+
+// 5. CREATE STORY
+router.post('/story', createStory);
+
+// 5b. DELETE STORY
+router.delete('/story/:storyId', deleteStory);
+
+// 6. TOGGLE LIKE
+router.post('/post/:postId/like', toggleLike);
+
+// 7. ADD COMMENT
+router.post('/post/:postId/comment', addComment);
+
+// 7b. GET COMMENTS (with nested replies)
+router.get('/post/:postId/comments', getComments);
+
+// 7c. REPLY TO COMMENT
+router.post('/post/:postId/comment/:commentId/reply', replyToComment);
+
+// 7d. LIKE / UNLIKE A COMMENT
+router.post('/comment/:commentId/like', toggleCommentLike);
+
+// 8. GET POST LIKES LIST (who liked this post)
+router.get('/post/:postId/likes', getPostLikes);
+
+// 8b. SAVE POST
+router.post('/post/:postId/save', toggleSavePost);
+
+// 10. VIEW STORY
+router.post('/story/:storyId/view', viewStory);
+
+// 11. GET STORY VIEWS (who viewed this story)
+router.get('/story/:storyId/views', getStoryViews);
+
+export default router;
+
+=== FILE: ./src/modules/social/social.schema.ts ===
+import { z } from 'zod';
+
+
+=== FILE: ./src/modules/social/social.service.ts ===
+import prisma from '../../config/prisma';
+import { ContentService } from '../../services/ContentService';
+import { ActivityService } from '../../services/ActivityService';
+import { pubClient } from '../../config/redis';
+
+/**
+ * SocialService handles the core logical operations for the Social Feed,
+ * including Post creation, Feed retrieval, and Story management.
+ */
+export class SocialService {
+    
+    /**
+     * Create a new post with optional media.
+     * High-scale Ready: Uses specific selection on return.
+     */
+    static async createPost(userId: string, data: { content?: string, mediaUrl?: string, mediaType?: string }) {
+        if (!userId) throw new Error('User ID is required');
+        if (!data.content && !data.mediaUrl) throw new Error('Post must have content or media');
+
+        try {
+            const post = await (prisma as any).post.create({
+                data: {
+                    authorId: userId,
+                    content: data.content,
+                    mediaUrl: data.mediaUrl,
+                    mediaType: data.mediaType || 'text'
+                },
+                include: {
+                    author: {
+                        select: { id: true, username: true, displayName: true, avatar: true }
+                    }
+                }
+            });
+
+            // 🟢 DISTRIBUTED MENTION LOGIC (Run in background)
+            if (data.content) {
+                ContentService.handlePostMentions(userId, post.id, data.content).catch((e: any) => 
+                    console.error('[SocialService] Mention Error:', e)
+                );
+            }
+
+            // 🔵 REAL-TIME BROADCAST (Background)
+            const followers = await (prisma as any).userFollows.findMany({
+                where: { followingId: userId },
+                select: { followerId: true }
+            });
+            const followerIds = followers.map((f: any) => f.followerId);
+
+            if (followerIds.length > 0) {
+                pubClient.publish('SOCIAL_POST_UPDATE', JSON.stringify({ 
+                    userId, 
+                    postId: post.id, 
+                    post,
+                    followerIds 
+                }));
+            }
+
+            return post;
+        } catch (error) {
+            console.error('[SocialService] createPost failed:', error);
+            throw new Error('Could not create post');
+        }
+    }
+
+    static async deletePost(userId: string, postId: string) {
+        if (!userId || !postId) throw new Error('User ID and Post ID are required');
+        try {
+            const post = await (prisma as any).post.findUnique({ where: { id: postId } });
+            if (!post) throw new Error('Post not found');
+            if (post.authorId !== userId) throw new Error('Not authorized');
+
+            await (prisma as any).post.delete({ where: { id: postId } });
+            return { success: true };
+        } catch (error) {
+            console.error('[SocialService] deletePost failed:', error);
+            throw new Error('Deletion failed');
+        }
+    }
+
+    static async editPost(userId: string, postId: string, content: string) {
+        if (!userId || !postId) throw new Error('User ID and Post ID are required');
+        try {
+            const post = await (prisma as any).post.findUnique({ where: { id: postId } });
+            if (!post) throw new Error('Post not found');
+            if (post.authorId !== userId) throw new Error('Not authorized');
+
+            return await (prisma as any).post.update({
+                where: { id: postId },
+                data: { content },
+                include: {
+                    author: { select: { id: true, username: true, displayName: true, avatar: true } }
+                }
+            });
+        } catch (error) {
+            console.error('[SocialService] editPost failed:', error);
+            throw new Error('Edit failed');
+        }
+    }
+
+    static async getFeed(userId: string, cursor?: string, limit: number = 20) {
+        if (!userId) return [];
+        try {
+            const following = await (prisma as any).userFollows.findMany({
+                where: { followerId: userId },
+                select: { followingId: true }
+            });
+            const followingIds = following.map((f: any) => f.followingId);
+            const authors = [...followingIds, userId];
+
+            return await (prisma as any).post.findMany({
+                where: { authorId: { in: authors } },
+                take: limit,
+                ...(cursor && { skip: 1, cursor: { id: cursor } }),
+                orderBy: { createdAt: 'desc' },
+                include: {
+                    author: {
+                        select: { id: true, username: true, displayName: true, avatar: true }
+                    },
+                    likes: { select: { userId: true } },
+                    comments: {
+                        include: {
+                            user: { select: { id: true, username: true, displayName: true, avatar: true } }
+                        },
+                        orderBy: { createdAt: 'asc' },
+                        take: 5
+                    },
+                    _count: { select: { likes: true, comments: true } }
+                }
+            });
+        } catch (error) {
+            console.error('[SocialService] getFeed failed:', error);
+            return [];
+        }
+    }
+
+    static async createStory(userId: string, data: { mediaUrl: string, mediaType: string, content?: string }) {
+        if (!userId || !data.mediaUrl) throw new Error('User ID and Media URL are required');
+        
+        try {
+            const story = await (prisma as any).story.create({
+                data: {
+                    userId,
+                    mediaUrl: data.mediaUrl,
+                    mediaType: data.mediaType || 'image',
+                    content: data.content
+                },
+                include: {
+                    user: {
+                        select: { id: true, username: true, displayName: true, avatar: true }
+                    }
+                }
+            });
+
+            const followers = await (prisma as any).userFollows.findMany({
+                where: { followingId: userId },
+                select: { followerId: true }
+            });
+            const followerIds = followers.map((f: any) => f.followerId);
+
+            for (const followerId of followerIds) {
+                ActivityService.createActivity({
+                    userId: followerId,
+                    actorId: userId,
+                    type: 'STORY',
+                    storyId: story.id,
+                    text: 'published a new story'
+                }).catch(() => {});
+            }
+
+            pubClient.publish('SOCIAL_STORY_UPDATE', JSON.stringify({ 
+                userId, 
+                storyId: story.id, 
+                story,
+                followerIds 
+            }));
+
+            return story;
+        } catch (error) {
+            console.error('[SocialService] createStory failed:', error);
+            throw new Error('Story creation failed');
+        }
+    }
+
+    static async getActiveStories(userId: string) {
+        if (!userId) return [];
+        try {
+            const following = await (prisma as any).userFollows.findMany({
+                where: { followerId: userId },
+                select: { followingId: true }
+            });
+            const followingIds = following.map((f: any) => f.followingId);
+            const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+            return await (prisma as any).story.findMany({
+                where: {
+                    userId: { in: [...followingIds, userId] },
+                    createdAt: { gte: twentyFourHoursAgo }
+                },
+                orderBy: { createdAt: 'desc' },
+                include: {
+                    user: { select: { id: true, username: true, displayName: true, avatar: true } }
+                }
+            });
+        } catch (error) {
+            console.error('[SocialService] getActiveStories failed:', error);
+            return [];
+        }
+    }
+
+    static async deleteStory(userId: string, storyId: string) {
+        if (!userId || !storyId) throw new Error('User ID and Story ID are required');
+        
+        try {
+            const story = await (prisma as any).story.findUnique({
+                where: { id: storyId }
+            });
+
+            if (!story) throw new Error('Story not found');
+            if (story.userId !== userId) throw new Error('Not authorized to delete this story');
+
+            await (prisma as any).story.delete({
+                where: { id: storyId }
+            });
+
+            return { success: true };
+        } catch (error) {
+            console.error('[SocialService] deleteStory failed:', error);
+            throw new Error('Story deletion failed');
+        }
+    }
+
+    static async getUserPosts(userId: string) {
+        try {
+            return await (prisma as any).post.findMany({
+                where: { authorId: userId },
+                orderBy: { createdAt: 'desc' },
+                include: {
+                    author: { select: { id: true, username: true, displayName: true, avatar: true } },
+                    likes: { select: { userId: true } },
+                    comments: {
+                        include: { user: { select: { id: true, username: true, displayName: true, avatar: true } } },
+                        orderBy: { createdAt: 'asc' }, take: 5
+                    },
+                    _count: { select: { likes: true, comments: true } }
+                }
+            });
+        } catch (error) {
+            console.error('[SocialService] getUserPosts failed:', error);
+            return [];
+        }
+    }
+
+    static async getUserStories(userId: string) {
+        try {
+            const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+            return await (prisma as any).story.findMany({
+                where: { userId, createdAt: { gte: twentyFourHoursAgo } },
+                orderBy: { createdAt: 'desc' },
+                include: { user: { select: { id: true, username: true, displayName: true, avatar: true } } }
+            });
+        } catch (error) {
+            console.error('[SocialService] getUserStories failed:', error);
+            return [];
+        }
+    }
+
+    static async toggleLike(userId: string, postId: string) {
+        if (!userId || !postId) throw new Error('Missing User ID or Post ID');
+        try {
+            const existingLike = await (prisma as any).like.findUnique({
+                where: { userId_postId: { userId, postId } }
+            });
+
+            if (existingLike) {
+                await (prisma as any).like.delete({ where: { id: existingLike.id } });
+                return { liked: false };
+            } else {
+                const like = await (prisma as any).like.create({ data: { userId, postId } });
+                const post = await (prisma as any).post.findUnique({ where: { id: postId }, select: { authorId: true } });
+                
+                if (post && post.authorId !== userId) {
+                    ActivityService.createActivity({
+                        userId: post.authorId,
+                        actorId: userId,
+                        type: 'LIKE',
+                        postId,
+                        text: 'liked your post'
+                    }).catch(() => {});
+                }
+
+                // 🔵 Broadcast Like
+                pubClient.publish('SOCIAL_LIKE_UPDATE', JSON.stringify({ userId, postId, liked: true }));
+                
+                return { liked: true, like };
+            }
+        } catch (error) {
+            console.error('[SocialService] toggleLike failed:', error);
+            throw new Error('Like operation failed');
+        }
+    }
+
+    static async addComment(userId: string, postId: string, content: string) {
+        if (!userId || !postId || !content) throw new Error('Missing required fields for comment');
+        try {
+            const comment = await (prisma as any).comment.create({
+                data: { userId, postId, content },
+                include: {
+                    user: { select: { id: true, username: true, displayName: true, avatar: true } }
+                }
+            });
+
+            const post = await (prisma as any).post.findUnique({ where: { id: postId }, select: { authorId: true } });
+            if (post && post.authorId !== userId) {
+                ActivityService.createActivity({
+                    userId: post.authorId,
+                    actorId: userId,
+                    type: 'COMMENT',
+                    postId,
+                    text: 'commented: ' + (content.length > 20 ? content.substring(0, 17) + '...' : content)
+                }).catch(() => {});
+            }
+
+            // 🔵 Broadcast Comment
+            pubClient.publish('SOCIAL_COMMENT_UPDATE', JSON.stringify({ userId, postId, comment }));
+
+            return comment;
+        } catch (error) {
+            console.error('[SocialService] addComment failed:', error);
+            throw new Error('Comment failed');
+        }
+    }
+    static async getComments(postId: string, cursor?: string, limit: number = 20) {
+        return await (prisma as any).comment.findMany({
+            where: { postId, parentId: null },
+            take: limit,
+            ...(cursor && { skip: 1, cursor: { id: cursor } }),
+            orderBy: { createdAt: 'asc' },
+            include: {
+                user: { select: { id: true, username: true, displayName: true, avatar: true } },
+                replies: {
+                    include: {
+                        user: { select: { id: true, username: true, displayName: true, avatar: true } },
+                        _count: { select: { likes: true } }
+                    },
+                    orderBy: { createdAt: 'asc' },
+                    take: 3
+                },
+                _count: { select: { likes: true, replies: true } }
+            }
+        });
+    }
+
+    static async replyToComment(userId: string, postId: string, parentId: string, content: string) {
+        if (!content) throw new Error('Reply content is required');
+        const parent = await (prisma as any).comment.findUnique({ where: { id: parentId } });
+        if (!parent || parent.postId !== postId) throw new Error('Parent comment not found');
+
+        const reply = await (prisma as any).comment.create({
+            data: { userId, postId, parentId, content },
+            include: {
+                user: { select: { id: true, username: true, displayName: true, avatar: true } }
+            }
+        });
+
+        // Notify parent comment author
+        if (parent.userId !== userId) {
+            ActivityService.createActivity({
+                userId: parent.userId,
+                actorId: userId,
+                type: 'COMMENT',
+                postId,
+                text: 'replied: ' + (content.length > 20 ? content.substring(0, 17) + '...' : content)
+            }).catch(() => {});
+        }
+
+        return reply;
+    }
+
+    static async getPostLikes(postId: string, cursor?: string, limit: number = 30) {
+        const likes = await (prisma as any).like.findMany({
+            where: { postId },
+            take: limit,
+            ...(cursor && { skip: 1, cursor: { id: cursor } }),
+            orderBy: { createdAt: 'desc' },
+            include: {
+                user: { select: { id: true, username: true, displayName: true, avatar: true, bio: true } }
+            }
+        });
+        return likes.map((l: any) => l.user);
+    }
+
+    static async getStoryViews(userId: string, storyId: string) {
+        // Only the story owner can see views
+        const story = await (prisma as any).story.findUnique({ where: { id: storyId } });
+        if (!story) throw new Error('Story not found');
+        if (story.userId !== userId) throw new Error('Only the story owner can see views');
+
+        return await (prisma as any).storyView.findMany({
+            where: { storyId },
+            orderBy: { viewedAt: 'desc' },
+            include: {
+                user: { select: { id: true, username: true, displayName: true, avatar: true } }
+            }
+        });
+    }
+
+    static async toggleCommentLike(userId: string, commentId: string) {
+        if (!commentId) throw new Error('Comment ID is required');
+        const existing = await (prisma as any).commentLike.findUnique({
+            where: { userId_commentId: { userId, commentId } }
+        });
+        if (existing) {
+            await (prisma as any).commentLike.delete({ where: { id: existing.id } });
+            return { liked: false };
+        } else {
+            await (prisma as any).commentLike.create({ data: { userId, commentId } });
+            return { liked: true };
+        }
+    }
+
+    static async toggleSavePost(userId: string, postId: string) {
+        const existing = await (prisma as any).savedPost.findUnique({
+            where: { userId_postId: { userId, postId } }
+        });
+        if (existing) {
+            await (prisma as any).savedPost.delete({ where: { id: existing.id } });
+            return { saved: false };
+        } else {
+            await (prisma as any).savedPost.create({ data: { userId, postId } });
+            return { saved: true };
+        }
+    }
+
+    static async getSavedPosts(userId: string) {
+        const saved = await (prisma as any).savedPost.findMany({
+            where: { userId },
+            include: {
+                post: {
+                    include: { author: { select: { id: true, username: true, displayName: true, avatar: true } } }
+                }
+            },
+            orderBy: { savedAt: 'desc' }
+        });
+        return saved.map((s: any) => s.post);
+    }
+
+    static async viewStory(userId: string, storyId: string) {
+        const existing = await (prisma as any).storyView.findUnique({
+            where: { storyId_userId: { storyId, userId } }
+        });
+        if (!existing) {
+            await (prisma as any).storyView.create({ data: { storyId, userId } });
+        }
+        return { success: true };
+    }
+}
+
+
+=== FILE: ./src/modules/social/social.controller.ts ===
+import { Request, Response, NextFunction } from 'express';
+import { catchAsync } from '../../core/utils/catchAsync';
+import { SocialService } from './social.service';
+import { SearchService } from '../../services/SearchService';
+
+export const globalSearch = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const q = req.query.q as string;
+    if (!q) return res.json({ users: [], posts: [] });
+    const results = await SearchService.globalSearch(q, req.user.id);
+    res.json(results);
+});
+
+export const getFeed = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const cursor = req.query.cursor as string | undefined;
+    const feed = await SocialService.getFeed(req.user.id, cursor);
+    res.json(feed);
+});
+
+export const getActiveStories = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const stories = await SocialService.getActiveStories(req.user.id);
+    res.json(stories);
+});
+
+export const getUserPosts = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const posts = await SocialService.getUserPosts(req.params.userId);
+    res.json(posts);
+});
+
+export const getUserStories = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const stories = await SocialService.getUserStories(req.params.userId);
+    res.json(stories);
+});
+
+export const createPost = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const { content, mediaUrl, mediaType } = req.body;
+    const post = await SocialService.createPost(req.user.id, { content, mediaUrl, mediaType });
+    res.json({ success: true, post });
+});
+
+export const deletePost = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    await SocialService.deletePost(req.user.id, req.params.postId);
+    res.json({ success: true, message: 'Post deleted' });
+});
+
+export const editPost = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const post = await SocialService.editPost(req.user.id, req.params.postId, req.body.content);
+    res.json({ success: true, post });
+});
+
+export const createStory = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const { mediaUrl, mediaType, content } = req.body;
+    const story = await SocialService.createStory(req.user.id, { mediaUrl, mediaType, content });
+    res.json({ success: true, story });
+});
+
+export const deleteStory = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    await SocialService.deleteStory(req.user.id, req.params.storyId);
+    res.json({ success: true, message: 'Story deleted' });
+});
+
+export const toggleLike = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const result = await SocialService.toggleLike(req.user.id, req.params.postId);
+    res.json(result);
+});
+
+export const addComment = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const comment = await SocialService.addComment(req.user.id, req.params.postId, req.body.content);
+    res.json({ success: true, comment });
+});
+
+export const toggleSavePost = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const result = await SocialService.toggleSavePost(req.user.id, req.params.postId);
+    res.json(result);
+});
+
+export const getSavedPosts = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const saved = await SocialService.getSavedPosts(req.user.id);
+    res.json(saved);
+});
+
+export const viewStory = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    await SocialService.viewStory(req.user.id, req.params.storyId);
+    res.json({ success: true });
+});
+
+export const getComments = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const cursor = req.query.cursor as string | undefined;
+    const comments = await SocialService.getComments(req.params.postId, cursor);
+    res.json(comments);
+});
+
+export const replyToComment = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const reply = await SocialService.replyToComment(req.user.id, req.params.postId, req.params.commentId, req.body.content);
+    res.json({ success: true, reply });
+});
+
+export const getPostLikes = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const cursor = req.query.cursor as string | undefined;
+    const users = await SocialService.getPostLikes(req.params.postId, cursor);
+    res.json(users);
+});
+
+export const getStoryViews = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const views = await SocialService.getStoryViews(req.user.id, req.params.storyId);
+    res.json(views);
+});
+
+export const toggleCommentLike = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const result = await SocialService.toggleCommentLike(req.user.id, req.params.commentId);
+    res.json(result);
+});
+
+
+
+=== FILE: ./src/modules/admin/admin.route.ts ===
+import { Router } from 'express';
+import { verifyToken } from '../../middleware/auth';
+import prisma from '../../config/prisma';
+import {
+    setup,
+    login,
+    getStats,
+    getAnalytics,
+    getUsers,
+    deleteUser,
+    banUser,
+    getChats,
+    getChatMessages,
+    deleteChat,
+    deleteMessage,
+    getPosts,
+    deletePost,
+    getReports,
+    resolveReport,
+    resetDatabase,
+    cleanupSessions
+} from './admin.controller';
+
+const router = Router();
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// PUBLIC (No auth required)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+router.post('/setup', setup);
+router.post('/login', login);
+
+// TEMPORARY: Wipes existing admins so you can start fresh. 
+// Remove this after you use it in production!
+router.post('/force-reset-admin', async (req: any, res: any) => {
+    try {
+        const deleted = await (prisma as any).user.deleteMany({ where: { role: 'admin' } });
+        res.json({ message: 'Previous admins deleted successfully', count: deleted.count, nextStep: 'Call /api/admin/setup to create your new JWT Admin' });
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ADMIN MIDDLEWARE
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+const isAdmin = async (req: any, res: any, next: any) => {
+    try {
+        const userId = req.user?.id;
+        if (!userId) return res.status(401).json({ error: 'Not authenticated' });
+        const user = await (prisma as any).user.findUnique({ where: { id: userId } });
+        if (user?.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
+        next();
+    } catch (e) {
+        res.status(500).json({ error: 'Admin check failed' });
+    }
+};
+
+router.use(verifyToken);
+router.use((req: any, res: any, next: any) => {
+    if (!req.user?.id) return res.status(403).json({ error: 'Profile setup incomplete' });
+    next();
+});
+router.use(isAdmin);
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// DASHBOARD
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+router.get('/stats', getStats);
+router.get('/analytics', getAnalytics);
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// USERS MANAGEMENT
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+router.get('/users', getUsers);
+router.delete('/users/:userId', deleteUser);
+router.patch('/users/:userId/ban', banUser);
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// CHATS MANAGEMENT
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+router.get('/chats', getChats);
+router.get('/chats/:chatId/messages', getChatMessages);
+router.delete('/chats/:chatId', deleteChat);
+router.delete('/messages/:messageId', deleteMessage);
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// POSTS MANAGEMENT
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+router.get('/posts', getPosts);
+router.delete('/posts/:postId', deletePost);
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// REPORTS MANAGEMENT
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+router.get('/reports', getReports);
+router.patch('/reports/:reportId/resolve', resolveReport);
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// DATABASE CLEANUP
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+router.post('/reset-database', resetDatabase);
+router.post('/cleanup-sessions', cleanupSessions);
+
+export default router;
+
+
+=== FILE: ./src/modules/admin/admin.service.ts ===
+import prisma from '../../config/prisma';
+import { AppError } from '../../core/exceptions/AppError';
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
+
+const JWT_SECRET = process.env.JWT_SECRET || '07f4aa247bb2789d402af105e7fc416e57aebb266facfb2c30ad2843a86e4e61';
+
+export class AdminService {
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // AUTH
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    static async setup(email: string, password: string, name?: string) {
+        if (!email || !password || password.length < 6) {
+            throw new AppError('Valid email and a password (min 6 chars) are required.', 400);
+        }
+
+        const existingAdmin = await (prisma as any).user.findFirst({ where: { role: 'admin' } });
+        const hashedPassword = await bcrypt.hash(password, 10);
+        let adminUser;
+
+        if (existingAdmin) {
+            // If admin exists but has no password (legacy Firebase admin), allow setting password if email matches
+            if (!existingAdmin.password && existingAdmin.email === email) {
+                adminUser = await (prisma as any).user.update({
+                    where: { id: existingAdmin.id },
+                    data: { password: hashedPassword, displayName: name || existingAdmin.displayName }
+                });
+            } else {
+                throw new AppError('Admin already exists and is secured. Please login.', 403);
+            }
+        } else {
+            adminUser = await (prisma as any).user.create({
+                data: {
+                    email,
+                    password: hashedPassword,
+                    displayName: name || 'System Admin',
+                    role: 'admin',
+                    isPrivate: false
+                }
+            });
+        }
+
+        const token = jwt.sign(
+            { id: adminUser.id, email: adminUser.email, role: adminUser.role },
+            JWT_SECRET,
+            { expiresIn: '7d' }
+        );
+
+        return { token };
+    }
+
+    static async login(email: string, password: string) {
+        if (!email || !password) throw new AppError('Email and password required', 400);
+
+        const adminUser = await (prisma as any).user.findFirst({ where: { email, role: 'admin' } });
+        if (!adminUser || !adminUser.password) throw new AppError('Invalid admin credentials', 401);
+
+        const isMatch = await bcrypt.compare(password, adminUser.password);
+        if (!isMatch) throw new AppError('Invalid admin credentials', 401);
+
+        const token = jwt.sign(
+            { id: adminUser.id, email: adminUser.email, role: adminUser.role },
+            JWT_SECRET,
+            { expiresIn: '7d' }
+        );
+
+        return {
+            token,
+            user: { id: adminUser.id, email: adminUser.email, name: adminUser.displayName }
+        };
+    }
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // DASHBOARD
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    static async getStats() {
+        const [totalUsers, totalChats, totalMessages, totalPosts, activeUsers] = await Promise.all([
+            (prisma as any).user.count(),
+            (prisma as any).chat.count(),
+            (prisma as any).message.count(),
+            (prisma as any).post.count(),
+            (prisma as any).user.count({
+                where: { lastLogin: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } }
+            })
+        ]);
+
+        return { totalUsers, activeUsers, totalChats, totalMessages, totalPosts, timestamp: new Date() };
+    }
+
+    static async getAnalytics() {
+        const lastWeek = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        const [newUsers, messages, posts] = await Promise.all([
+            (prisma as any).user.count({ where: { createdAt: { gte: lastWeek } } }),
+            (prisma as any).message.count({ where: { createdAt: { gte: lastWeek } } }),
+            (prisma as any).post.count({ where: { createdAt: { gte: lastWeek } } })
+        ]);
+
+        return { period: 'Last 7 days', newUsers, messages, posts };
+    }
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // USERS
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    static async getUsers(page: number, limit: number) {
+        const skip = (page - 1) * limit;
+        const [users, total] = await Promise.all([
+            (prisma as any).user.findMany({
+                skip,
+                take: limit,
+                select: {
+                    id: true, email: true, phone: true, displayName: true,
+                    username: true, avatar: true, role: true, createdAt: true, lastLogin: true,
+                    _count: { select: { followers: true, following: true } }
+                },
+                orderBy: { createdAt: 'desc' }
+            }),
+            (prisma as any).user.count()
+        ]);
+
+        return { users, pagination: { page, limit, total, pages: Math.ceil(total / limit) } };
+    }
+
+    static async deleteUser(adminId: string, userId: string) {
+        if (userId === adminId) throw new AppError('Cannot delete yourself', 400);
+
+        await (prisma as any).$transaction([
+            (prisma as any).message.deleteMany({ where: { senderId: userId } }),
+            (prisma as any).post.deleteMany({ where: { authorId: userId } }),
+            (prisma as any).comment.deleteMany({ where: { userId } }),
+            (prisma as any).chatParticipant.deleteMany({ where: { userId } }),
+            (prisma as any).userFollows.deleteMany({ where: { OR: [{ followerId: userId }, { followingId: userId }] } }),
+            (prisma as any).notification.deleteMany({ where: { OR: [{ userId }, { actorId: userId }] } }),
+            (prisma as any).session.deleteMany({ where: { userId } }),
+            (prisma as any).user.delete({ where: { id: userId } })
+        ]);
+
+        return { message: `User ${userId} deleted successfully` };
+    }
+
+    static async banUser(userId: string, banned: boolean) {
+        const user = await (prisma as any).user.findUnique({ where: { id: userId } });
+        if (!user) throw new AppError('User not found', 404);
+
+        const currentSettings = (user.settings as any) || {};
+        return await (prisma as any).user.update({
+            where: { id: userId },
+            data: { settings: { ...currentSettings, banned: !!banned } }
+        });
+    }
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // CHATS
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    static async getChats(page: number, limit: number) {
+        const skip = (page - 1) * limit;
+        const [chats, total] = await Promise.all([
+            (prisma as any).chat.findMany({
+                skip,
+                take: limit,
+                include: {
+                    participants: {
+                        select: { userId: true, user: { select: { displayName: true, email: true } } }
+                    },
+                    messages: { take: 1, orderBy: { createdAt: 'desc' } }
+                },
+                orderBy: { updatedAt: 'desc' }
+            }),
+            (prisma as any).chat.count()
+        ]);
+
+        return { chats, pagination: { page, limit, total, pages: Math.ceil(total / limit) } };
+    }
+
+    static async getChatMessages(chatId: string, page: number, limit: number) {
+        const skip = (page - 1) * limit;
+        const [messages, total] = await Promise.all([
+            (prisma as any).message.findMany({
+                where: { chatId },
+                skip,
+                take: limit,
+                include: { sender: { select: { id: true, displayName: true, email: true } } },
+                orderBy: { createdAt: 'desc' }
+            }),
+            (prisma as any).message.count({ where: { chatId } })
+        ]);
+
+        return { messages, pagination: { page, limit, total, pages: Math.ceil(total / limit) } };
+    }
+
+    static async deleteChat(chatId: string, hardDelete: boolean) {
+        if (hardDelete) {
+            await (prisma as any).$transaction([
+                (prisma as any).message.deleteMany({ where: { chatId } }),
+                (prisma as any).chatParticipant.deleteMany({ where: { chatId } }),
+                (prisma as any).chat.delete({ where: { id: chatId } })
+            ]);
+        } else {
+            await (prisma as any).chat.update({
+                where: { id: chatId },
+                data: {
+                    participants: {
+                        updateMany: { where: { chatId }, data: { isArchived: true } }
+                    }
+                }
+            });
+        }
+        return { message: `Chat deleted (hardDelete: ${hardDelete})` };
+    }
+
+    static async deleteMessage(messageId: string) {
+        await (prisma as any).message.delete({ where: { id: messageId } });
+        return { message: 'Message deleted' };
+    }
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // POSTS
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    static async getPosts(page: number, limit: number) {
+        const skip = (page - 1) * limit;
+        const [posts, total] = await Promise.all([
+            (prisma as any).post.findMany({
+                skip,
+                take: limit,
+                include: {
+                    author: { select: { id: true, displayName: true, email: true } },
+                    _count: { select: { likes: true, comments: true } }
+                },
+                orderBy: { createdAt: 'desc' }
+            }),
+            (prisma as any).post.count()
+        ]);
+
+        return { posts, pagination: { page, limit, total, pages: Math.ceil(total / limit) } };
+    }
+
+    static async deletePost(postId: string) {
+        await (prisma as any).$transaction([
+            (prisma as any).comment.deleteMany({ where: { postId } }),
+            (prisma as any).like.deleteMany({ where: { postId } }),
+            (prisma as any).post.delete({ where: { id: postId } })
+        ]);
+        return { message: 'Post deleted' };
+    }
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // REPORTS
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    static async getReports(page: number, limit: number, status?: string) {
+        const skip = (page - 1) * limit;
+        const where = status ? { status } : {};
+
+        const [reports, total] = await Promise.all([
+            (prisma as any).report.findMany({
+                where,
+                skip,
+                take: limit,
+                include: {
+                    reporter: { select: { id: true, displayName: true, username: true, avatar: true } },
+                    reported: { select: { id: true, displayName: true, username: true, avatar: true } }
+                },
+                orderBy: { createdAt: 'desc' }
+            }),
+            (prisma as any).report.count({ where })
+        ]);
+
+        return { reports, pagination: { page, limit, total, pages: Math.ceil(total / limit) } };
+    }
+
+    static async resolveReport(reportId: string, action: string, adminNotes?: string) {
+        if (!action) throw new AppError('action is required (dismiss, warn, ban)', 400);
+
+        const report = await (prisma as any).report.findUnique({ where: { id: reportId } });
+        if (!report) throw new AppError('Report not found', 404);
+
+        // Update report status
+        const updated = await (prisma as any).report.update({
+            where: { id: reportId },
+            data: {
+                status: action === 'dismiss' ? 'dismissed' : 'resolved',
+                ...(adminNotes && { adminNotes })
+            }
+        });
+
+        // If action is ban, ban the reported user
+        if (action === 'ban') {
+            const user = await (prisma as any).user.findUnique({ where: { id: report.reportedId } });
+            if (user) {
+                const currentSettings = (user.settings as any) || {};
+                await (prisma as any).user.update({
+                    where: { id: report.reportedId },
+                    data: { settings: { ...currentSettings, banned: true } }
+                });
+            }
+        }
+
+        return updated;
+    }
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // CLEANUP
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    static async resetDatabase(confirmReset: string) {
+        if (confirmReset !== 'CONFIRM_RESET_ALL_DATA') {
+            throw new AppError('Confirmation required', 400);
+        }
+
+        await (prisma as any).$transaction([
+            (prisma as any).message.deleteMany({}),
+            (prisma as any).chatParticipant.deleteMany({}),
+            (prisma as any).chat.deleteMany({}),
+            (prisma as any).comment.deleteMany({}),
+            (prisma as any).like.deleteMany({}),
+            (prisma as any).post.deleteMany({}),
+            (prisma as any).story.deleteMany({}),
+            (prisma as any).notification.deleteMany({}),
+            (prisma as any).userFollows.deleteMany({}),
+            (prisma as any).session.deleteMany({})
+        ]);
+
+        return { message: 'All data cleared (users preserved)' };
+    }
+
+    static async cleanupSessions() {
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+        const result = await (prisma as any).session.deleteMany({
+            where: { expiresAt: { lt: thirtyDaysAgo } }
+        });
+        return { deleted: result.count };
+    }
+}
+
+
+=== FILE: ./src/modules/admin/admin.schema.ts ===
+import { z } from 'zod';
+
+
+=== FILE: ./src/modules/admin/admin.controller.ts ===
+import { Request, Response, NextFunction } from 'express';
+import { catchAsync } from '../../core/utils/catchAsync';
+import { AdminService } from './admin.service';
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// AUTH (No admin middleware needed)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+export const setup = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const result = await AdminService.setup(req.body.email, req.body.password, req.body.name);
+    res.status(201).json({ success: true, message: 'Admin created', ...result });
+});
+
+export const login = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const result = await AdminService.login(req.body.email, req.body.password);
+    res.json({ success: true, ...result });
+});
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// DASHBOARD
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+export const getStats = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const stats = await AdminService.getStats();
+    res.json(stats);
+});
+
+export const getAnalytics = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const analytics = await AdminService.getAnalytics();
+    res.json(analytics);
+});
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// USERS
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+export const getUsers = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const result = await AdminService.getUsers(page, limit);
+    res.json(result);
+});
+
+export const deleteUser = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const result = await AdminService.deleteUser(req.user.id, req.params.userId);
+    res.json({ success: true, ...result });
+});
+
+export const banUser = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const user = await AdminService.banUser(req.params.userId, req.body.banned);
+    res.json({ success: true, user });
+});
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// CHATS
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+export const getChats = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const result = await AdminService.getChats(page, limit);
+    res.json(result);
+});
+
+export const getChatMessages = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const result = await AdminService.getChatMessages(req.params.chatId, page, limit);
+    res.json(result);
+});
+
+export const deleteChat = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const result = await AdminService.deleteChat(req.params.chatId, req.body.hardDelete);
+    res.json({ success: true, ...result });
+});
+
+export const deleteMessage = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const result = await AdminService.deleteMessage(req.params.messageId);
+    res.json({ success: true, ...result });
+});
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// POSTS
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+export const getPosts = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const result = await AdminService.getPosts(page, limit);
+    res.json(result);
+});
+
+export const deletePost = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const result = await AdminService.deletePost(req.params.postId);
+    res.json({ success: true, ...result });
+});
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// REPORTS
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+export const getReports = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const status = req.query.status as string | undefined;
+    const result = await AdminService.getReports(page, limit, status);
+    res.json(result);
+});
+
+export const resolveReport = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const result = await AdminService.resolveReport(req.params.reportId, req.body.action, req.body.adminNotes);
+    res.json({ success: true, report: result });
+});
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// CLEANUP
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+export const resetDatabase = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const result = await AdminService.resetDatabase(req.body.confirmReset);
+    res.json({ success: true, ...result });
+});
+
+export const cleanupSessions = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const result = await AdminService.cleanupSessions();
+    res.json({ success: true, ...result });
+});
+
+
+=== FILE: ./src/server.ts ===
+import dotenv from 'dotenv';
+dotenv.config();
+
+import express from 'express';
+import cookieParser from 'cookie-parser';
+import cors from 'cors';
+import authRoutes from './modules/auth/auth.route';
+import userRoutes from './modules/user/user.route';
+import chatRoutes from './modules/chat/chat.route';
+import socialRoutes from './modules/social/social.route';
+import groupRoutes from './modules/group/group.route';
+import uploadRoutes from './modules/upload/upload.route';
+import adminRoutes from './modules/admin/admin.route';
+import path from 'path';
+import { Server } from 'socket.io';
+import { createServer } from 'http';
+import prisma from './config/prisma';
+import { createAdapter } from '@socket.io/redis-adapter';
+import { pubClient, subClient } from './config/redis';
+import { SocketService } from './services/SocketService';
+
+const app = express();
+const port = process.env.PORT || 5000;
+const server = createServer(app);
+const allowedOrigins = [
+    'http://localhost:5173', 
+    'http://127.0.0.1:5173', 
+    'http://localhost:3000', 
+    'http://127.0.0.1:3000',
+    'http://localhost',
+    'https://aqualyn.onrender.com',
+    'https://aqualyn-admin.vercel.app'
+];
+
+if (process.env.FRONTEND_URL) {
+    allowedOrigins.push(process.env.FRONTEND_URL);
+}
+
+const corsOptions = {
+    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+        if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+};
+
+export const io = new Server(server, {
+    cors: {
+        origin: allowedOrigins,
+        credentials: true
+    }
+});
+
+// Setup Distributed Redis Adapter
+io.adapter(createAdapter(pubClient, subClient));
+// Initialize our clean SocketService
+SocketService.init(io);
+
+app.use(cookieParser());
+
+
+app.use(cors(corsOptions));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// Serve Static Files
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+app.use(express.static(path.join(__dirname, '../public')));
+
+// Admin Panel Route
+app.get('/admin-panel.html', (req, res) => {
+    res.sendFile(path.join(__dirname, '../admin-panel.html'));
+});
+
+app.get('/admin', (req, res) => {
+    res.sendFile(path.join(__dirname, '../admin-panel.html'));
+});
+
+// Users Search API
+app.get('/api/users/search', async (req, res) => {
+    const q = req.query.q as string;
+    if (!q) return res.json([]);
+    try {
+        const users = await (prisma as any).user.findMany({
+            where: {
+                OR: [
+                    { username: { contains: q, mode: 'insensitive' } },
+                    { displayName: { contains: q, mode: 'insensitive' } },
+                    { 
+                      AND: [
+                        { phone: { contains: q } },
+                        { searchByPhone: true }
+                      ]
+                    }
+                ]
+            },
+            select: { 
+                id: true, 
+                displayName: true, 
+                username: true, 
+                phone: true, 
+                avatar: true, 
+                bio: true, 
+                isPrivate: true,
+                receivedFollowReqs: {
+                    select: { senderId: true }
+                }
+            }
+        });
+        res.json(users);
+    } catch (e) {
+        res.status(500).json({ error: 'Search failed' });
+    }
+});
+
+// Routes
+app.use('/api/auth', authRoutes);
+app.use('/api/user', userRoutes);
+app.use('/api/chats', chatRoutes);
+app.use('/api/social', socialRoutes);
+app.use('/api/groups', groupRoutes);
+app.use('/api/upload', uploadRoutes);
+app.use('/api/admin', adminRoutes);
+
+app.get('/api/health', (req, res) => {
+    res.json({ status: 'Aqualyn server is running' });
+});
+
+// Use global error handler
+import { errorHandler } from './core/middlewares/error.middleware';
+app.use(errorHandler);
+
+// All Socket.io logic has been moved to SocketService.ts
+// to support a high-concurrency distributed architecture.
+
+server.listen(port, () => {
+    console.log(`Server is running on port ${port}`);
+});
+
+
+=== FILE: ./src/services/SocketService.ts ===
+import { Server, Socket } from 'socket.io';
+import { PresenceService } from './PresenceService';
+import prisma from '../config/prisma';
+import { notificationQueue } from '../config/queues';
+import { subClient, pubClient } from '../config/redis';
+import { ActivityService } from './ActivityService';
+import { ContentService } from './ContentService';
+
+/**
+ * SocketService handles the distributed real-time communication for Aqualyn.
+ * It is responsible for message delivery, user presence, and real-time state sync.
+ */
+export class SocketService {
+    private static io: Server;
+
+    static emitToUser(userId: string, event: string, data: any) {
+        if (this.io) {
+            this.io.to(userId).emit(event, data);
+        }
+    }
+
+    /**
+     * Initializes the Socket.io instance with the provided server.
+     */
+    static init(io: Server) {
+        this.io = io;
+        this.io.on('connection', (socket: Socket) => this.handleConnection(socket));
+        
+        // Listen for Global Distributed Logout events
+        this.setupAuthSubscriptions();
+        
+        console.log('[Socket] SocketService Initialized');
+    }
+
+    /**
+     * Listens for distributed logout signals across all server nodes.
+     */
+    private static setupAuthSubscriptions() {
+        subClient.subscribe('GLOBAL_LOGOUT', (err: any) => {
+            if (err) console.error('[Socket] Redis Global Logout Sub Error:', err);
+        });
+
+        subClient.subscribe('SOCIAL_STORY_UPDATE', (err: any) => {
+            if (err) console.error('[Socket] Redis Social Sub Error:', err);
+        });
+
+        subClient.subscribe('BROADCAST_ACTIVITY', (err: any) => {
+            if (err) console.error('[Socket] Redis Broadcast Activity Error:', err);
+        });
+
+        subClient.subscribe('SOCIAL_POST_UPDATE', (err: any) => {
+            if (err) console.error('[Socket] Redis Social Post Sub Error:', err);
+        });
+
+        subClient.subscribe('SOCIAL_LIKE_UPDATE', (err: any) => {
+            if (err) console.error('[Socket] Redis Social Like Sub Error:', err);
+        });
+
+        subClient.subscribe('SOCIAL_COMMENT_UPDATE', (err: any) => {
+            if (err) console.error('[Socket] Redis Social Comment Sub Error:', err);
+        });
+
+        subClient.on('message', (channel: string, message: string) => {
+            if (channel === 'GLOBAL_LOGOUT') {
+                const { userId } = JSON.parse(message);
+                this.disconnectUser(userId);
+            }
+
+            if (channel === 'SOCIAL_STORY_UPDATE') {
+                const { userId, storyId, story, followerIds } = JSON.parse(message);
+                // Broadcast to every follower's room on this specific node
+                for (const followerId of followerIds) {
+                    this.io.to(followerId).emit('receive_new_story', { 
+                        userId, 
+                        storyId,
+                        story,
+                        timestamp: new Date()
+                    });
+                }
+            }
+
+            if (channel === 'SOCIAL_POST_UPDATE') {
+                const { userId, postId, post, followerIds } = JSON.parse(message);
+                for (const followerId of followerIds) {
+                    this.io.to(followerId).emit('receive_new_post', { 
+                        userId, 
+                        postId,
+                        post,
+                        timestamp: new Date()
+                    });
+                }
+            }
+
+            if (channel === 'BROADCAST_ACTIVITY') {
+                const { userId, activity } = JSON.parse(message);
+                this.io.to(userId).emit('new_notification', activity);
+            }
+
+            if (channel === 'SOCIAL_LIKE_UPDATE') {
+                const { userId, postId, liked } = JSON.parse(message);
+                // In production, we'd typically broadcast this to all online followers or just the author
+                // For simplicity, we broadcast to the author's room which everyone interested in their feed should listen to?
+                // Actually, emitting specifically to followers or the target post's room is better.
+                // For now, let's broadcast globally or to people currently viewed room.
+                this.io.emit('receive_post_like', { userId, postId, liked });
+            }
+
+            if (channel === 'SOCIAL_COMMENT_UPDATE') {
+                const { userId, postId, comment } = JSON.parse(message);
+                this.io.emit('receive_post_comment', { userId, postId, comment });
+            }
+        });
+    }
+
+    /**
+     * Finds and kills all active socket connections for a specific user.
+     */
+    private static disconnectUser(userId: string) {
+        const userRoom = this.io.sockets.adapter.rooms.get(userId);
+        if (userRoom) {
+            for (const socketId of userRoom) {
+                const socket = this.io.sockets.sockets.get(socketId);
+                if (socket) {
+                    console.log(`[Socket] Killing session for user: ${userId}`);
+                    socket.emit('force_logout', { message: 'Session revoked globally' });
+                    socket.disconnect(true);
+                }
+            }
+        }
+    }
+
+    /**
+     * Entry point for every new socket connection.
+     */
+    private static handleConnection(socket: Socket) {
+        console.log(`[Socket] Connection established: ${socket.id}`);
+
+        socket.on('join', async (userId: string) => {
+            if (!userId || userId === 'null' || userId === 'undefined') {
+                console.warn(`[Socket] Attempted join with invalid userId: ${userId}`);
+                return;
+            }
+            socket.data.userId = userId;
+            socket.join(userId);
+            console.log(`[Socket] User ${userId} joined room`);
+
+            // Presence management
+            await PresenceService.setUserOnline(userId);
+            try {
+                await (prisma as any).user.update({ where: { id: userId }, data: { lastLogin: new Date() } });
+            } catch (e) {
+                console.error(`[Socket] Failed to update lastLogin for ${userId}:`, e);
+            }
+        });
+
+        socket.on('heartbeat', async (userId: string) => {
+            // Regularly update Redis TTL to keep user "Online"
+            await PresenceService.heartbeat(userId);
+        });
+
+        socket.on('disconnecting', async () => {
+            const userId = socket.data.userId;
+            if (userId && userId !== 'null' && userId !== 'undefined') {
+                await PresenceService.setUserOffline(userId);
+                // Last Seen persistence
+                try {
+                    await (prisma as any).user.update({ where: { id: userId }, data: { lastLogin: new Date() } });
+                    console.log(`[Socket] User ${userId} disconnected. Presence saved.`);
+                } catch (e) {
+                    console.error(`[Socket] Failed to update disconnect presence for ${userId}:`, e);
+                }
+            }
+        });
+
+        // Delegate specific events to handlers
+        socket.on('send_message', (data: any) => this.handleSendMessage(socket, data));
+        socket.on('typing', (data: any) => this.handleTyping(socket, data));
+        socket.on('mark_as_read', (data: any) => this.handleMarkAsRead(socket, data));
+        socket.on('react_message', (data: any) => this.handleReactMessage(socket, data));
+        socket.on('edit_message', (data: any) => this.handleEditMessage(socket, data));
+        socket.on('delete_message_for_everyone', (data: any) => this.handleDeleteMessageForEveryone(socket, data));
+        socket.on('delete_chat_for_me', (data: any) => this.handleDeleteChatForMe(socket, data));
+        socket.on('delete_message_for_me', (data: any) => this.handleDeleteMessageForMe(socket, data));
+        socket.on('delete_chat_for_everyone', (data: any) => this.handleDeleteChatForEveryone(socket, data));
+        socket.on('invite_to_chat', (data: any) => this.handleInviteToChat(socket, data));
+
+        // --- WebRTC Signaling with CallLog Persistence ---
+        socket.on('call_user', async (data: any) => {
+            try {
+                // Create a CallLog entry when call is initiated
+                const callLog = await (prisma as any).callLog.create({
+                    data: {
+                        callerId: data.from,
+                        calleeId: data.to,
+                        type: data.type || 'VOICE',
+                        status: 'ringing'
+                    }
+                });
+                // Forward call request to target user
+                this.io.to(data.to).emit('incoming_call', {
+                    from: data.from,
+                    callerName: data.callerName,
+                    callerAvatar: data.callerAvatar,
+                    type: data.type,
+                    signal: data.signal,
+                    callLogId: callLog.id
+                });
+                // Also send the callLogId back to the caller
+                socket.emit('call_log_created', { callLogId: callLog.id });
+            } catch (e) {
+                console.error('[Socket] call_user error:', e);
+                this.io.to(data.to).emit('incoming_call', {
+                    from: data.from,
+                    callerName: data.callerName,
+                    callerAvatar: data.callerAvatar,
+                    type: data.type,
+                    signal: data.signal
+                });
+            }
+        });
+
+        socket.on('call_accepted', async (data: any) => {
+            this.io.to(data.to).emit('call_accepted', { signal: data.signal, answer: data.answer });
+            // Update CallLog to active
+            if (data.callLogId) {
+                try {
+                    await (prisma as any).callLog.update({
+                        where: { id: data.callLogId },
+                        data: { status: 'active' }
+                    });
+                } catch (e) { console.error('[Socket] call_accepted log error:', e); }
+            }
+        });
+
+        socket.on('call_rejected', async (data: any) => {
+            this.io.to(data.to).emit('call_rejected', { reason: data.reason });
+            // Update CallLog to rejected
+            if (data.callLogId) {
+                try {
+                    await (prisma as any).callLog.update({
+                        where: { id: data.callLogId },
+                        data: { status: 'rejected', endedAt: new Date() }
+                    });
+                } catch (e) { console.error('[Socket] call_rejected log error:', e); }
+            }
+        });
+
+        socket.on('webrtc_signal', (data: any) => {
+            this.io.to(data.to).emit('webrtc_signal', { signal: data.signal, from: data.from });
+        });
+
+        socket.on('end_call', async (data: any) => {
+            this.io.to(data.to).emit('call_ended');
+            // Update CallLog to ended with duration
+            if (data.callLogId) {
+                try {
+                    const callLog = await (prisma as any).callLog.findUnique({ where: { id: data.callLogId } });
+                    if (callLog) {
+                        const duration = Math.floor((Date.now() - new Date(callLog.startedAt).getTime()) / 1000);
+                        await (prisma as any).callLog.update({
+                            where: { id: data.callLogId },
+                            data: { status: 'ended', endedAt: new Date(), duration }
+                        });
+                    }
+                } catch (e) { console.error('[Socket] end_call log error:', e); }
+            }
+        });
+    }
+
+    private static async handleSendMessage(socket: Socket, data: any) {
+        const { senderId, receiverId, chatId, text, imageUrl, videoUrl } = data;
+        
+        try {
+            let chat = await (prisma as any).chat.findUnique({ where: { id: chatId } });
+            if (!chat) {
+                chat = await (prisma as any).chat.create({
+                    data: {
+                        id: chatId,
+                        isSecret: data.isSecret || false,
+                        participants: { create: [{ userId: senderId }, { userId: receiverId }] }
+                    }
+                });
+            } else {
+                let deletedFor = [ ...(chat.deletedFor as any || []) ];
+                if (deletedFor.includes(senderId)) {
+                    deletedFor = deletedFor.filter((id: string) => id !== senderId);
+                    await (prisma as any).chat.update({ where: { id: chatId }, data: { deletedFor } });
+                }
+            }
+
+            const message = await (prisma as any).message.create({
+                data: {
+                    senderId, chatId, text,
+                    imageUrl: data.imageUrl || null,
+                    videoUrl: data.videoUrl || null,
+                    fileUrl: data.fileUrl || null,
+                    audioUrl: data.audioUrl || null,
+                    gifUrl: data.gifUrl || null,
+                    sharedPostId: data.sharedPostId || null,
+                    sharedStoryId: data.sharedStoryId || null,
+                    isForwarded: data.isForwarded || false,
+                    isHD: data.isHD || false,
+                    fileName: data.fileName || null,
+                    fileSize: data.fileSize || null,
+                    mimeType: data.mimeType || null,
+                    document: data.document,
+                    location: data.location,
+                    contact: data.contact,
+                    payment: data.payment,
+                    schedule: data.schedule,
+                    wallet: data.wallet,
+                    replyToId: data.replyToId,
+                    status: 'sent',
+                    isRead: false
+                }
+            });
+
+            // 🟢 DISTRIBUTED MENTION LOGIC (Run in background)
+            if (text) {
+                ContentService.handleChatMentions(senderId, chatId, text).catch((e: any) => 
+                    console.error('[SocketService] Mention Error:', e)
+                );
+            }
+
+            const sender = await (prisma as any).user.findUnique({
+                where: { id: senderId },
+                select: { displayName: true, avatar: true, username: true }
+            });
+
+            const chatPayload = {
+                id: chat.id,
+                name: chat.name,
+                avatar: chat.avatar,
+                isGroup: chat.isGroup,
+                isSecret: chat.isSecret
+            };
+
+            if (chat.isGroup) {
+                const participants = await (prisma as any).chatParticipant.findMany({
+                    where: { chatId },
+                    select: { userId: true }
+                });
+                for (const p of participants) {
+                    if (p.userId !== senderId) {
+                        this.io.to(p.userId).emit('receive_message', {
+                            ...message,
+                            sender: sender,
+                            chat: chatPayload,
+                            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                        });
+                    }
+                }
+            } else {
+                const recipientStatus = await PresenceService.getUserStatus(receiverId);
+                if (recipientStatus === 'online') {
+                    await (prisma as any).message.update({ where: { id: message.id }, data: { status: 'delivered' } });
+                    message.status = 'delivered';
+                }
+
+                this.io.to(receiverId).emit('receive_message', {
+                    ...message,
+                    sender: sender,
+                    chat: chatPayload,
+                    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                });
+            }
+
+            socket.emit('message_sent_ack', {
+                ...message,
+                sender: sender,
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            });
+
+            // 🔵 Create Activity Notification
+            const activity = await ActivityService.createActivity({
+                userId: receiverId,
+                actorId: senderId,
+                type: 'direct_message',
+                text: text ? (text.length > 50 ? text.substring(0, 50) + '...' : text) : 'Sent a media file'
+            });
+
+            if (activity) {
+                const activityWithActor = {
+                    ...activity,
+                    actor: sender
+                };
+                pubClient.publish('BROADCAST_ACTIVITY', JSON.stringify({ userId: receiverId, activity: activityWithActor }));
+            }
+
+            // 5. Distributed Push Notification (Background)
+            // We offload this to the Queue so the Socket response is instant
+            await notificationQueue.add('send-push', { 
+                userId: receiverId, 
+                senderId, 
+                chatId, 
+                text: text || 'Sent a media file' 
+            });
+
+        } catch (e: any) {
+            console.error('[SocketService] ERROR in send_message:', e.message || e);
+        }
+    }
+
+    private static handleTyping(socket: Socket, data: any) {
+        this.io.to(data.receiverId).emit('user_typing', data);
+    }
+
+    private static async handleMarkAsRead(socket: Socket, data: any) {
+        const { chatId, userId } = data;
+        try {
+            await (prisma as any).message.updateMany({
+                where: { chatId, senderId: { not: userId }, status: { not: 'seen' } },
+                data: { isRead: true, status: 'seen' }
+            });
+            
+            const chat = await (prisma as any).chat.findUnique({
+                where: { id: chatId },
+                include: { participants: true }
+            });
+            const otherParticipant = chat?.participants.find((p: any) => p.userId !== userId);
+            if (otherParticipant) {
+                this.io.to(otherParticipant.userId).emit('messages_seen', { chatId, userId });
+            }
+        } catch (e) {
+            console.error('[SocketService] Mark as read error:', e);
+        }
+    }
+
+    private static async handleReactMessage(socket: Socket, data: any) {
+        const { messageId, emoji, userId, receiverId } = data;
+        try {
+            const message = await (prisma as any).message.findUnique({ where: { id: messageId } });
+            if (message) {
+                const reactions = { ...(message.reactions as any || {}) };
+                const userReactions = reactions[emoji] || [];
+                if (userReactions.includes(userId)) {
+                    reactions[emoji] = userReactions.filter((id: string) => id !== userId);
+                    if (reactions[emoji].length === 0) delete reactions[emoji];
+                } else {
+                    reactions[emoji] = [...userReactions, userId];
+                }
+                await (prisma as any).message.update({ where: { id: messageId }, data: { reactions } });
+                this.io.to(receiverId).emit('message_reacted', { chatId: message.chatId, messageId, emoji, userId });
+            }
+        } catch (e) { console.error('Reaction error:', e); }
+    }
+
+    private static async handleEditMessage(socket: Socket, data: any) {
+        const { messageId, newText, receiverId } = data;
+        try {
+            const message = await (prisma as any).message.update({ where: { id: messageId }, data: { text: newText, isEdited: true } });
+            this.io.to(receiverId).emit('message_edited', { chatId: message.chatId, messageId, newText });
+        } catch (e) { console.error('Edit error:', e); }
+    }
+
+    private static async handleDeleteMessageForEveryone(socket: Socket, data: any) {
+        const { chatId, messageId, receiverId } = data;
+        try {
+            await (prisma as any).message.delete({ where: { id: messageId } });
+            this.io.to(receiverId).emit('message_deleted', { chatId, messageId });
+        } catch (e) { console.error('Delete error:', e); }
+    }
+
+    private static async handleDeleteChatForMe(socket: Socket, data: any) {
+        const { chatId, userId } = data;
+        try {
+            const chat = await (prisma as any).chat.findUnique({ where: { id: chatId } });
+            if (chat) {
+                const deletedFor = [ ...(chat.deletedFor as any || []) ];
+                if (!deletedFor.includes(userId)) deletedFor.push(userId);
+                await (prisma as any).chat.update({ where: { id: chatId }, data: { deletedFor } });
+            }
+        } catch (e) { console.error('Delete chat error:', e); }
+    }
+
+    private static async handleDeleteMessageForMe(socket: Socket, data: any) {
+        const { messageId, userId } = data;
+        try {
+            const message = await (prisma as any).message.findUnique({ where: { id: messageId } });
+            if (message) {
+                const deletedFor = [ ...(message.deletedFor as any || []) ];
+                if (!deletedFor.includes(userId)) deletedFor.push(userId);
+                await (prisma as any).message.update({ where: { id: messageId }, data: { deletedFor } });
+            }
+        } catch (e) { console.error('Delete for me error:', e); }
+    }
+
+    private static async handleDeleteChatForEveryone(socket: Socket, data: any) {
+        const { chatId, receiverId } = data;
+        try {
+            await (prisma as any).chat.delete({ where: { id: chatId } });
+            this.io.to(receiverId).emit('chat_deleted', { chatId });
+        } catch (e) { console.error('Delete for everyone error:', e); }
+    }
+
+    private static async handleInviteToChat(socket: Socket, data: any) {
+        const { chatId, targetUserId, inviterId } = data;
+        try {
+            const inviter = await (prisma as any).user.findUnique({ where: { id: inviterId } });
+            this.io.to(targetUserId).emit('chat_invitation', { 
+                chatId, inviterId, inviterName: inviter?.displayName || inviter?.username || 'Someone' 
+            });
+        } catch (e) { console.error('Invite error:', e); }
+    }
+}
+
+
+=== FILE: ./src/services/SearchService.ts ===
+import prisma from '../config/prisma';
+
+/**
+ * SearchService handles discovery across all entities.
+ * Designed for Big Production scale with optimized index usage.
+ */
+export class SearchService {
+    
+    /**
+     * Search for users and posts globally.
+     */
+    static async globalSearch(query: string, currentUserId: string, limit: number = 20) {
+        if (!query || query.length < 2) return { users: [], posts: [] };
+
+        try {
+            // 1. Search Users (Hits Username & DisplayName Indexes)
+            const users = await (prisma as any).user.findMany({
+                where: {
+                    OR: [
+                        { username: { contains: query, mode: 'insensitive' } },
+                        { displayName: { contains: query, mode: 'insensitive' } }
+                    ]
+                },
+                take: limit,
+                select: { id: true, username: true, displayName: true, avatar: true, isPrivate: true }
+            });
+
+            // 2. Search Posts (Hits Post Content Keywords)
+            const posts = await (prisma as any).post.findMany({
+                where: { content: { contains: query, mode: 'insensitive' } },
+                take: limit,
+                include: {
+                    author: { select: { id: true, username: true, displayName: true, avatar: true } }
+                }
+            });
+
+            return { users, posts };
+        } catch (error) {
+            console.error('[SearchService] globalSearch error:', error);
+            return { users: [], posts: [] };
+        }
+    }
+}
+
+
+=== FILE: ./src/services/PresenceService.ts ===
+import { redis } from '../config/redis';
+
+/**
+ * PresenceService manages user online/offline status in a distributed way using Redis.
+ * This ensures any server node can check if a user is online, regardless of
+ * which node they are connected to.
+ */
+export class PresenceService {
+    private static PREFIX = 'user:presence:';
+    private static TTL = 60; // 60 seconds (1 minute)
+
+    /**
+     * Mark a user as online in the global Redis store.
+     */
+    static async setUserOnline(userId: string): Promise<void> {
+        const key = `${this.PREFIX}${userId}`;
+        await redis.set(key, 'online', 'EX', this.TTL);
+    }
+
+    /**
+     * Mark a user as offline in the global Redis store.
+     */
+    static async setUserOffline(userId: string): Promise<void> {
+        const key = `${this.PREFIX}${userId}`;
+        await redis.del(key);
+    }
+
+    /**
+     * Check if a user is currently online.
+     */
+    static async getUserStatus(userId: string): Promise<'online' | 'offline'> {
+        const key = `${this.PREFIX}${userId}`;
+        const status = await redis.get(key);
+        return status === 'online' ? 'online' : 'offline';
+    }
+
+    /**
+     * Batch check online status for multiple users (Optimized for Chat Lists).
+     * Returns a Map of userId -> status
+     */
+    static async getPresenceBatch(userIds: string[]): Promise<Record<string, 'online' | 'offline'>> {
+        if (!userIds || userIds.length === 0) return {};
+        try {
+            const keys = userIds.map(id => `${this.PREFIX}${id}`);
+            const results = await redis.mget(...keys);
+            
+            const presenceMap: Record<string, 'online' | 'offline'> = {};
+            userIds.forEach((id, index) => {
+                presenceMap[id] = results[index] === 'online' ? 'online' : 'offline';
+            });
+            return presenceMap;
+        } catch (error) {
+            console.error('[Presence] Batch fetch failed:', error);
+            return {};
+        }
+    }
+
+    static async heartbeat(userId: string): Promise<void> {
+        if (!userId) return;
+        try {
+            await this.setUserOnline(userId);
+        } catch (error) {
+            console.error('[Presence] Heartbeat failed:', error);
+        }
+    }
+}
+
+
+=== FILE: ./src/services/CallService.ts ===
+import prisma from '../config/prisma';
+
+export class CallService {
+    static async createCallLog(data: { callerId: string, receiverId: string, type: 'VOICE' | 'VIDEO' }) {
+        return await (prisma as any).callLog.create({
+            data: {
+                ...data,
+                status: 'INITIATED'
+            }
+        });
+    }
+
+    static async updateCallStatus(callId: string, status: 'MISSED' | 'COMPLETED' | 'REJECTED', duration?: number) {
+        return await (prisma as any).callLog.update({
+            where: { id: callId },
+            data: { 
+                status, 
+                duration,
+                endedAt: new Date()
+            }
+        });
+    }
+
+    static async getUserCallHistory(userId: string) {
+        return await (prisma as any).callLog.findMany({
+            where: {
+                OR: [
+                    { callerId: userId },
+                    { receiverId: userId }
+                ]
+            },
+            orderBy: { startedAt: 'desc' },
+            include: {
+                caller: { select: { id: true, username: true, displayName: true, avatar: true } },
+                receiver: { select: { id: true, username: true, displayName: true, avatar: true } }
+            }
+        });
+    }
+}
+
+
+=== FILE: ./src/services/ContentService.ts ===
+import prisma from '../config/prisma';
+import { GroupService } from '../modules/group/group.service';
+
+/**
+ * ContentService handles the parsing of mentions, links, and hashtags
+ * across the entire Aqualyn social ecosystem.
+ */
+export class ContentService {
+    
+    /**
+     * Parse @usernames from a string and find their database IDs.
+     */
+    static async parseMentions(text: string): Promise<string[]> {
+        if (!text) return [];
+        try {
+            const mentionRegex = /@([a-zA-Z0-9._]+)/g;
+            const matches = [...text.matchAll(mentionRegex)];
+            const usernames = matches.map(match => match[1]);
+
+            if (usernames.length === 0) return [];
+
+            const users = await (prisma as any).user.findMany({
+                where: { username: { in: usernames } },
+                select: { id: true }
+            });
+            return users.map((u: any) => u.id);
+        } catch (error) {
+            console.error('[Content] Mention parsing failed:', error);
+            return [];
+        }
+    }
+
+    static async handlePostMentions(actorId: string, postId: string, text: string) {
+        if (!actorId || !postId || !text) return;
+        try {
+            const mentionIds = await this.parseMentions(text);
+            for (const userId of mentionIds) {
+                if (userId === actorId) continue;
+                await (prisma as any).activity.create({
+                    data: { userId, actorId, type: 'MENTION', postId }
+                });
+            }
+        } catch (error) {
+            console.error('[Content] Post mention handling failed:', error);
+        }
+    }
+
+    static async handleChatMentions(actorId: string, chatId: string, text: string) {
+        if (!actorId || !chatId || !text) return;
+        try {
+            const mentionIds = await this.parseMentions(text);
+            const participants = await (prisma as any).chatParticipant.findMany({
+                where: { chatId },
+                select: { userId: true }
+            });
+            const existingUserIds = participants.map((p: any) => p.userId);
+
+            for (const userId of mentionIds) {
+                if (!existingUserIds.includes(userId)) {
+                    await (prisma as any).activity.create({
+                        data: {
+                            userId, actorId, type: 'MENTION',
+                            text: `Mentioned you in a chat.`
+                        }
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('[Content] Chat mention handling failed:', error);
+        }
+    }
+}
+
+
+=== FILE: ./src/services/SettingsService.ts ===
+import prisma from '../config/prisma';
+import { pubClient } from '../config/redis';
+
+/**
+ * SettingsService handles the persistence and sync of user preferences.
+ * Uses a JSON merge strategy to ensure non-destructive updates.
+ */
+export class SettingsService {
+    
+    /**
+     * Get the current settings for a user.
+     */
+    static async getSettings(userId: string) {
+        const user = await (prisma as any).user.findUnique({
+            where: { id: userId },
+            select: { settings: true }
+        });
+        return user?.settings || {};
+    }
+
+    /**
+     * Update user settings with a partial object (Deep Merge).
+     */
+    static async updateSettings(userId: string, newSettings: any) {
+        try {
+            // 1. Fetch current settings
+            const user = await (prisma as any).user.findUnique({
+                where: { id: userId },
+                select: { settings: true }
+            });
+
+            const currentSettings = user?.settings && typeof user.settings === 'object' ? user.settings : {};
+            
+            // 2. Deep Merge logic
+            const mergedSettings = this.deepMerge(currentSettings, newSettings);
+
+            // 3. Persist
+            const updatedUser = await (prisma as any).user.update({
+                where: { id: userId },
+                data: { settings: mergedSettings },
+                select: { settings: true }
+            });
+
+            // 4. Global Broadcast (Sync with all devices)
+            await pubClient.publish('SETTINGS_SYNC', JSON.stringify({ userId, settings: mergedSettings }));
+
+            return updatedUser.settings;
+        } catch (e) {
+            console.error('[SettingsService] Sync error:', e);
+            throw new Error('Failed to update settings');
+        }
+    }
+
+    /**
+     * Simple deep merge helper
+     */
+    private static deepMerge(target: any, source: any) {
+        const output = { ...target };
+        if (typeof source === 'object' && source !== null) {
+            Object.keys(source).forEach(key => {
+                if (typeof source[key] === 'object' && source[key] !== null && target[key]) {
+                    output[key] = this.deepMerge(target[key], source[key]);
+                } else {
+                    output[key] = source[key];
+                }
+            });
+        }
+        return output;
+    }
+
+    /**
+     * Calculate storage usage breakdown for a user.
+     */
+    static async getStorageUsage(userId: string) {
+        const messages = await (prisma as any).message.findMany({
+            where: { senderId: userId, NOT: { fileSize: null } },
+            select: { fileSize: true, mimeType: true }
+        });
+
+        const breakdown = {
+            images: 0,
+            videos: 0,
+            audio: 0,
+            documents: 0,
+            total: 0
+        };
+
+        messages.forEach((msg: any) => {
+            const size = msg.fileSize || 0;
+            breakdown.total += size;
+            
+            if (msg.mimeType?.startsWith('image/')) breakdown.images += size;
+            else if (msg.mimeType?.startsWith('video/')) breakdown.videos += size;
+            else if (msg.mimeType?.startsWith('audio/')) breakdown.audio += size;
+            else breakdown.documents += size;
+        });
+
+        return breakdown;
+    }
+
+    /**
+     * List active sessions for a user.
+     */
+    static async getActiveSessions(userId: string) {
+        return await (prisma as any).session.findMany({
+            where: { userId },
+            select: { id: true, device: true, createdAt: true, expiresAt: true }
+        });
+    }
+
+    /**
+     * Revoke a specific session.
+     */
+    static async revokeSession(userId: string, sessionId: string) {
+        return await (prisma as any).session.deleteMany({
+            where: { id: sessionId, userId }
+        });
+    }
+}
+
+
+=== FILE: ./src/services/ActivityService.ts ===
+import prisma from '../config/prisma';
+
+/**
+ * ActivityService handles the retrieval and management of social notifications
+ * and interactions (Likes, Mentions, Follows).
+ */
+export class ActivityService {
+    
+    /**
+     * Get the activity tab data for a user.
+     * High-scale Ready: Uses Cursor Pagination.
+     */
+    static async getActivities(userId: string, cursor?: string, limit: number = 20) {
+        if (!userId) return [];
+        try {
+            return await (prisma as any).activity.findMany({
+                where: { userId },
+                take: limit,
+                ...(cursor && { skip: 1, cursor: { id: cursor } }),
+                orderBy: { createdAt: 'desc' },
+                include: {
+                    actor: { select: { id: true, username: true, displayName: true, avatar: true } }
+                }
+            });
+        } catch (error) {
+            console.error('[ActivityService] getActivities failed:', error);
+            return [];
+        }
+    }
+
+    static async markRead(userId: string, activityIds: string[]) {
+        if (!userId || !activityIds.length) return;
+        try {
+            return await (prisma as any).activity.updateMany({
+                where: { id: { in: activityIds }, userId },
+                data: { isRead: true }
+            });
+        } catch (error) {
+            console.error('[ActivityService] markRead failed:', error);
+        }
+    }
+
+    static async createActivity(data: { userId: string, actorId: string, type: string, postId?: string, storyId?: string, text?: string }) {
+        if (!data.userId || !data.actorId || data.userId === data.actorId) return;
+        try {
+            return await (prisma as any).activity.create({ data });
+        } catch (error) {
+            console.error('[ActivityService] createActivity failed:', error);
+        }
+    }
+}
+
+export class ForwardService {
+    static async sharePostToChat(senderId: string, postId: string, chatId: string) {
+        if (!senderId || !postId || !chatId) throw new Error('Missing sharing params');
+        try {
+            return await (prisma as any).message.create({
+                data: { chatId, senderId, sharedPostId: postId, text: "Shared a post." }
+            });
+        } catch (error) {
+            console.error('[ForwardService] sharePostToChat failed:', error);
+            throw new Error('Failed to share post');
+        }
+    }
+
+    static async shareStoryToChat(senderId: string, storyId: string, chatId: string) {
+        if (!senderId || !storyId || !chatId) throw new Error('Missing sharing params');
+        try {
+            return await (prisma as any).message.create({
+                data: { chatId, senderId, sharedStoryId: storyId, text: "Shared a story." }
+            });
+        } catch (error) {
+            console.error('[ForwardService] shareStoryToChat failed:', error);
+            throw new Error('Failed to share story');
+        }
+    }
+
+    static async reactToStory(userId: string, storyId: string, emoji: string) {
+        if (!userId || !storyId || !emoji) throw new Error('Missing reaction params');
+        try {
+            const story = await (prisma as any).story.findUnique({
+                where: { id: storyId },
+                select: { reactions: true }
+            });
+            if (!story) throw new Error('Story not found');
+
+            const reactions = (story.reactions as any) || {};
+            const currentEmojiUsers = reactions[emoji] || [];
+
+            let newUsers;
+            if (currentEmojiUsers.includes(userId)) {
+                newUsers = currentEmojiUsers.filter((id: string) => id !== userId);
+            } else {
+                newUsers = [...currentEmojiUsers, userId];
+            }
+
+            return await (prisma as any).story.update({
+                where: { id: storyId },
+                data: { reactions: { ...reactions, [emoji]: newUsers } }
+            });
+        } catch (error) {
+            console.error('[ForwardService] reactToStory failed:', error);
+            throw new Error('Reaction failed');
+        }
+    }
+}
+
+
+=== FILE: ./src/config/prisma.ts ===
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
+
+export default prisma;
+
+
+=== FILE: ./src/config/firebaseAdmin.ts ===
+import admin from 'firebase-admin';
+import dotenv from 'dotenv';
+dotenv.config();
+
+let serviceAccount: any;
+try {
+    if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+        serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+    } else {
+        serviceAccount = {
+            projectId: process.env.FIREBASE_PROJECT_ID,
+            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+            privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+        };
+    }
+} catch (e: any) {
+    console.error('[Firebase] JSON Config Parse Error!', e.message);
+    serviceAccount = {};
+}
+
+if (!admin.apps.length) {
+    try {
+        admin.initializeApp({
+            credential: admin.credential.cert(serviceAccount),
+        });
+        console.log('[Firebase] Admin SDK Ready | Project:', serviceAccount.project_id || serviceAccount.projectId);
+    } catch (e: any) {
+        console.error('[Firebase] Init Error:', e.message);
+    }
+}
+
+export default admin;
+
+
+=== FILE: ./src/config/queues.ts ===
+import { Queue } from 'bullmq';
+import { redis } from './redis';
+
+/**
+ * QueueService is the central place to register and manage distributed task queues.
+ * All background work (Push Notifications, Media Resizing, Emails) must go through here.
+ */
+export const notificationQueue = new Queue('notification-queue', { 
+    connection: redis.duplicate(), // Create a dedicated Redis connection for the Queue
+    defaultJobOptions: {
+        attempts: 3, // Retry failed notifications 3 times automatically
+        backoff: {
+            type: 'exponential',
+            delay: 1000, // Wait 1s, then 2s, then 4s...
+        },
+        removeOnComplete: true, // Cleanup Redis memory once done
+    }
+});
+
+console.log('[BullMQ] Notification Queue Initialized');
+
+
+=== FILE: ./src/config/redis.ts ===
+import Redis from 'ioredis';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
+
+const redisConfig = {
+  maxRetriesPerRequest: null,
+  enableReadyCheck: true,
+  retryStrategy(times: number) {
+    const delay = Math.min(times * 50, 2000);
+    return delay;
+  },
+};
+
+// Singleton clients for different concerns
+export const redis = new Redis(REDIS_URL, redisConfig);
+export const pubClient = new Redis(REDIS_URL, redisConfig);
+export const subClient = pubClient.duplicate();
+
+redis.on('error', (err) => console.error('[Redis] Event Error:', err));
+pubClient.on('error', (err) => console.error('[Redis] Pub Error:', err));
+subClient.on('error', (err) => console.error('[Redis] Sub Error:', err));
+
+redis.on('connect', () => console.log('[Redis] Connected'));
+
+

@@ -181,14 +181,14 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
   };
 
   const SkeletonChat = () => (
-    <div className="p-4 rounded-2xl flex items-center gap-4 animate-pulse">
-      <div className="w-14 h-14 rounded-full bg-white/10 shrink-0"></div>
+    <div className="p-4 rounded-2xl flex items-center gap-4 animate-pulse glass-card border border-black/5 dark:border-white/5">
+      <div className="w-14 h-14 rounded-full bg-black/10 dark:bg-white/10 shrink-0"></div>
       <div className="flex-1 min-w-0 space-y-2">
         <div className="flex justify-between">
-          <div className="h-4 bg-white/10 rounded-full w-1/3"></div>
-          <div className="h-3 bg-white/10 rounded-full w-8"></div>
+          <div className="h-4 bg-black/10 dark:bg-white/10 rounded-full w-1/3"></div>
+          <div className="h-3 bg-black/10 dark:bg-white/10 rounded-full w-8"></div>
         </div>
-        <div className="h-3 bg-white/10 rounded-full w-2/3"></div>
+        <div className="h-3 bg-black/10 dark:bg-white/10 rounded-full w-2/3"></div>
       </div>
     </div>
   );

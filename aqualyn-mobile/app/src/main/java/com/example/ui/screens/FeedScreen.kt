@@ -77,12 +77,7 @@ fun FeedScreen(
             if (remotePosts.isNotEmpty()) {
                 postsList.clear()
                 remotePosts.forEach { post ->
-                    val authorName = if (!post.authorId.isNullOrBlank()) {
-                        val p = com.example.network.AqualynRepository.fetchUserProfile(post.authorId)
-                        p?.displayName ?: p?.username ?: "Aqualyn User"
-                    } else {
-                        "Aqualyn User"
-                    }
+                    val authorName = post.authorName ?: "Aqualyn User"
                     postsList.add(
                         LocalPost(
                             id = post.id,
@@ -95,10 +90,7 @@ fun FeedScreen(
                             location = post.location,
                             authorId = post.authorId,
                             imageUrl = post.mediaUrl,
-                            avatarUrl = if (!post.authorId.isNullOrBlank()) {
-                                val p = com.example.network.AqualynRepository.fetchUserProfile(post.authorId)
-                                p?.avatar ?: p?.largeAvatar
-                            } else null
+                            avatarUrl = post.avatarUrl
                         )
                     )
                 }
@@ -108,18 +100,8 @@ fun FeedScreen(
             if (remoteStories.isNotEmpty()) {
                 storiesList.clear()
                 remoteStories.forEach { story ->
-                    val authorName = if (!story.userId.isNullOrBlank()) {
-                        val p = com.example.network.AqualynRepository.fetchUserProfile(story.userId)
-                        p?.displayName ?: p?.username ?: (story.title ?: "Story")
-                    } else {
-                        story.title ?: "Story"
-                    }
-                    val authorAvatar = if (!story.userId.isNullOrBlank()) {
-                        val p = com.example.network.AqualynRepository.fetchUserProfile(story.userId)
-                        p?.avatar ?: p?.largeAvatar
-                    } else {
-                        null
-                    }
+                    val authorName = story.authorName ?: story.title ?: "Story"
+                    val authorAvatar = story.avatarUrl
                     storiesList.add(
                         LocalStory(
                             id = story.id,
@@ -216,12 +198,7 @@ fun FeedScreen(
                             if (remotePosts.isNotEmpty()) {
                                 postsList.clear()
                                 remotePosts.forEach { post ->
-                                    val authorName = if (!post.authorId.isNullOrBlank()) {
-                                        val p = com.example.network.AqualynRepository.fetchUserProfile(post.authorId)
-                                        p?.displayName ?: p?.username ?: "Aqualyn User"
-                                    } else {
-                                        "Aqualyn User"
-                                    }
+                                    val authorName = post.authorName ?: "Aqualyn User"
                                     postsList.add(
                                         LocalPost(
                                             id = post.id,
@@ -233,10 +210,7 @@ fun FeedScreen(
                                             timeInfo = post.timeAgo,
                                             location = post.location,
                                             imageUrl = post.mediaUrl,
-                                            avatarUrl = if (!post.authorId.isNullOrBlank()) {
-                                                val p = com.example.network.AqualynRepository.fetchUserProfile(post.authorId)
-                                                p?.avatar ?: p?.largeAvatar
-                                            } else null
+                                            avatarUrl = post.avatarUrl
                                         )
                                     )
                                 }
@@ -245,18 +219,8 @@ fun FeedScreen(
                             if (remoteStories.isNotEmpty()) {
                                 storiesList.clear()
                                 remoteStories.forEach { story ->
-                                    val authorName = if (!story.userId.isNullOrBlank()) {
-                                        val p = com.example.network.AqualynRepository.fetchUserProfile(story.userId)
-                                        p?.displayName ?: p?.username ?: (story.title ?: "Story")
-                                    } else {
-                                        story.title ?: "Story"
-                                    }
-                                    val authorAvatar = if (!story.userId.isNullOrBlank()) {
-                                        val p = com.example.network.AqualynRepository.fetchUserProfile(story.userId)
-                                        p?.avatar ?: p?.largeAvatar
-                                    } else {
-                                        null
-                                    }
+                                    val authorName = story.authorName ?: story.title ?: "Story"
+                                    val authorAvatar = story.avatarUrl
                                     storiesList.add(
                                         LocalStory(
                                             id = story.id,

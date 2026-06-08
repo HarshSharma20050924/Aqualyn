@@ -407,6 +407,21 @@ export const useAppActions = (
 
   const followUser = async (userId: string) => {
     if (!currentUser) return;
+    
+    // Optimistically update UI immediately before API call
+    const originalFollowing = [...(currentUser.following || [])];
+    const isAlreadyFollowing = originalFollowing.includes(userId);
+    
+    // Immediate state update
+    setCurrentUser({ 
+      ...currentUser, 
+      following: isAlreadyFollowing ? originalFollowing.filter((id: string) => id !== userId) : [...originalFollowing, userId],
+      _count: {
+        ...currentUser._count,
+        following: isAlreadyFollowing ? (currentUser._count?.following || originalFollowing.length) - 1 : (currentUser._count?.following || originalFollowing.length) + 1
+      }
+    });
+
     try {
       const res = await apiFetch(ENDPOINTS.FOLLOW, {
         method: 'POST',
@@ -414,47 +429,81 @@ export const useAppActions = (
       });
       
       const data = await res.json();
-      if (res.ok) {
-        if (data.status === 'requested') {
-           setGlobalUsers(prev => prev.map(u => 
-             u.id === userId ? { ...u, receivedFollowReqs: [...(u.receivedFollowReqs || []), { id: 'temp', senderId: currentUser.id, status: 'pending' }] } : u
-           ));
-           addToast('Follow request sent', 'success');
-        } else {
-           setCurrentUser({ ...currentUser, following: [...(currentUser.following || []), userId] });
-           // Update target user's follower count in global state
-           const updateFollowers = (u: User) => u.id === userId ? { ...u, followers: [...(u.followers || []), currentUser.id] } : u;
-           setGlobalUsers(prev => prev.map(updateFollowers));
-           setContacts(prev => prev.map(updateFollowers));
-           addToast('Started following', 'success');
-        }
+      if (!res.ok || data.status === 'error') {
+        // Rollback on error
+        setCurrentUser({ ...currentUser, following: originalFollowing });
+        addToast(data.error || 'Failed to follow user', 'error');
+        return;
+      }
+      
+      // For private accounts, update follower arrays
+      if (data.followers !== undefined) {
+        setGlobalUsers(prev => prev.map(u => {
+          if (data.followers?.some((f: any) => f.followerId === u.id)) {
+            const followerIds = data.followers.map((f: any) => f.followerId);
+            return { ...u, followers: followerIds };
+          }
+          return u;
+        }));
+      }
+      
+      if (data.status === 'requested') {
+        addToast('Follow request sent', 'success');
+      } else {
+        addToast(isAlreadyFollowing ? 'Unfollowed' : 'Started following', 'success');
       }
     } catch (e) {
       console.error(e);
+      // Rollback
+      setCurrentUser({ ...currentUser, following: originalFollowing });
       addToast('Failed to follow user', 'error');
     }
   };
 
   const unfollowUser = async (userId: string) => {
     if (!currentUser) return;
+
+    const originalUser = { ...currentUser };
+    const originalGlobalUsers = [...globalUsers];
+    const originalContacts = [...contacts];
+
+    // Optimistic UI update
+    setCurrentUser({ 
+      ...currentUser, 
+      following: (currentUser.following || []).filter((id: string) => id !== userId),
+      _count: {
+        ...currentUser._count,
+        following: Math.max(0, (currentUser._count?.following || (currentUser.following?.length || 0)) - 1)
+      }
+    });
+    const updateFollowers = (u: User) => u.id === userId ? { 
+      ...u, 
+      followers: (u.followers || []).filter(id => id !== currentUser.id),
+      _count: {
+        ...u._count,
+        followers: Math.max(0, (u._count?.followers || (u.followers?.length || 0)) - 1)
+      }
+    } : u;
+    setGlobalUsers(prev => prev.map(updateFollowers));
+    setContacts(prev => prev.map(updateFollowers));
+
     try {
       const res = await apiFetch(ENDPOINTS.UNFOLLOW, {
         method: 'POST',
         body: JSON.stringify({ targetUserId: userId })
       });
       if (res.ok) {
-        setCurrentUser({ 
-          ...currentUser, 
-          following: (currentUser.following || []).filter((id: string) => id !== userId) 
-        });
-        // Update target user's follower count in global state
-        const updateFollowers = (u: User) => u.id === userId ? { ...u, followers: (u.followers || []).filter(id => id !== currentUser.id) } : u;
-        setGlobalUsers(prev => prev.map(updateFollowers));
-        setContacts(prev => prev.map(updateFollowers));
         addToast('Unfollowed', 'info');
+      } else {
+        throw new Error('Failed to unfollow');
       }
     } catch (e) {
       console.error(e);
+      // Rollback
+      setCurrentUser(originalUser);
+      setGlobalUsers(originalGlobalUsers);
+      setContacts(originalContacts);
+      addToast('Failed to unfollow', 'error');
     }
   };
 

@@ -106,3 +106,12 @@ export const pinMessage = catchAsync(async (req: any, res: Response, next: NextF
     const result = await ChatService.pinMessage(req.params.chatId, req.params.messageId);
     res.json({ success: true, isPinned: result.isPinned });
 });
+
+export const createChat = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const { isGroup, name, memberIds } = req.body;
+    if (isGroup === undefined || !memberIds || !Array.isArray(memberIds)) {
+        return next(new AppError('isGroup and memberIds (array) are required', 400));
+    }
+    const chat = await ChatService.createChat(req.user.id, isGroup, name || '', memberIds);
+    res.json(chat);
+});

@@ -34,8 +34,11 @@ import coil.compose.AsyncImage
 import com.example.model.ChatItem
 import com.example.ui.components.SwipeToRefreshBox
 import com.example.ui.screens.chat.*
-import kotlinx.coroutines.delay
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -76,7 +79,8 @@ fun ChatsScreen(
             com.example.network.AqualynRepository.fetchChats()
         }
         try {
-            val backendFolders = com.example.network.AqualynRepository.getChatFolders()
+            val backendFolders = com.example.model.GlobalState.chats.isEmpty()
+                .let { com.example.network.AqualynRepository.getChatFolders() }
             if (backendFolders.isNotEmpty()) {
                 com.example.model.GlobalState.folders.clear()
                 backendFolders.forEach { folderDto ->
@@ -90,15 +94,9 @@ fun ChatsScreen(
             Log.e("ChatsScreen", "Failed to load folders", e)
         }
         isFetching = false
-        while (true) {
-            kotlinx.coroutines.delay(3500)
-            try {
-                com.example.network.AqualynRepository.fetchChats(silent = true)
-            } catch (e: Exception) {
-                // Ignore errors silently for background sync
-            }
-        }
     }
+
+    val backgroundSyncJob = remember { mutableStateOf<androidx.lifecycle.LifecycleEventObserver?>(null) }
 
     val visibleChats = com.example.model.GlobalState.chats.filter { chat ->
         val matchesSearch = (chat.groupName ?: chat.user?.name ?: "").contains(searchQuery, ignoreCase = true)

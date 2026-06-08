@@ -3,6 +3,119 @@ import { SocketService } from '../../services/SocketService';
 import { AppError } from '../../core/exceptions/AppError';
 
 export class ChatService {
+    static async formatChat(chat: any, userId: string) {
+        const myParticipant = chat.participants.find((p: any) => p.userId === userId);
+        const otherParticipant = chat.participants.find((p: any) => p.userId !== userId);
+        
+        // Find unread message count
+        const unreadCount = await (prisma as any).message.count({
+            where: {
+                chatId: chat.id,
+                isRead: false,
+                senderId: { not: userId }
+            }
+        });
+
+        // Check if muted
+        const isMuted = await (prisma as any).mutedChat.findUnique({
+            where: { userId_chatId: { userId, chatId: chat.id } }
+        });
+
+        return {
+            id: chat.id,
+            name: chat.name || otherParticipant?.user.displayName || otherParticipant?.user.username || 'User',
+            avatar: chat.isGroup ? chat.avatar : otherParticipant?.user.avatar,
+            lastMessage: chat.messages?.[0]?.text || '',
+            lastMessageTime: chat.messages?.[0]?.createdAt 
+                ? new Date(chat.messages[0].createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                : 'Recent',
+            isGroup: chat.isGroup,
+            isSecret: chat.isSecret,
+            unreadCount: unreadCount,
+            selfDestructTimer: chat.selfDestructTimer,
+            participantIds: chat.participants.map((p: any) => p.userId),
+            isMuted: !!isMuted,
+            myStatus: myParticipant?.status || 'JOINED',
+            myRole: myParticipant?.role || 'MEMBER',
+            isArchived: myParticipant?.isArchived || false,
+            isPinned: myParticipant?.isPinned || false
+        };
+    }
+
+    static async createChat(userId: string, isGroup: boolean, name: string, memberIds: string[]) {
+        const uniqueMemberIds = Array.from(new Set([userId, ...memberIds]));
+
+        if (!isGroup) {
+            const targetUserId = memberIds.find(id => id !== userId) || memberIds[0];
+            if (!targetUserId) throw new AppError('Target user ID is required for direct chat', 400);
+
+            const existing = await (prisma as any).chat.findFirst({
+                where: {
+                    isGroup: false,
+                    isSecret: false,
+                    AND: [
+                        { participants: { some: { userId: userId } } },
+                        { participants: { some: { userId: targetUserId } } }
+                    ]
+                },
+                include: {
+                    participants: {
+                        include: {
+                            user: { select: { id: true, username: true, displayName: true, avatar: true } }
+                        }
+                    },
+                    messages: {
+                        orderBy: { createdAt: 'desc' },
+                        take: 1,
+                        select: { text: true, createdAt: true }
+                    }
+                }
+            });
+
+            if (existing) {
+                return await this.formatChat(existing, userId);
+            }
+        }
+
+        const chat = await (prisma as any).chat.create({
+            data: {
+                isGroup,
+                isSecret: false,
+                name: isGroup ? name : null,
+                participants: {
+                    create: uniqueMemberIds.map((id) => ({
+                        userId: id,
+                        role: id === userId ? 'OWNER' : 'MEMBER',
+                        status: 'JOINED'
+                    }))
+                }
+            },
+            include: {
+                participants: {
+                    include: {
+                        user: { select: { id: true, username: true, displayName: true, avatar: true } }
+                    }
+                },
+                messages: {
+                    orderBy: { createdAt: 'desc' },
+                    take: 1,
+                    select: { text: true, createdAt: true }
+                }
+            }
+        });
+
+        const formatted = await this.formatChat(chat, userId);
+        uniqueMemberIds.forEach((id) => {
+            if (id !== userId) {
+                this.formatChat(chat, id).then((otherFormatted) => {
+                    SocketService.emitToUser(id, 'chat_created', otherFormatted);
+                }).catch(() => {});
+            }
+        });
+
+        return formatted;
+    }
+
     static async getChats(userId: string) {
         const chats = await (prisma as any).chat.findMany({
             where: {

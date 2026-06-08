@@ -53,33 +53,45 @@ fun ProfileScreen(
     var isRefreshing by remember { mutableStateOf(false) }
 
     val coroutineScope = rememberCoroutineScope()
+    val isLoading = remember { mutableStateOf(false) }
+    
     LaunchedEffect(Unit) {
-        // Load the fresh user profile from the backend
-        com.example.network.AqualynRepository.fetchUserProfile("me")
-
+        if (isLoading.value) return@LaunchedEffect
+        isLoading.value = true
+        
+        // Load the fresh user profile from the backend once
+        if (GlobalState.currentUserProfile == null) {
+            com.example.network.AqualynRepository.fetchUserProfile("me")
+        }
+        
         if (GlobalState.posts.isEmpty() && GlobalState.followersList.isEmpty()) {
-            val followers = com.example.network.AqualynRepository.getFollowers("me")
-            GlobalState.followersList.clear()
-            GlobalState.followersList.addAll(followers.map { it.toDomain() })
-
-            val following = com.example.network.AqualynRepository.getFollowing("me")
-            GlobalState.followingList.clear()
-            GlobalState.followingList.addAll(following.map { it.toDomain() })
-
-            // Load real posts from user API
-            val posts = com.example.network.AqualynRepository.getUserPosts("me")
-            if (posts.isNotEmpty()) {
-                GlobalState.posts.clear()
-                GlobalState.posts.addAll(posts)
-            }
-
-            // Load real stories from user API
-            val stories = com.example.network.AqualynRepository.getUserStories("me")
-            if (stories.isNotEmpty()) {
-                GlobalState.stories.clear()
-                GlobalState.stories.addAll(stories)
+            try {
+                val followers = com.example.network.AqualynRepository.getFollowers("me")
+                GlobalState.followersList.clear()
+                GlobalState.followersList.addAll(followers)
+                
+                val following = com.example.network.AqualynRepository.getFollowing("me")
+                GlobalState.followingList.clear()
+                GlobalState.followingList.addAll(following)
+                
+                // Load real posts from user API
+                val posts = com.example.network.AqualynRepository.getUserPosts("me")
+                if (posts.isNotEmpty()) {
+                    GlobalState.posts.clear()
+                    GlobalState.posts.addAll(posts)
+                }
+                
+                // Load real stories from user API
+                val stories = com.example.network.AqualynRepository.getUserStories("me")
+                if (stories.isNotEmpty()) {
+                    GlobalState.stories.clear()
+                    GlobalState.stories.addAll(stories)
+                }
+            } catch (e: Exception) {
+                Log.e("ProfileScreen", "Error loading profile data", e)
             }
         }
+        isLoading.value = false
     }
 
     Box(

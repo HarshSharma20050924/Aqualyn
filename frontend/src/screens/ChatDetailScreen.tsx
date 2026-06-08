@@ -102,12 +102,12 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
   // Skeleton message bubble component
   const SkeletonBubble = ({ isMe }: { isMe: boolean }) => (
     <div className={`flex flex-col space-y-1 max-w-[85%] ${isMe ? 'items-end ml-auto' : 'items-start'}`}>
-      <div className="chat-bubble rounded-2xl p-4 w-[220px]">
-        <div className="h-3 bg-white/10 rounded-full animate-pulse w-3/4 mb-2" />
-        <div className="h-3 bg-white/10 rounded-full animate-pulse w-1/2" />
+      <div className={`chat-bubble rounded-2xl p-4 w-[220px] ${isMe ? 'bg-secondary/20' : 'bg-black/5 dark:bg-white/5'}`}>
+        <div className="h-3 bg-black/10 dark:bg-white/10 rounded-full animate-pulse w-3/4 mb-2" />
+        <div className="h-3 bg-black/10 dark:bg-white/10 rounded-full animate-pulse w-1/2" />
       </div>
       <div className={`flex items-center gap-1 ${isMe ? 'mr-1' : 'ml-1'}`}>
-        <div className="h-2 bg-white/10 rounded-full animate-pulse w-8" />
+        <div className="h-2 bg-black/10 dark:bg-white/10 rounded-full animate-pulse w-8" />
       </div>
     </div>
   );

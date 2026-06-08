@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { verifyToken } from '../../middleware/auth';
 import {
     getChats,
+    createChat,
     getMessages,
     sendMessage,
     deleteMessage,
@@ -40,6 +41,7 @@ router.post('/secret/handle', handleSecretChat);
 
 // Chat list
 router.get('/', getChats);
+router.post('/', createChat);
 
 // Messages
 router.get('/:chatId/messages', getMessages);

@@ -52,7 +52,7 @@ const ScrambledText = ({ text, isSecret }: { text: string; isSecret?: boolean })
   );
 };
 
-export default function MessageBubble({ msg, isMe, onReply, onEdit, replyMessage, onMediaClick, isSecret }: MessageBubbleProps) {
+const MessageBubbleComponent = ({ msg, isMe, onReply, onEdit, replyMessage, onMediaClick, isSecret }: MessageBubbleProps) => {
   const { deleteMessage, addReaction, currentUser, addToast, chats } = useAppContext();
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -455,3 +455,10 @@ export default function MessageBubble({ msg, isMe, onReply, onEdit, replyMessage
     </motion.div>
   );
 }
+
+export default React.memo(MessageBubbleComponent, (prevProps, nextProps) => {
+  return prevProps.msg === nextProps.msg && 
+         prevProps.isMe === nextProps.isMe && 
+         prevProps.isSecret === nextProps.isSecret &&
+         prevProps.replyMessage === nextProps.replyMessage;
+});

@@ -172,7 +172,7 @@ export default function ContactsScreen({ onNavigate }: { onNavigate: (s: string)
             onClick={() => { setActiveTab('followers'); setSearchQuery(''); }}
             className={`flex-1 py-3 text-center text-sm font-bold transition-all relative ${activeTab === 'followers' ? 'text-primary' : 'text-on-surface-variant/80'}`}
           >
-            Followers ({currentUser?.followers?.length || 0})
+            Followers ({currentUser?._count?.followers ?? currentUser?.followers?.length ?? 0})
             {activeTab === 'followers' && <motion.div layoutId="tab-indicator" className="absolute bottom-0 left-1/4 right-1/4 h-0.5 bg-primary rounded-full" />}
           </button>
 
@@ -180,7 +180,7 @@ export default function ContactsScreen({ onNavigate }: { onNavigate: (s: string)
             onClick={() => { setActiveTab('following'); setSearchQuery(''); }}
             className={`flex-1 py-3 text-center text-sm font-bold transition-all relative ${activeTab === 'following' ? 'text-primary' : 'text-on-surface-variant/80'}`}
           >
-            Following ({currentUser?.following?.length || 0})
+            Following ({currentUser?._count?.following ?? currentUser?.following?.length ?? 0})
             {activeTab === 'following' && <motion.div layoutId="tab-indicator" className="absolute bottom-0 left-1/4 right-1/4 h-0.5 bg-primary rounded-full" />}
           </button>
         </div>

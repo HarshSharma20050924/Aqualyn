@@ -77,7 +77,9 @@ data class PostItem(
     val isCommentsDisabled: Boolean = false,
     val location: String = "",
     val authorId: String? = null,
-    val mediaUrl: String? = null
+    val mediaUrl: String? = null,
+    val authorName: String? = null,
+    val avatarUrl: String? = null
 )
 
 data class StoryItem(
@@ -86,7 +88,9 @@ data class StoryItem(
     val isViewed: Boolean = false,
     val isMe: Boolean = false,
     val userId: String? = null,
-    val mediaUrl: String? = null
+    val mediaUrl: String? = null,
+    val authorName: String? = null,
+    val avatarUrl: String? = null
 )
 
 data class User(

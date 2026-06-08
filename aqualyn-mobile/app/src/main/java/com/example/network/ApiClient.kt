@@ -47,6 +47,14 @@ data class SyncAuthResponse(
 // 👤 USER DTOs
 // ========================================
 
+data class FollowerDto(
+    val followerId: String
+)
+
+data class FollowingDto(
+    val followingId: String
+)
+
 // ✅ CORRECTED: All field names match actual backend response
 data class UserDto(
     val id: String,
@@ -59,17 +67,17 @@ data class UserDto(
     val largeAvatar: String? = null,
     val bio: String? = null,
     val dob: String? = null,
-    val isPrivate: Boolean = false,
-    val searchByPhone: Boolean = true,
-    val showPhoneTo: String = "everyone",
-    val invitationSettings: String = "everyone",
+    val isPrivate: Boolean? = false,
+    val searchByPhone: Boolean? = true,
+    val showPhoneTo: String? = "everyone",
+    val invitationSettings: String? = "everyone",
     val appLockPin: String? = null,
     val lastLogin: String? = null,
     val createdAt: String? = null,
     val updatedAt: String? = null,
-    // ✅ Arrays of IDs, not nested User objects
-    val followers: List<String> = emptyList(),
-    val following: List<String> = emptyList(),
+    // ✅ Arrays of objects from backend
+    val followers: List<FollowerDto> = emptyList(),
+    val following: List<FollowingDto> = emptyList(),
     // ✅ Count object from backend
     val _count: CountDto? = null,
     // For search endpoint only
@@ -115,18 +123,18 @@ data class ChatDto(
     val id: String,
     val name: String? = null,                  // Group name OR other user's displayName
     val avatar: String? = null,
-    val lastMessage: String = "",
-    val lastMessageTime: String = "",          // ✅ NOT timeInfo - formatted like "2:30 PM"
-    val isGroup: Boolean = false,
-    val isSecret: Boolean = false,
-    val unreadCount: Int = 0,
-    val selfDestructTimer: Int = 0,
+    val lastMessage: String? = "",
+    val lastMessageTime: String? = "",          // ✅ NOT timeInfo - formatted like "2:30 PM"
+    val isGroup: Boolean? = false,
+    val isSecret: Boolean? = false,
+    val unreadCount: Int? = 0,
+    val selfDestructTimer: Int? = 0,
     val participantIds: List<String> = emptyList(),
-    val isMuted: Boolean = false,
-    val myStatus: String = "JOINED",           // "JOINED", "INVITED", "DECLINED"
-    val myRole: String = "MEMBER",             // "OWNER", "ADMIN", "MEMBER"
-    val isArchived: Boolean = false,
-    val isPinned: Boolean = false,
+    val isMuted: Boolean? = false,
+    val myStatus: String? = "JOINED",           // "JOINED", "INVITED", "DECLINED"
+    val myRole: String? = "MEMBER",             // "OWNER", "ADMIN", "MEMBER"
+    val isArchived: Boolean? = false,
+    val isPinned: Boolean? = false,
     val user: UserDto? = null,                 // Support flat "user" key
     val participants: List<ParticipantDto> = emptyList() // Support "participants" array
 ) {
@@ -173,12 +181,12 @@ data class ChatDto(
                 followers = followersSize,
                 following = followingSize
             ),
-            isGroup = isGroup,
-            groupName = if (isGroup) (name ?: "Group") else null,
-            lastMessage = lastMessage,
-            timeInfo = lastMessageTime,            // ✅ Maps lastMessageTime to timeInfo
-            unreadCount = unreadCount,
-            isPinned = isPinned,
+            isGroup = isGroup ?: false,
+            groupName = if (isGroup == true) (name ?: "Group") else null,
+            lastMessage = lastMessage ?: "",
+            timeInfo = lastMessageTime ?: "Recent",            // ✅ Maps lastMessageTime to timeInfo
+            unreadCount = unreadCount ?: 0,
+            isPinned = isPinned ?: false,
             isVoiceMessage = false
         )
     }
@@ -242,13 +250,14 @@ data class MessageSendInputDto(
 data class PostDto(
     val id: String,
     val authorId: String? = null,
+    val author: UserDto? = null,
     val content: String? = null,
     val caption: String? = null,
     val mediaUrl: String? = null,
     val mediaType: String? = null,             // "image", "video"
     val likesCount: Int = 0,
-    val timeAgo: String = "Just now",
-    val location: String = "",
+    val timeAgo: String? = "Just now",
+    val location: String? = "",
     val isCommentsDisabled: Boolean = false,
     val createdAt: String? = null,
     val updatedAt: String? = null
@@ -258,17 +267,20 @@ data class PostDto(
         imageDescription = content ?: caption ?: "",
         caption = caption ?: content ?: "",
         likesCount = likesCount,
-        timeAgo = timeAgo,
+        timeAgo = timeAgo ?: "Just now",
         isCommentsDisabled = isCommentsDisabled,
-        location = location,
+        location = location ?: "",
         authorId = authorId,
-        mediaUrl = mediaUrl
+        mediaUrl = mediaUrl,
+        authorName = author?.displayName ?: author?.username ?: "Aqualyn User",
+        avatarUrl = author?.avatar ?: author?.largeAvatar
     )
 }
 
 data class StoryDto(
     val id: String,
     val userId: String? = null,
+    val user: UserDto? = null,
     val mediaUrl: String? = null,
     val mediaType: String? = null,
     val content: String? = null,
@@ -283,7 +295,9 @@ data class StoryDto(
         isViewed = isViewed,
         isMe = isMe,
         userId = userId,
-        mediaUrl = mediaUrl
+        mediaUrl = mediaUrl,
+        authorName = user?.displayName ?: user?.username ?: title ?: "Story",
+        avatarUrl = user?.avatar ?: user?.largeAvatar
     )
 }
 
@@ -384,7 +398,7 @@ data class NotificationDto(
 )
 
 data class HandleFollowRequestDto(
-    val senderId: String,
+    val followerId: String,
     val action: String // "accept" or "reject"
 )
 
@@ -522,7 +536,7 @@ interface AqualynApiService {
     suspend fun reactMessage(@Path("id") id: String, @Path("messageId") messageId: String, @Body request: Map<String, Any>): Response<Unit>
 
     @GET("api/chats/{id}/media")
-    suspend fun getChatMedia(@Path("id") id: String): Response<Map<String, Any>>
+    suspend fun getChatMedia(@Path("id") id: String): Response<List<String>>
 
     @POST("api/groups/create")
     suspend fun createGroup(@Body request: CreateGroupRequest): Response<ChatDto>
@@ -614,7 +628,6 @@ interface AqualynApiService {
 // ========================================
 
 object AqualynApi {
-    // ✅ BACKEND: Render Production
     private var baseUrl = "https://aqualyn.onrender.com/"
 
     fun setBaseUrl(url: String) {
@@ -648,7 +661,7 @@ object AqualynApi {
         .build()
 
     private var retrofit = retrofit2.Retrofit.Builder()
-        .baseUrl("https://aqualyn.onrender.com/")
+        .baseUrl(if (baseUrl.startsWith("http")) baseUrl else "https://aqualyn.onrender.com/")
         .client(okHttpClient)
         .addConverterFactory(retrofit2.converter.moshi.MoshiConverterFactory.create(moshi))
         .build()
