@@ -1,8 +1,12 @@
 /**
- * API Configuration for Aqualyn.
- * Switch between LOCAL and PRODUCTION IPs here.
+ * api.ts
+ * API Configuration for Aqualyn tailored for React Native environments.
+ * Switch between LOCAL (using machine IPs for physical devices) and PRODUCTION configurations.
  */
-export const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || "http://localhost:5000";
+
+// In React Native, do not use 'localhost' when testing on a physical device;
+// instead use your local development machine's private LAN IP address (e.g., http://192.168.1.X:5000)
+export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || process.env.REACT_APP_API_URL || "http://10.0.2.2:5000"; // 10.0.2.2 is default loopback alias for the Android Emulator
 
 // Endpoints mapping for easier maintenance
 export const ENDPOINTS = {
@@ -10,6 +14,8 @@ export const ENDPOINTS = {
     AUTH_SEND_OTP: `${API_BASE_URL}/api/auth/send-otp`,
     AUTH_VERIFY_OTP: `${API_BASE_URL}/api/auth/verify-otp`,
     USER_PROFILE: (id: string) => `${API_BASE_URL}/api/user/profile/${id}`,
+    GET_FOLLOWERS: (id: string) => `${API_BASE_URL}/api/user/${id}/followers`,
+    GET_FOLLOWING: (id: string) => `${API_BASE_URL}/api/user/${id}/following`,
     NOTIFICATIONS: `${API_BASE_URL}/api/user/notifications`,
     FOLLOW: `${API_BASE_URL}/api/user/follow`,
     UNFOLLOW: `${API_BASE_URL}/api/user/unfollow`,
@@ -22,8 +28,6 @@ export const ENDPOINTS = {
     EXPORT_DATA: `${API_BASE_URL}/api/user/export`,
     CONTACT_SYNC: `${API_BASE_URL}/api/user/contacts/sync`,
     CALL_HISTORY: `${API_BASE_URL}/api/user/call-history`,
-    UPDATE_SETTINGS: `${API_BASE_URL}/api/user/settings`,
-    UPLOAD_AVATAR: `${API_BASE_URL}/api/user/upload-avatar`,
     CHATS: `${API_BASE_URL}/api/chats`,
     CHAT_MESSAGES: (id: string) => `${API_BASE_URL}/api/chats/${id}/messages`,
     MUTE_CHAT: (id: string) => `${API_BASE_URL}/api/chats/${id}/mute`,
@@ -41,8 +45,7 @@ export const ENDPOINTS = {
     DELETE_STORY: (id: string) => `${API_BASE_URL}/api/social/story/${id}`,
     LIKE_POST: (id: string) => `${API_BASE_URL}/api/social/post/${id}/like`,
     COMMENT_POST: (id: string) => `${API_BASE_URL}/api/social/post/${id}/comment`,
-    GET_FOLLOWERS: (userId: string) => `${API_BASE_URL}/api/user/${userId}/followers`,
-    GET_FOLLOWING: (userId: string) => `${API_BASE_URL}/api/user/${userId}/following`,
-    USER_POSTS: (userId: string) => `${API_BASE_URL}/api/social/user/${userId}/posts`,
-    USER_STORIES: (userId: string) => `${API_BASE_URL}/api/social/user/${userId}/stories`,
+    USER_POSTS: (id: string) => `${API_BASE_URL}/api/user/${id}/posts`,
+    USER_STORIES: (id: string) => `${API_BASE_URL}/api/user/${id}/stories`,
+    UPDATE_PROFILE: `${API_BASE_URL}/api/user/profile`,
 };

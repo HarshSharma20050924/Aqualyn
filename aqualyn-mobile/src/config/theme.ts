@@ -1,3 +1,8 @@
+/**
+ * theme.ts
+ * Style guide design vectors optimized directly for StyleSheet use cases in React Native.
+ */
+
 export const Theme = {
   colors: {
     primary: '#0057bd',
@@ -36,26 +41,7 @@ export const Theme = {
     onBackground: '#f3f7fb',
     error: '#ffb4ab',
     onError: '#690005',
-    outline: '#73777b',
-    outlineVariant: '#45494d',
-  },
-  typography: {
-    headline: { fontFamily: 'PlusJakartaSans-Bold', fontWeight: '700' as const },
-    body: { fontFamily: 'Inter-Regular', fontWeight: '400' as const },
-    label: { fontFamily: 'Inter-Medium', fontWeight: '500' as const },
-  },
-  spacing: {
-    xs: 4,
-    sm: 8,
-    md: 16,
-    lg: 24,
-    xl: 32,
-    xxl: 48,
-  },
-  radii: {
-    sm: 8,
-    md: 16,
-    lg: 24,
-    full: 9999,
+    outline: '#8d9196',
+    outlineVariant: '#43474a',
   }
 };

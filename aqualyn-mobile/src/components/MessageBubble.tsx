@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, Share, Clipboard, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, Share, Clipboard, Pressable, Modal } from 'react-native';
 import { Play, Pause, FileText, Download, MapPin, CheckCheck, Reply, Copy, Trash2, Smile, Timer, Edit2, Wallet, ArrowRight, ShieldAlert } from 'lucide-react-native';
 import { useAppContext } from '../context/AppContext';
 import { Theme } from '../config/theme';
@@ -59,13 +59,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioProgress, setAudioProgress] = useState(0);
-  const [audioDuration] = useState(12); // Simulated audio duration (12s)
+  const [audioDuration] = useState(12); 
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
 
   const activeChat = chats.find((c: any) => c.id === msg.chatId);
-  const otherParticipantName = activeChat?.name || 'User';
 
-  // Self-Destruct Message Timer for Secret Chats
   useEffect(() => {
     if (!isSecret) return;
     const timerDuration = activeChat?.selfDestructTimer || 30; 
@@ -94,7 +92,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     return () => clearInterval(interval);
   }, [isSecret, msg.id, msg.chatId, activeChat?.selfDestructTimer]);
 
-  // Handle system notices
   const isSystemNotice = msg.text?.startsWith('[System]') || msg.text?.startsWith('[Security Notice]');
   if (isSystemNotice) {
     return (
@@ -124,7 +121,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
   const toggleAudio = () => {
     setIsPlaying(!isPlaying);
-    // Simulate playing audio
     if (!isPlaying) {
       let interval = setInterval(() => {
         setAudioProgress(prev => {
@@ -143,10 +139,10 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
   return (
     <View style={[styles.bubbleContainer, isMe ? styles.alignRight : styles.alignLeft]}>
-      {/* Context Menu overlay */}
-      {showContextMenu && (
-        <View style={styles.contextMenuOverlay}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowContextMenu(false)} />
+      
+      {/* Context Menu Bottom Sheet/Modal Simulation */}
+      <Modal visible={showContextMenu} transparent animationType="fade" onRequestClose={() => setShowContextMenu(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setShowContextMenu(false)}>
           <View style={[styles.contextMenu, isMe ? styles.contextMenuRight : styles.contextMenuLeft]}>
             <View style={styles.emojiRow}>
               {emojis.map(emoji => (
@@ -180,10 +176,10 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               <Text style={styles.menuItemTextDelete}>Delete</Text>
             </TouchableOpacity>
           </View>
-        </View>
-      )}
+        </Pressable>
+      </Modal>
 
-      {/* Reply header */}
+      {/* Reply Header Metadata Display block */}
       {replyMessage && (
         <View style={[styles.replyHeader, isMe ? styles.replyHeaderMe : styles.replyHeaderOther]}>
           <Text style={styles.replySender}>
@@ -195,7 +191,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         </View>
       )}
 
-      {/* Main bubble body */}
+      {/* Main bubble click zone wrapper */}
       <TouchableOpacity 
         activeOpacity={0.9}
         onLongPress={() => setShowContextMenu(true)}
@@ -205,14 +201,12 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           replyMessage && styles.bubbleWithReply
         ]}
       >
-        {/* Images / media */}
         {msg.imageUrl && (
           <TouchableOpacity onPress={() => onMediaClick?.(msg)}>
             <Image source={{ uri: msg.imageUrl }} style={styles.attachmentImage} resizeMode="cover" />
           </TouchableOpacity>
         )}
 
-        {/* Video preview */}
         {msg.videoUrl && (
           <TouchableOpacity onPress={() => onMediaClick?.(msg)} style={styles.videoPreview}>
             <Image source={{ uri: msg.videoUrl }} style={styles.attachmentImage} resizeMode="cover" />
@@ -222,7 +216,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           </TouchableOpacity>
         )}
 
-        {/* Audio attachment */}
         {msg.audioUrl && (
           <View style={styles.audioRow}>
             <TouchableOpacity onPress={toggleAudio} style={[styles.audioPlayButton, isMe ? styles.audioPlayButtonMe : styles.audioPlayButtonOther]}>
@@ -235,7 +228,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           </View>
         )}
 
-        {/* Location attachment */}
         {msg.location && (
           <View style={styles.locationContainer}>
             <View style={styles.locationMapMock}>
@@ -245,7 +237,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           </View>
         )}
 
-        {/* Payment / Wallet request */}
         {(msg.payment || msg.wallet) && (
           <View style={[styles.paymentContainer, isMe ? styles.paymentMe : styles.paymentOther]}>
             <View style={styles.paymentRow}>
@@ -264,10 +255,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           </View>
         )}
 
-        {/* Text body */}
         {msg.text && <ScrambledText text={msg.text} isSecret={isSecret} />}
 
-        {/* Message reactions */}
+        {/* Reaction Pill Container Layer */}
         {msg.reactions && Object.keys(msg.reactions).length > 0 && (
           <View style={[styles.reactionsRow, isMe ? styles.reactionsRight : styles.reactionsLeft]}>
             {Object.entries(msg.reactions).map(([emoji, users]: [string, any]) => (
@@ -280,7 +270,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         )}
       </TouchableOpacity>
 
-      {/* Message footer info */}
+      {/* Metadata Metrics Row */}
       <View style={styles.footerRow}>
         {isSecret && timeLeft !== null && (
           <View style={styles.timerContainer}>
@@ -302,336 +292,68 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 };
 
 const styles = StyleSheet.create({
-  bubbleContainer: {
-    marginVertical: 4,
-    maxWidth: '85%',
-  },
-  alignRight: {
-    alignSelf: 'flex-end',
-    alignItems: 'flex-end',
-  },
-  alignLeft: {
-    alignSelf: 'flex-start',
-    alignItems: 'flex-start',
-  },
-  bubble: {
-    borderRadius: 18,
-    padding: 10,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-  },
-  bubbleMe: {
-    backgroundColor: '#1e293b',
-    borderTopRightRadius: 2,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  bubbleOther: {
-    backgroundColor: '#0f172a',
-    borderTopLeftRadius: 2,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
-  },
-  bubbleWithReply: {
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-  },
-  replyHeader: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-    borderLeftWidth: 3,
-    minWidth: 150,
-  },
-  replyHeaderMe: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderLeftColor: 'rgba(255,255,255,0.5)',
-  },
-  replyHeaderOther: {
-    backgroundColor: 'rgba(0,0,0,0.15)',
-    borderLeftColor: '#0ea5e9',
-  },
-  replySender: {
-    color: '#0ea5e9',
-    fontWeight: 'bold',
-    fontSize: 11,
-    marginBottom: 2,
-  },
-  replyText: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontSize: 12,
-  },
-  text: {
-    color: 'white',
-    fontSize: 15,
-    lineHeight: 20,
-  },
-  secretText: {
-    color: '#4ade80',
-    fontFamily: 'monospace',
-  },
-  systemNoticeContainer: {
-    alignSelf: 'center',
-    marginVertical: 12,
-  },
-  systemNotice: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#121820',
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
-  systemNoticeText: {
-    color: '#cbd5e1',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  attachmentImage: {
-    width: 240,
-    height: 150,
-    borderRadius: 12,
-    marginBottom: 6,
-  },
-  videoPreview: {
-    position: 'relative',
-  },
-  videoPlayOverlay: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  audioRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: 220,
-    gap: 8,
-    marginBottom: 4,
-  },
-  audioPlayButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  audioPlayButtonMe: {
-    backgroundColor: 'white',
-  },
-  audioPlayButtonOther: {
-    backgroundColor: '#0ea5e9',
-  },
-  audioProgressBarBg: {
-    flex: 1,
-    height: 4,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  audioProgressBar: {
-    height: '100%',
-    borderRadius: 2,
-  },
-  progressBarMe: {
-    backgroundColor: 'white',
-  },
-  progressBarOther: {
-    backgroundColor: '#0ea5e9',
-  },
-  audioDurationText: {
-    color: 'rgba(255, 255, 255, 0.6)',
-    fontSize: 11,
-    fontWeight: '500',
-  },
-  locationContainer: {
-    width: 220,
-    marginBottom: 4,
-  },
-  locationMapMock: {
-    height: 100,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  locationAddress: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  paymentContainer: {
-    width: 220,
-    padding: 10,
-    borderRadius: 12,
-    marginBottom: 4,
-  },
-  paymentMe: {
-    backgroundColor: 'rgba(0,0,0,0.15)',
-  },
-  paymentOther: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
-  },
-  paymentRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  paymentIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  paymentIconPay: {
-    backgroundColor: '#22c55e',
-  },
-  paymentIconRequest: {
-    backgroundColor: '#0ea5e9',
-  },
-  paymentInfo: {
-    flex: 1,
-  },
-  paymentTitle: {
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  paymentAmount: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  footerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 2,
-  },
-  timeText: {
-    color: 'rgba(255, 255, 255, 0.4)',
-    fontSize: 10,
-  },
-  editedText: {
-    color: 'rgba(255, 255, 255, 0.4)',
-    fontSize: 10,
-    fontStyle: 'italic',
-  },
-  timerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-    backgroundColor: 'rgba(34, 197, 94, 0.15)',
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 10,
-  },
-  timerText: {
-    color: '#4ade80',
-    fontSize: 9,
-    fontWeight: '800',
-  },
-  reactionsRow: {
-    position: 'absolute',
-    bottom: -14,
-    flexDirection: 'row',
-    gap: 3,
-  },
-  reactionsLeft: {
-    left: 8,
-  },
-  reactionsRight: {
-    right: 8,
-  },
-  reactionPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1e293b',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 10,
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-  },
-  reactionEmoji: {
-    fontSize: 11,
-  },
-  reactionCount: {
-    color: 'white',
-    fontSize: 9,
-    fontWeight: 'bold',
-    marginLeft: 2,
-  },
-  contextMenuOverlay: {
-    position: 'absolute',
-    top: -100,
-    left: -100,
-    right: -100,
-    bottom: -100,
-    zIndex: 999,
-  },
-  contextMenu: {
-    position: 'absolute',
-    backgroundColor: 'rgb(24, 30, 36)',
-    borderRadius: 14,
-    padding: 6,
-    minWidth: 180,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    shadowColor: 'black',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 10,
-  },
-  contextMenuRight: {
-    right: 0,
-    top: 0,
-  },
-  contextMenuLeft: {
-    left: 0,
-    top: 0,
-  },
-  emojiRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingVertical: 4,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.06)',
-    marginBottom: 4,
-  },
-  emojiText: {
-    fontSize: 18,
-  },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-  },
-  menuItemText: {
-    color: 'white',
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  menuDivider: {
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    marginVertical: 4,
-  },
-  deleteItem: {
-    paddingVertical: 6,
-  },
-  menuItemTextDelete: {
-    color: '#ef4444',
-    fontSize: 13,
-    fontWeight: '600',
-  },
+  bubbleContainer: { marginVertical: 4, maxWidth: '85%' },
+  alignRight: { alignSelf: 'flex-end', alignItems: 'flex-end' },
+  alignLeft: { alignSelf: 'flex-start', alignItems: 'flex-start' },
+  bubble: { borderRadius: 18, padding: 10, backgroundColor: 'rgba(255,255,255,0.06)' },
+  bubbleMe: { backgroundColor: '#1e293b', borderTopRightRadius: 2, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)' },
+  bubbleOther: { backgroundColor: '#0f172a', borderTopLeftRadius: 2, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.05)' },
+  bubbleWithReply: { borderTopLeftRadius: 18, borderTopRightRadius: 18 },
+  replyHeader: { paddingHorizontal: 10, paddingVertical: 6, borderTopLeftRadius: 12, borderTopRightRadius: 12, borderLeftWidth: 3, minWidth: 150 },
+  replyHeaderMe: { backgroundColor: 'rgba(255,255,255,0.08)', borderLeftColor: 'rgba(255,255,255,0.5)' },
+  replyHeaderOther: { backgroundColor: 'rgba(0,0,0,0.15)', borderLeftColor: '#0ea5e9' },
+  replySender: { color: '#0ea5e9', fontWeight: 'bold', fontSize: 11, marginBottom: 2 },
+  replyText: { color: 'rgba(255, 255, 255, 0.7)', fontSize: 12 },
+  text: { color: 'white', fontSize: 15, lineHeight: 20 },
+  secretText: { color: '#4ade80', fontFamily: 'monospace' },
+  systemNoticeContainer: { alignSelf: 'center', marginVertical: 12 },
+  systemNotice: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#121820', paddingVertical: 6, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
+  systemNoticeText: { color: '#cbd5e1', fontSize: 11, fontWeight: '600' },
+  attachmentImage: { width: 240, height: 150, borderRadius: 12, marginBottom: 6 },
+  videoPreview: { position: 'relative' },
+  videoPlayOverlay: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0, 0, 0, 0.3)', justifyContent: 'center', alignItems: 'center' },
+  audioRow: { flexDirection: 'row', alignItems: 'center', width: 220, gap: 8, marginBottom: 4 },
+  audioPlayButton: { width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+  audioPlayButtonMe: { backgroundColor: 'white' },
+  audioPlayButtonOther: { backgroundColor: '#0ea5e9' },
+  audioProgressBarBg: { flex: 1, height: 4, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 2, overflow: 'hidden' },
+  audioProgressBar: { height: '100%', borderRadius: 2 },
+  progressBarMe: { backgroundColor: 'white' },
+  progressBarOther: { backgroundColor: '#0ea5e9' },
+  audioDurationText: { color: 'rgba(255, 255, 255, 0.6)', fontSize: 11, fontWeight: '500' },
+  locationContainer: { width: 220, marginBottom: 4 },
+  locationMapMock: { height: 100, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginBottom: 4 },
+  locationAddress: { color: 'white', fontSize: 12, fontWeight: '500' },
+  paymentContainer: { width: 220, padding: 10, borderRadius: 12, marginBottom: 4 },
+  paymentMe: { backgroundColor: 'rgba(0,0,0,0.15)' },
+  paymentOther: { backgroundColor: 'rgba(255,255,255,0.05)' },
+  paymentRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  paymentIconContainer: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
+  paymentIconPay: { backgroundColor: '#22c55e' },
+  paymentIconRequest: { backgroundColor: '#0ea5e9' },
+  paymentInfo: { flex: 1 },
+  paymentTitle: { color: 'rgba(255,255,255,0.6)', fontSize: 11, fontWeight: '600' },
+  paymentAmount: { color: 'white', fontSize: 16, fontWeight: 'bold' },
+  footerRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  timeText: { color: 'rgba(255, 255, 255, 0.4)', fontSize: 10 },
+  editedText: { color: 'rgba(255, 255, 255, 0.4)', fontSize: 10, fontStyle: 'italic' },
+  timerContainer: { flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: 'rgba(34, 197, 94, 0.15)', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 10 },
+  timerText: { color: '#4ade80', fontSize: 9, fontWeight: '800' },
+  reactionsRow: { position: 'absolute', bottom: -14, flexDirection: 'row', gap: 3 },
+  reactionsLeft: { left: 8 },
+  reactionsRight: { right: 8 },
+  reactionPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1e293b', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderRadius: 10, paddingHorizontal: 5, paddingVertical: 2 },
+  reactionEmoji: { fontSize: 11 },
+  reactionCount: { color: 'white', fontSize: 9, fontWeight: 'bold', marginLeft: 2 },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
+  contextMenu: { backgroundColor: 'rgb(24, 30, 36)', borderRadius: 14, padding: 6, minWidth: 200, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)', shadowColor: 'black', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 10 },
+  contextMenuRight: { alignSelf: 'center' },
+  contextMenuLeft: { alignSelf: 'center' },
+  emojiRow: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)', marginBottom: 4 },
+  emojiText: { fontSize: 18 },
+  menuItem: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 8 },
+  menuItemText: { color: 'white', fontSize: 13, fontWeight: '500' },
+  menuDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.06)', marginVertical: 4 },
+  deleteItem: { paddingVertical: 6 },
+  menuItemTextDelete: { color: '#ef4444', fontSize: 13, fontWeight: '600' }
 });

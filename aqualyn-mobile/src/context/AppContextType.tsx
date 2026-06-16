@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect, useRef } from 'react';
 import { User, Chat, Message, Folder, ThemeSettings, Post, Collection, Story, Notification } from '../types';
-import { io, Socket } from 'socket.io-client';
-import { API_BASE_URL, ENDPOINTS } from '../config/api';
+import { Socket } from 'socket.io-client';
 
 export type ToastType = 'success' | 'error' | 'info';
 export interface Toast {
@@ -33,7 +32,7 @@ export interface AppContextType {
   setTyping: (chatId: string, isTyping: boolean) => void;
   logout: () => void;
   toasts: Toast[];
-  addToast: (message: string, type: ToastType) => void;
+  addToast: (message: string, type: ToastType, options?: { avatar?: string; title?: string }) => void;
   removeToast: (id: string) => void;
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;

@@ -1,11 +1,12 @@
 /**
  * contactsService.ts
- * Handles device contact syncing and Aqualyn user matching.
- * Supports native Capacitor path (Android/iOS) and web fallback.
+ * Handles device contact syncing and Aqualyn user matching for React Native.
+ * Supports iOS/Android contact reading with web fallbacks.
  */
 
 import { ENDPOINTS } from '../config/api';
 import { apiFetch } from './fetcher';
+import { Platform } from 'react-native';
 
 export interface DeviceContact {
   name: string;
@@ -22,63 +23,97 @@ export interface AqualynContact {
 
 /**
  * Normalise a phone number to E.164-ish format for server-side matching.
- * Strips all non-digit characters and keeps country code if present.
+ * Strips all non-digit characters.
  */
 function normalisePhone(raw: string): string {
   return raw.replace(/\D/g, '');
 }
 
 /**
- * Detect if we're running inside a Capacitor native shell.
+ * Detect if running on mobile application layers.
  */
 function isNativePlatform(): boolean {
-  return typeof (window as any).Capacitor !== 'undefined' &&
-    (window as any).Capacitor?.isNativePlatform?.() === true;
+  return Platform.OS === 'ios' || Platform.OS === 'android';
 }
 
 /**
- * Read device contacts using the Capacitor Contacts plugin.
- * Returns an empty array on any permission denial or error.
+ * Read device contacts using native React Native modules.
  */
 async function readNativeContacts(): Promise<DeviceContact[]> {
   try {
-    // Dynamic import so the web bundle doesn't fail if the plugin isn't installed
-    const { Contacts, 'PhoneType': PhoneType } = await import(
-      '@capacitor-community/contacts' as any
-    );
+    // Graceful check for bare React Native or Expo runtime dependencies
+    let ContactsModule: any;
+    try {
+      ContactsModule = require('react-native-contacts').default;
+    } catch {
+      ContactsModule = require('expo-contacts');
+    }
 
-    const permission = await Contacts.requestPermissions();
-    if (permission.contacts !== 'granted') {
-      console.warn('[ContactsService] Permission denied');
+    if (!ContactsModule) {
+      console.warn('[ContactsService] No native contacts module resolved');
       return [];
     }
 
-    const result = await Contacts.getContacts({
-      projection: { name: true, phones: true },
-    });
+    // --- Bare React Native Path ---
+    if (typeof ContactsModule.checkPermission === 'function') {
+      const permission = await new Promise<string>((resolve) => {
+        ContactsModule.checkPermission((err: any, perm: string) => resolve(perm));
+      });
 
-    return (result.contacts || [])
-      .filter((c: any) => c.phones && c.phones.length > 0)
-      .map((c: any) => ({
-        name: c.name?.display || c.name?.given || 'Unknown',
-        phones: (c.phones as any[]).map((p: any) => normalisePhone(p.number || '')).filter(Boolean),
+      if (permission === 'undefined' || permission === 'denied') {
+        const request = await new Promise<string>((resolve) => {
+          ContactsModule.requestPermission((err: any, perm: string) => resolve(perm));
+        });
+        if (request !== 'authorized') return [];
+      } else if (permission !== 'authorized') {
+        return [];
+      }
+
+      const nativeList = await new Promise<any[]>((resolve, reject) => {
+        ContactsModule.getAll((err: any, contacts: any[]) => (err ? reject(err) : resolve(contacts)));
+      });
+
+      return nativeList.map((c) => {
+        const givenName = c.givenName || '';
+        const familyName = c.familyName || '';
+        return {
+          name: `${givenName} ${familyName}`.trim() || 'Unknown Contact',
+          phones: (c.phoneNumbers || [])
+            .map((p: any) => normalisePhone(p.number))
+            .filter((num: string) => num.length >= 10),
+        };
+      });
+    }
+
+    // --- Expo Path ---
+    if (typeof ContactsModule.requestPermissionsAsync === 'function') {
+      const { status } = await ContactsModule.requestPermissionsAsync();
+      if (status !== 'granted') return [];
+
+      const { data } = await ContactsModule.getContactsAsync({
+        fields: [ContactsModule.Fields.Name, ContactsModule.Fields.PhoneNumbers],
+      });
+
+      return data.map((c: any) => ({
+        name: c.name || 'Unknown Contact',
+        phones: (c.phoneNumbers || [])
+          .map((p: any) => normalisePhone(p.number || p.digits))
+          .filter((num: string) => num.length >= 10),
       }));
+    }
+
+    return [];
   } catch (e) {
-    console.error('[ContactsService] Native read error:', e);
+    console.warn('[ContactsService] Failed to fetch device contacts book context:', e);
     return [];
   }
 }
 
-/**
- * POST phone numbers to the backend for server-side matching.
- * Returns matched Aqualyn users.
- */
 async function matchPhonesOnServer(phones: string[]): Promise<AqualynContact[]> {
   if (phones.length === 0) return [];
   try {
     const res = await apiFetch(ENDPOINTS.CONTACT_SYNC, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ phones }),
     });
     if (!res.ok) throw new Error('Server match failed');
@@ -90,18 +125,13 @@ async function matchPhonesOnServer(phones: string[]): Promise<AqualynContact[]> 
 }
 
 export interface SyncResult {
-  /** Aqualyn users found from the device contacts */
   onAqualyn: AqualynContact[];
-  /** Raw phone numbers that didn't match any Aqualyn user */
   toInvite: DeviceContact[];
-  /** Whether native contacts were available */
   wasNative: boolean;
 }
 
 /**
- * Main sync function.
- * On native: reads device contacts and matches against server.
- * On web: returns wasNative=false so the caller can show a manual-search prompt.
+ * Main sync execution loop wrapper.
  */
 export async function syncContacts(): Promise<SyncResult> {
   if (!isNativePlatform()) {
@@ -113,20 +143,27 @@ export async function syncContacts(): Promise<SyncResult> {
     return { onAqualyn: [], toInvite: [], wasNative: true };
   }
 
-  const allPhones = [...new Set(deviceContacts.flatMap(c => c.phones))];
+  const allPhones = [...new Set(deviceContacts.flatMap((c) => c.phones))];
   const matched = await matchPhonesOnServer(allPhones);
-  const matchedPhones = new Set(matched.map(m => m.phone).filter(Boolean));
+  const matchedPhones = new Set(matched.map((m) => m.phone).filter(Boolean));
 
-  const toInvite = deviceContacts.filter(c =>
-    c.phones.every(p => !matchedPhones.has(p))
+  const toInvite = deviceContacts.filter((c) =>
+    c.phones.every((p) => !matchedPhones.has(p))
   );
 
   return { onAqualyn: matched, toInvite, wasNative: true };
 }
 
 /**
- * Search Aqualyn users by phone number manually (web fallback).
+ * Search Aqualyn users manually (Web/Manual search fallback).
  */
-export async function searchByPhone(phone: string): Promise<AqualynContact[]> {
-  return matchPhonesOnServer([normalisePhone(phone)]);
+export async function searchContactManually(query: string): Promise<AqualynContact[]> {
+  try {
+    const res = await apiFetch(`${ENDPOINTS.CONTACT_SYNC}/search?q=${encodeURIComponent(query)}`);
+    if (!res.ok) return [];
+    return await res.json();
+  } catch (e) {
+    console.error('[ContactsService] Manual lookup failed', e);
+    return [];
+  }
 }

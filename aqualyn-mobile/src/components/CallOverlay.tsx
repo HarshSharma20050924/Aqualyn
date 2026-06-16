@@ -1,10 +1,9 @@
 import React from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, Modal, Dimensions } from 'react-native';
+import { View, Text, TouchableOpacity, Image, Modal, StyleSheet, Platform, Dimensions } from 'react-native';
 import { Phone, PhoneOff, Video, VideoOff, Mic, MicOff, Volume2 } from 'lucide-react-native';
 import { useCall } from '../context/CallContext';
-import { Theme } from '../config/theme';
 
-const { width, height } = Dimensions.get('window');
+const { width: WINDOW_WIDTH, height: WINDOW_HEIGHT } = Dimensions.get('window');
 
 const formatDuration = (seconds: number) => {
   const m = Math.floor(seconds / 60);
@@ -16,84 +15,135 @@ export const CallOverlay: React.FC = () => {
   const {
     isCalling, incomingCall, currentCall,
     acceptCall, rejectCall, endCall,
-    localStream, remoteStream,
-    duration, isMuted, isVideoEnabled,
+    remoteStream, duration, isMuted, isVideoEnabled,
     toggleMute, toggleVideo,
   } = useCall();
 
+  // Incoming Popup Banner layout context
   if (incomingCall && !isCalling) {
+    const fallbackAvatar = `https://api.dicebear.com/7.x/initials/svg?seed=${incomingCall.callerName}`;
     return (
-      <View style={styles.bannerContainer}>
-        <View style={styles.banner}>
+      <View style={styles.incomingBanner}>
+        <View style={styles.avatarWrapper}>
           <Image 
-            source={{ uri: incomingCall.callerAvatar || `https://api.dicebear.com/7.x/initials/svg?seed=${incomingCall.callerName}` }} 
-            style={styles.bannerAvatar} 
+            source={{ uri: incomingCall.callerAvatar || fallbackAvatar }} 
+            style={styles.incomingAvatar} 
           />
-          <View style={styles.bannerInfo}>
-            <Text style={styles.bannerName}>{incomingCall.callerName}</Text>
-            <Text style={styles.bannerType}>
-              Incoming {incomingCall.type === 'VIDEO' ? 'Video' : 'Voice'} Call
-            </Text>
-          </View>
-          <View style={styles.bannerActions}>
-            <TouchableOpacity onPress={rejectCall} style={[styles.miniButton, styles.declineBg]}>
-              <PhoneOff size={18} color="white" />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={acceptCall} style={[styles.miniButton, styles.acceptBg]}>
-              {incomingCall.type === 'VIDEO' ? <Video size={18} color="white" /> : <Phone size={18} color="white" />}
-            </TouchableOpacity>
-          </View>
+        </View>
+        
+        <View style={styles.callerMeta}>
+          <Text style={styles.callerNameText} numberOfLines={1}>{incomingCall.callerName}</Text>
+          <Text style={styles.incomingCallTypeText}>
+            Incoming {incomingCall.type === 'VIDEO' ? 'Video' : 'Voice'} Call
+          </Text>
+        </View>
+
+        <View style={styles.incomingActionRow}>
+          <TouchableOpacity onPress={rejectCall} style={[styles.actionBtnCircle, styles.rejectBtn]}>
+            <PhoneOff size={18} color="#FFF" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={acceptCall} style={[styles.actionBtnCircle, styles.acceptBtn]}>
+            {incomingCall.type === 'VIDEO' ? <Video size={18} color="#FFF" /> : <Phone size={18} color="#FFF" />}
+          </TouchableOpacity>
         </View>
       </View>
     );
   }
 
+  // Active Full-Screen Overlay Modal Interface
   if (isCalling && currentCall) {
     const isVideo = currentCall.type === 'VIDEO';
+    const fallbackCurrentAvatar = `https://api.dicebear.com/7.x/initials/svg?seed=${currentCall.userName}`;
 
     return (
-      <Modal animationType="slide" transparent={false} visible={true}>
-        <View style={styles.fullscreenContainer}>
-          {/* Avatar Voice Call Display */}
-          <View style={styles.avatarContainer}>
-            <Image 
-              source={{ uri: currentCall.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${currentCall.userName}` }} 
-              style={[styles.fullscreenAvatar, isVideo ? styles.avatarVideoSize : styles.avatarVoiceSize]} 
-            />
-            <Text style={styles.callerNameText}>{currentCall.userName}</Text>
+      <Modal visible transparent={false} animationType="fade">
+        <View style={styles.modalContent}>
+          
+          {/* Stream Views & Background Layer */}
+          <View style={styles.backgroundLayer}>
+            {isVideo ? (
+              <View style={styles.videoStreamContainer}>
+                {/* Full-Screen Stream Representation */}
+                <Text style={styles.remoteFeedPlaceholder}>Remote Video Feed Stream Track</Text>
+                
+                {/* Local Picture-in-Picture window container overlay */}
+                <View style={styles.pipContainer}>
+                  {isVideoEnabled ? (
+                    <Text style={styles.pipText}>Local Camera</Text>
+                  ) : (
+                    <VideoOff size={24} color="rgba(255, 255, 255, 0.5)" />
+                  )}
+                </View>
+              </View>
+            ) : (
+              <View style={styles.voiceBackgroundContainer}>
+                <Image 
+                  source={{ uri: currentCall.avatar || fallbackCurrentAvatar }} 
+                  style={styles.backgroundImageBlur}
+                  blurRadius={20}
+                />
+              </View>
+            )}
+          </View>
+
+          {/* User Details Header Panel */}
+          <View style={styles.headerPanel}>
+            <View style={styles.avatarContainer}>
+              <Image 
+                source={{ uri: currentCall.avatar || fallbackCurrentAvatar }} 
+                style={[
+                  styles.activeAvatar, 
+                  isVideo ? styles.activeAvatarVideo : styles.activeAvatarVoice
+                ]} 
+              />
+            </View>
+            <Text style={styles.activeCallerName}>{currentCall.userName}</Text>
             <Text style={styles.durationText}>
               {remoteStream ? (
-                <Text style={{ color: '#4ade80' }}>{formatDuration(duration)}</Text>
+                <Text style={styles.greenText}>{formatDuration(duration)}</Text>
               ) : (
-                <Text style={{ color: 'rgba(255, 255, 255, 0.6)' }}>
+                <Text style={styles.connectingText}>
                   {currentCall.isOutgoing ? 'Calling…' : 'Connecting…'}
                 </Text>
               )}
             </Text>
           </View>
 
-          {/* Controls Bar */}
-          <View style={styles.controlsContainer}>
+          {/* Dynamic Bottom Controls Matrix */}
+          <View style={styles.bottomControlsWrapper}>
             <View style={styles.controlsRow}>
-              <TouchableOpacity onPress={toggleMute} style={[styles.controlButton, isMuted && styles.controlButtonActive]}>
-                {isMuted ? <MicOff size={24} color={isMuted ? 'black' : 'white'} /> : <Mic size={24} color="white" />}
+              <TouchableOpacity 
+                onPress={toggleMute} 
+                style={[styles.controlBtnCircle, isMuted ? styles.controlBtnActive : styles.controlBtnInactive]}
+              >
+                {isMuted ? <MicOff size={24} color="#0F172A" /> : <Mic size={24} color="#FFF" />}
               </TouchableOpacity>
 
               {isVideo && (
-                <TouchableOpacity onPress={toggleVideo} style={[styles.controlButton, !isVideoEnabled && styles.controlButtonActive]}>
-                  {isVideoEnabled ? <Video size={24} color="white" /> : <VideoOff size={24} color="black" />}
+                <TouchableOpacity 
+                  onPress={toggleVideo} 
+                  style={[styles.controlBtnCircle, !isVideoEnabled ? styles.controlBtnActive : styles.controlBtnInactive]}
+                >
+                  {isVideoEnabled ? <Video size={24} color="#FFF" /> : <VideoOff size={24} color="#0F172A" />}
                 </TouchableOpacity>
               )}
 
-              <TouchableOpacity style={styles.controlButton}>
-                <Volume2 size={24} color="white" />
+              <TouchableOpacity style={[styles.controlBtnCircle, styles.controlBtnInactive]}>
+                <Volume2 size={24} color="#FFF" />
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity onPress={endCall} style={styles.endCallButton}>
-              <PhoneOff size={32} color="white" />
-            </TouchableOpacity>
+            {/* End Call Anchor Control Trigger */}
+            <View style={styles.endCallWrapper}>
+              <TouchableOpacity 
+                onPress={endCall} 
+                style={styles.endCallBtnCircle}
+              >
+                <PhoneOff size={32} color="#FFF" />
+              </TouchableOpacity>
+            </View>
           </View>
+
         </View>
       </Modal>
     );
@@ -103,123 +153,213 @@ export const CallOverlay: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  bannerContainer: {
+  incomingBanner: {
     position: 'absolute',
-    top: 50,
-    left: 16,
-    right: 16,
-    zIndex: 9999,
-  },
-  banner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(10, 15, 18, 0.95)',
-    borderRadius: 20,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  bannerAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-  },
-  bannerInfo: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  bannerName: {
-    color: 'white',
-    fontWeight: 'bold',
-    fontSize: 15,
-  },
-  bannerType: {
-    color: '#4ade80',
-    fontSize: 12,
-    fontWeight: '500',
-    marginTop: 2,
-  },
-  bannerActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  miniButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  declineBg: {
-    backgroundColor: '#ef4444',
-  },
-  acceptBg: {
-    backgroundColor: '#22c55e',
-  },
-  fullscreenContainer: {
-    flex: 1,
+    top: Platform.OS === 'ios' ? 50 : 20,
+    left: '4%',
+    right: '4%',
+    zIndex: 300,
     backgroundColor: '#0f172a',
-    justifyContent: 'space-between',
-    paddingVertical: 60,
-  },
-  avatarContainer: {
-    alignItems: 'center',
-    marginTop: 60,
-  },
-  fullscreenAvatar: {
-    borderRadius: 9999,
-    borderWidth: 4,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  avatarVoiceSize: {
-    width: 140,
-    height: 140,
-  },
-  avatarVideoSize: {
-    width: 90,
-    height: 90,
-  },
-  callerNameText: {
-    color: 'white',
-    fontSize: 24,
-    fontWeight: '800',
-    marginTop: 20,
-  },
-  durationText: {
-    fontSize: 16,
-    fontWeight: '500',
-    marginTop: 8,
-  },
-  controlsContainer: {
-    alignItems: 'center',
-    gap: 30,
-  },
-  controlsRow: {
+    borderRadius: 24,
+    padding: 16,
     flexDirection: 'row',
-    gap: 24,
+    alignItems: 'center',
+    gap: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.3,
+    shadowRadius: 24,
+    elevation: 8,
   },
-  controlButton: {
+  avatarWrapper: {
+    position: 'relative',
+  },
+  incomingAvatar: {
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  callerMeta: {
+    flex: 1,
+    minWidth: 0,
+  },
+  callerNameText: {
+    fontWeight: '700',
+    color: '#ffffff',
+    fontSize: 16,
+  },
+  incomingCallTypeText: {
+    fontSize: 12,
+    color: '#4ade80',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginTop: 2,
+  },
+  incomingActionRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  actionBtnCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  rejectBtn: {
+    backgroundColor: '#ef4444',
+  },
+  acceptBtn: {
+    backgroundColor: '#22c55e',
+  },
+  modalContent: {
+    flex: 1,
+    backgroundColor: '#020617',
+    flexDirection: 'column',
+    justifyContent: 'space-between',
+    paddingBottom: 56,
+    paddingTop: 80,
+  },
+  backgroundLayer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    zIndex: 0,
+  },
+  videoStreamContainer: {
+    flex: 1,
+    backgroundColor: '#18181b',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  controlButtonActive: {
-    backgroundColor: 'white',
+  remoteFeedPlaceholder: {
+    color: 'rgba(255,255,255,0.4)',
+    fontSize: 12,
   },
-  endCallButton: {
+  pipContainer: {
+    position: 'absolute',
+    top: 56,
+    right: 16,
+    width: 112,
+    height: 160,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: '#000',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  pipText: {
+    color: 'rgba(255,255,255,0.3)',
+    fontSize: 10,
+  },
+  voiceBackgroundContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: '#0f172a',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  backgroundImageBlur: {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+    opacity: 0.1,
+  },
+  headerPanel: {
+    zIndex: 10,
+    alignItems: 'center',
+  },
+  avatarContainer: {
+    marginBottom: 16,
+  },
+  activeAvatar: {
+    borderRadius: 999,
+  },
+  activeAvatarVideo: {
+    width: 80,
+    height: 80,
+    borderWidth: 4,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  activeAvatarVoice: {
+    width: 128,
+    height: 128,
+    borderWidth: 4,
+    borderColor: 'rgba(6,182,212,0.4)',
+  },
+  activeCallerName: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: '#ffffff',
+    letterSpacing: -0.5,
+  },
+  durationText: {
+    fontSize: 14,
+    marginTop: 4,
+    fontWeight: '600',
+  },
+  greenText: {
+    color: '#4ade80',
+  },
+  connectingText: {
+    color: 'rgba(255,255,255,0.6)',
+  },
+  bottomControlsWrapper: {
+    zIndex: 10,
+    paddingHorizontal: 32,
+    gap: 24,
+  },
+  controlsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 24,
+    marginBottom: 24,
+  },
+  controlBtnCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  controlBtnActive: {
+    backgroundColor: '#ffffff',
+  },
+  controlBtnInactive: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  endCallWrapper: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  endCallBtnCircle: {
     width: 72,
     height: 72,
     borderRadius: 36,
     backgroundColor: '#ef4444',
-    justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#ef4444',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
     elevation: 8,
   },
 });

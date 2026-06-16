@@ -1,18 +1,41 @@
 import { apiFetch } from './fetcher';
-import { ENDPOINTS } from '../config/api';
+
+export interface RativeNativeFileParam {
+  uri: string;
+  name?: string;
+  type?: string;
+}
 
 /**
- * Uploads a file to the backend and returns the public URL.
- * This is 100% free as it use your own server storage.
+ * Uploads a file from a device URI to the backend and returns the cloud target string.
  */
-export const uploadFile = async (file: File): Promise<string> => {
+export const uploadFile = async (file: RativeNativeFileParam): Promise<string> => {
   const formData = new FormData();
-  formData.append('file', file);
+
+  // Extract metadata directly from the device asset path if undefined
+  const uriParts = file.uri.split('/');
+  const fileName = file.name || uriParts[uriParts.length - 1] || 'upload.jpg';
+  
+  let fileType = file.type;
+  if (!fileType) {
+    const ext = fileName.split('.').pop()?.toLowerCase();
+    fileType = ext === 'mp4' ? 'video/mp4' : 'image/jpeg';
+  }
+
+  // React Native's FormData expects a specific shape for files instead of standard Web Blobs/Files
+  formData.append('file', {
+    uri: file.uri,
+    name: fileName,
+    type: fileType,
+  } as any);
 
   const res = await apiFetch('/api/upload', {
     method: 'POST',
-    // Do NOT set Content-Type header; browser will set it with boundary automatically for FormData
-    body: formData as any,
+    body: formData,
+    headers: {
+      // Allow the engine to inject bound multi-part borders automatically
+      'Content-Type': 'multipart/form-data',
+    },
   });
 
   if (!res.ok) {

@@ -39,8 +39,8 @@ export interface User {
   sentFollowReqs?: any[];
   receivedFollowReqs?: any[];
   _count?: {
-    followers: number;
-    following: number;
+    followers?: number;
+    following?: number;
     posts?: number;
   };
   followRequests?: any[]; // Keep for legacy screens
@@ -154,7 +154,7 @@ export interface Folder {
 }
 
 export interface ThemeSettings {
-  mode: 'light' | 'dark';
+  mode: 'light' | 'dark' | 'system';
   accentColor: string;
   wallpaper?: string;
   bubbleStyle: 'rounded' | 'sharp' | 'glass';

@@ -1,39 +1,43 @@
+/**
+ * fetcher.ts
+ * React Native optimized API fetch wrapper.
+ * Automatically prefixes endpoints and manages content-type boundaries.
+ */
+
 import { API_BASE_URL } from '../config/api';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /**
- * A professional fetch wrapper that automatically handles:
- * 1. Base URL prefixing (if needed)
- * 2. HttpOnly cookies via 'credentials: include'
- * 3. Default JSON headers
+ * A robust fetch wrapper tailored for React Native environments.
+ * 1. Base URL prefixing (cross-platform target resolution)
+ * 2. Native Cookie management integration
+ * 3. Conditional Content-Type payload configuration
  */
 export async function apiFetch(url: string, options: RequestInit = {}) {
     const headers: Record<string, string> = { ...((options.headers as any) || {}) };
     
-    // Auto-detect Content-Type: if body is NOT FormData, default to JSON
-    if (!(options.body instanceof FormData) && !headers['Content-Type']) {
+    // React Native FormData objects require skipping the standard application/json Content-Type 
+    // header so the underlying native networking layer can inject the multipart boundary string.
+    const isFormData = options.body && typeof options.body === 'object' && 'append' in options.body;
+
+    if (!isFormData && !headers['Content-Type']) {
         headers['Content-Type'] = 'application/json';
     }
 
-    // Attach JWT token from AsyncStorage
-    try {
-        const token = await AsyncStorage.getItem('auth_token');
-        if (token) {
-            headers['Authorization'] = `Bearer ${token}`;
-        }
-    } catch (e) {
-        console.error('Error reading token', e);
-    }
+    const targetUrl = url.startsWith('http') ? url : `${API_BASE_URL}${url}`;
 
-    const response = await fetch(url.startsWith('http') ? url : `${API_BASE_URL}${url}`, {
+    const response = await fetch(targetUrl, {
         ...options,
         headers,
+        // 'credentials' is a web standard configuration. In React Native, authentication cookies
+        // are stored and managed natively by the system's cookie manager automatically.
+        // We preserve it for hybrid web environments if applicable.
+        credentials: 'include',
     });
 
     if (response.status === 401) {
-        // Handle session expiry globally
-        // Note: we can't easily trigger AppContext logout from here without a circular dep or event bus
-        // but the next bootstrap/sync will catch it.
+        // Global Session Expiry Hook
+        // Tip: You can dispatch a global event or trigger your authentication store logout sequence here.
+        console.warn('[apiFetch] Unauthorised 401 response detected.');
     }
 
     return response;

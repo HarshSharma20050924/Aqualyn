@@ -1,5 +1,4 @@
 import React, { useState, ReactNode, useEffect, useRef } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { User, Chat, Message, Folder, ThemeSettings, Post, Story, Notification } from '../types';
 export type { Story };
 import { io, Socket } from 'socket.io-client';
@@ -122,27 +121,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
     let isMounted = true;
     const bootstrap = async () => {
       try {
-        console.log("[Auth] Starting bootstrap...");
-        const token = await AsyncStorage.getItem('auth_token');
-        if (!token) {
-            setIsLoading(false);
-            return;
-        }
-
-        const res = await apiFetch(`${API_BASE_URL}/api/user/profile/me`);
+        console.log("[Auth] Starting bootstrap sync...");
+        const res = await apiFetch(ENDPOINTS.AUTH_SYNC, {
+          method: 'POST',
+          body: JSON.stringify({})
+        });
 
         if (res.ok && isMounted) {
-          const user = await res.json();
-          console.log("[Auth] Bootstrap successful for:", user.username);
+          const data = await res.json();
+          const syncedUser = data.user;
+          if (!syncedUser || data.status === 'needs_profile') {
+            setIsLoading(false);
+            return;
+          }
+
+          console.log("[Auth] Sync successful for:", syncedUser.username);
           const mappedUser = {
-            ...user,
-            following: user.following?.map((f: any) => f.followingId || f.userId).filter(Boolean) || [],
-            followers: user.followers?.map((f: any) => f.followerId || f.userId).filter(Boolean) || [],
+            ...syncedUser,
+            following: syncedUser.following?.map((f: any) => f.followingId || f.userId).filter(Boolean) || [],
+            followers: syncedUser.followers?.map((f: any) => f.followerId || f.userId).filter(Boolean) || [],
           };
           setCurrentUser(mappedUser);
         } else if (isMounted && res.status === 401) {
           console.log("[Auth] Session invalid (401)");
-          await AsyncStorage.removeItem('auth_token');
           setCurrentUser(null);
         }
       } catch (e) {
@@ -204,15 +205,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
           }
         });
 
-        // Show Notification if the chat isn't currently active
+        // Native Alert Management implementation mimicking logic
         if (activeChatIdRef.current !== msg.chatId) {
           const senderName = (msg as any).sender?.displayName || (msg as any).sender?.username || 'Someone';
-          const chatName = (msg as any).chat?.isGroup ? `Group: ${(msg as any).chat.name}` : senderName;
           const msgText = msg.text || 'Sent an attachment';
 
-          // Notifications can be handled natively later using Expo Notifications
-          // For now, we rely on the in-app toast
-          
           addToast(msgText, 'info', {
             title: senderName,
             avatar: (msg as any).sender?.avatar

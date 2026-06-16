@@ -1,6 +1,42 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { useAppContext } from './AppContext';
 
+// Local stubs for WebRTC because the native package is not present in package.json
+export class MediaStream {
+  getTracks(): any[] { return []; }
+  getAudioTracks(): any[] { return []; }
+  getVideoTracks(): any[] { return []; }
+}
+
+class RTCPeerConnection {
+  onicecandidate: any;
+  ontrack: any;
+  onconnectionstatechange: any;
+  connectionState = 'connected';
+  constructor(config: any) {}
+  addTrack(track: any, stream: any) {}
+  close() {}
+  async createOffer() { return {}; }
+  async createAnswer() { return {}; }
+  async setLocalDescription(desc: any) {}
+  async setRemoteDescription(desc: any) {}
+  async addIceCandidate(cand: any) {}
+}
+
+class RTCIceCandidate {
+  constructor(c: any) {}
+}
+
+class RTCSessionDescription {
+  constructor(s: any) {}
+}
+
+const mediaDevices = {
+  getUserMedia: async (constraints: any) => {
+    return new MediaStream();
+  }
+};
+
 interface CallContextType {
   isCalling: boolean;
   incomingCall: any;
@@ -9,8 +45,8 @@ interface CallContextType {
   acceptCall: () => void;
   rejectCall: () => void;
   endCall: () => void;
-  localStream: any;
-  remoteStream: any;
+  localStream: MediaStream | null;
+  remoteStream: MediaStream | null;
   duration: number;
   isMuted: boolean;
   isVideoEnabled: boolean;
@@ -25,14 +61,23 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isCalling, setIsCalling] = useState(false);
   const [incomingCall, setIncomingCall] = useState<any>(null);
   const [currentCall, setCurrentCall] = useState<any>(null);
-  const [localStream, setLocalStream] = useState<any>(null);
-  const [remoteStream, setRemoteStream] = useState<any>(null);
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [duration, setDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
 
+  const peerConnection = useRef<RTCPeerConnection | null>(null);
   const callLogIdRef = useRef<string | null>(null);
-  const durationTimerRef = useRef<any | null>(null);
+  const durationTimerRef = useRef<any>(null); // Kept safe for cross-platform timeouts
+  const localStreamRef = useRef<MediaStream | null>(null);
+
+  const iceServers = {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+    ],
+  };
 
   const startDurationTimer = () => {
     if (durationTimerRef.current) clearInterval(durationTimerRef.current);
@@ -49,9 +94,18 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsMuted(false);
     setIsVideoEnabled(true);
     callLogIdRef.current = null;
-    setLocalStream(null);
+
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((t: any) => t.stop());
+      localStreamRef.current = null;
+      setLocalStream(null);
+    }
     setRemoteStream(null);
 
+    if (peerConnection.current) {
+      peerConnection.current.close();
+      peerConnection.current = null;
+    }
     if (durationTimerRef.current) {
       clearInterval(durationTimerRef.current);
       durationTimerRef.current = null;
@@ -71,13 +125,33 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     socket.on('call_accepted', async (data: any) => {
-      setRemoteStream({ mock: true }); // Simulated stream
+      if (peerConnection.current && data.signal) {
+        try {
+          await peerConnection.current.setRemoteDescription(new RTCSessionDescription(data.signal));
+        } catch (e) {
+          console.error('[Call] setRemoteDescription error:', e);
+        }
+      }
       startDurationTimer();
     });
 
     socket.on('call_rejected', (data: any) => {
       addToast(`Call declined${data.reason ? ': ' + data.reason : ''}`, 'info');
       cleanupCall();
+    });
+
+    socket.on('webrtc_signal', async (data: any) => {
+      if (peerConnection.current) {
+        try {
+          if (data.signal.candidate) {
+            await peerConnection.current.addIceCandidate(new RTCIceCandidate(data.signal.candidate));
+          } else if (data.signal.sdp) {
+            await peerConnection.current.setRemoteDescription(new RTCSessionDescription(data.signal.sdp));
+          }
+        } catch (e) {
+          console.error('[Call] ICE/SDP error:', e);
+        }
+      }
     });
 
     socket.on('call_ended', () => {
@@ -89,25 +163,75 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       socket.off('call_log_created');
       socket.off('call_accepted');
       socket.off('call_rejected');
+      socket.off('webrtc_signal');
       socket.off('call_ended');
     };
   }, [addToast, socket, cleanupCall]);
+
+  const setupPeerConnection = (targetId: string) => {
+    const pc = new RTCPeerConnection(iceServers);
+
+    pc.onicecandidate = (event: any) => {
+      if (event.candidate && socket) {
+        socket.emit('webrtc_signal', {
+          to: targetId,
+          from: currentUser?.id,
+          signal: { candidate: event.candidate },
+        });
+      }
+    };
+
+    pc.ontrack = (event: any) => {
+      if (event.streams && event.streams[0]) {
+        setRemoteStream(event.streams[0]);
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+        addToast('Call connection lost', 'error');
+        endCall();
+      }
+    };
+
+    peerConnection.current = pc;
+    return pc;
+  };
 
   const startCall = async (to: string, userName: string, avatar: string, type: 'VOICE' | 'VIDEO') => {
     if (!currentUser || !socket) return;
     setIsCalling(true);
     setCurrentCall({ to, userName, avatar, type, isOutgoing: true });
     setIsVideoEnabled(type === 'VIDEO');
-    setLocalStream({ mock: true });
 
-    socket.emit('call_user', {
-      to,
-      from: currentUser.id,
-      callerName: currentUser.displayName || currentUser.username,
-      callerAvatar: currentUser.avatar,
-      type,
-      signal: { sdp: 'mock-sdp', type: 'offer' },
-    });
+    try {
+      // Swapped browser navigator constraints targeting native media tracks instead
+      const stream = await mediaDevices.getUserMedia({
+        video: type === 'VIDEO',
+        audio: true,
+      });
+      localStreamRef.current = stream as unknown as MediaStream;
+      setLocalStream(stream as unknown as MediaStream);
+
+      const pc = setupPeerConnection(to);
+      (stream as unknown as MediaStream).getTracks().forEach((track: any) => pc.addTrack(track, stream as unknown as MediaStream));
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      socket.emit('call_user', {
+        to,
+        from: currentUser.id,
+        callerName: currentUser.displayName || currentUser.username,
+        callerAvatar: currentUser.avatar,
+        type,
+        signal: offer,
+      });
+    } catch (e) {
+      console.error('[Call] Failed to start call:', e);
+      addToast('Could not access camera/microphone. Check permissions.', 'error');
+      cleanupCall();
+    }
   };
 
   const acceptCall = async () => {
@@ -116,15 +240,38 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsCalling(true);
     setIncomingCall(null);
     setIsVideoEnabled(incomingCall.type === 'VIDEO');
-    setLocalStream({ mock: true });
-    setRemoteStream({ mock: true });
 
-    socket.emit('call_accepted', {
-      to: incomingCall.from,
-      signal: { sdp: 'mock-sdp', type: 'answer' },
-      callLogId: callLogIdRef.current,
-    });
-    startDurationTimer();
+    try {
+      const stream = await mediaDevices.getUserMedia({
+        video: incomingCall.type === 'VIDEO',
+        audio: true,
+      });
+      localStreamRef.current = stream as unknown as MediaStream;
+      setLocalStream(stream as unknown as MediaStream);
+
+      const pc = setupPeerConnection(incomingCall.from);
+      (stream as unknown as MediaStream).getTracks().forEach((track: any) => pc.addTrack(track, stream as unknown as MediaStream));
+
+      await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.signal));
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+
+      socket.emit('call_accepted', {
+        to: incomingCall.from,
+        signal: answer,
+        callLogId: callLogIdRef.current,
+      });
+      startDurationTimer();
+    } catch (e) {
+      console.error('[Call] Failed to accept call:', e);
+      addToast('Could not access camera/microphone', 'error');
+      socket.emit('call_rejected', {
+        to: incomingCall.from,
+        reason: 'Media device error',
+        callLogId: callLogIdRef.current,
+      });
+      cleanupCall();
+    }
   };
 
   const rejectCall = () => {
@@ -147,11 +294,19 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const toggleMute = () => {
-    setIsMuted(!isMuted);
+    if (localStreamRef.current) {
+      const enabled = !isMuted;
+      localStreamRef.current.getAudioTracks().forEach((t: any) => { t.enabled = enabled; });
+      setIsMuted(!isMuted);
+    }
   };
 
   const toggleVideo = () => {
-    setIsVideoEnabled(!isVideoEnabled);
+    if (localStreamRef.current) {
+      const newState = !isVideoEnabled;
+      localStreamRef.current.getVideoTracks().forEach((t: any) => { t.enabled = newState; });
+      setIsVideoEnabled(newState);
+    }
   };
 
   return (
