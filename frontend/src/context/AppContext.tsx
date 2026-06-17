@@ -142,9 +142,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
             followers: syncedUser.followers?.map((f: any) => f.followerId || f.userId).filter(Boolean) || [],
           };
           setCurrentUser(mappedUser);
-          // fetchInitialData will be triggered by the currentUser useEffect
         } else if (isMounted && res.status === 401) {
-          console.log("[Auth] Session invalid (401)");
+          // Stale JWT — call logout so the server clears the httpOnly cookie
+          console.log("[Auth] Session invalid (401) — clearing stale cookie...");
+          await apiFetch(`${API_BASE_URL}/api/auth/logout`, { method: 'POST' }).catch(() => {});
           setCurrentUser(null);
         }
       } catch (e) {

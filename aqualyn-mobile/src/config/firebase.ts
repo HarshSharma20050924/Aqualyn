@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { initializeApp, getApps, getApp } from 'firebase/app';
 
 const firebaseConfig = {
   apiKey: "AIzaSyD_T2pumFj4FvOUFAmCiZSk4Zpfb2tJ2TI",
@@ -10,26 +10,42 @@ const firebaseConfig = {
   measurementId: "G-ESEWH5T9SY"
 };
 
-let auth: any = null;
-let requestNativePhoneOtp: any = null;
-let googleProvider: any = null;
+// App and Auth will be initialized inside the getter to avoid SSR issues
+let app: any;
+let auth: any;
 
-if (Platform.OS === 'web') {
-  // Web SDK imports (using require so it doesn't crash React Native bundler if unlinked)
-  const { initializeApp } = require('firebase/app');
-  const { getAuth, RecaptchaVerifier, signInWithPhoneNumber, GoogleAuthProvider, setPersistence, browserSessionPersistence } = require('firebase/auth/compat');
+// Export functions to get Firebase services
+export const getFirebaseAuth = async () => {
+  if (typeof window === 'undefined') {
+    throw new Error('Firebase Auth cannot be initialized on the server side.');
+  }
+
+  // Dynamically import firebase/auth so it's not evaluated during SSR
+  const { 
+    getAuth, 
+    setPersistence, 
+    browserSessionPersistence, 
+    signInWithPhoneNumber, 
+    GoogleAuthProvider,
+    RecaptchaVerifier,
+    signInWithPopup
+  } = await import('firebase/auth');
+
+  if (!app) {
+    app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+  }
+  if (!auth) {
+    auth = getAuth(app);
+  }
+
+  // Set persistence
+  await setPersistence(auth, browserSessionPersistence);
   
-  const app = initializeApp(firebaseConfig);
-  auth = getAuth(app);
-  
-  // Set persistence to LOCAL for web to avoid popup issues
-  setPersistence(auth, browserSessionPersistence)
-    .then(() => console.log('[Firebase Web] Persistence set to LOCAL'))
-    .catch(error => console.error('[Firebase Web] Persistence error:', error));
+  console.log('[Firebase Web] Auth initialized with browser session persistence');
 
-  googleProvider = new GoogleAuthProvider();
+  const googleProvider = new GoogleAuthProvider();
 
-  requestNativePhoneOtp = async (phoneNumber: string, applicationVerifier: any) => {
+  const requestNativePhoneOtp = async (phoneNumber: string, applicationVerifier: any) => {
     try {
       console.log('[Firebase Web] Requesting OTP for:', phoneNumber);
       const confirmationResult = await signInWithPhoneNumber(auth, phoneNumber, applicationVerifier);
@@ -39,43 +55,12 @@ if (Platform.OS === 'web') {
       throw error;
     }
   };
-} else {
-  // Native SDK imports
-  const authModule = require('@react-native-firebase/auth').default;
-  const { GoogleAuthProvider } = require('@react-native-firebase/auth');
-  auth = authModule();
-  googleProvider = new GoogleAuthProvider();
 
-  requestNativePhoneOtp = async (phoneNumber: string) => {
-    try {
-      console.log('[Firebase Native] Requesting OTP for:', phoneNumber);
-      const confirmation = await auth.signInWithPhoneNumber(phoneNumber);
-      return confirmation; // Contains .confirm(code) method
-    } catch (error) {
-      console.error('[Firebase Native] Error:', error);
-      throw error;
-    }
+  return { 
+    auth, 
+    requestNativePhoneOtp, 
+    googleProvider,
+    RecaptchaVerifier,
+    signInWithPopup
   };
-}
-
-export { auth, requestNativePhoneOtp, googleProvider };
-} else {
-  // Native SDK imports
-  const authModule = require('@react-native-firebase/auth').default;
-  const { GoogleAuthProvider } = require('@react-native-firebase/auth');
-  auth = authModule();
-  googleProvider = new GoogleAuthProvider();
-
-  requestNativePhoneOtp = async (phoneNumber: string) => {
-    try {
-      console.log('[Firebase Native] Requesting OTP for:', phoneNumber);
-      const confirmation = await auth.signInWithPhoneNumber(phoneNumber);
-      return confirmation; // Contains .confirm(code) method
-    } catch (error) {
-      console.error('[Firebase Native] Error:', error);
-      throw error;
-    }
-  };
-}
-
-export { auth, requestNativePhoneOtp, googleProvider };
+};

@@ -650,7 +650,7 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
             Messages are end-to-end encrypted.<br/>No one outside this chat can read them.
           </p>
         </div>
-      </main>
+      </div>
 
       <button 
         onClick={() => setIsNewChatModalOpen(true)}

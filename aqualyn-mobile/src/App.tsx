@@ -93,28 +93,30 @@ export default function App() {
   // Dynamic Navigation Screen Router
   const renderActiveScreen = () => {
     switch (currentScreen) {
-case 'auth':
-  return <AuthScreen onLogin={() => setCurrentScreen('chats')} />;
-      case 'feed':
-        return <FeedScreen onNavigate={setCurrentScreen} />;
-      case 'chats':
-        return <ChatListScreen onNavigate={setCurrentScreen} />;
-      case 'chat-detail':
-        return <ChatDetailScreen onBack={() => setCurrentScreen('chats')} onNavigate={setCurrentScreen} />;
-      case 'profile':
-        return <ProfileScreen onNavigate={setCurrentScreen} />;
-      case 'settings':
-        return <SettingsScreen onBack={() => setCurrentScreen('profile')} onNavigate={setCurrentScreen} />;
-      case 'contacts':
-        return <ContactsScreen onNavigate={setCurrentScreen} />;
-      case 'edit-profile':
-        return <EditProfileScreen onBack={() => setCurrentScreen('profile')} />;
-      case 'contact-profile':
-        return <ContactProfileScreen onBack={() => setCurrentScreen('contacts')} onNavigate={setCurrentScreen} />;
-      case 'notifications':
-        return <NotificationsScreen onBack={() => setCurrentScreen('feed')} />;
-      default:
-        return <ChatListScreen onNavigate={setCurrentScreen} />;
+       case 'auth':
+         return <AuthScreen onLogin={() => setCurrentScreen('chats')} />;
+       case 'login':
+         return <LoginScreen onLogin={() => setCurrentScreen('chats')} />;
+       case 'feed':
+         return <FeedScreen onNavigate={setCurrentScreen} />;
+       case 'chats':
+         return <ChatListScreen onNavigate={setCurrentScreen} />;
+       case 'chat-detail':
+         return <ChatDetailScreen onBack={() => setCurrentScreen('chats')} onNavigate={setCurrentScreen} />;
+       case 'profile':
+         return <ProfileScreen onNavigate={setCurrentScreen} />;
+       case 'settings':
+         return <SettingsScreen onBack={() => setCurrentScreen('profile')} onNavigate={setCurrentScreen} />;
+       case 'contacts':
+         return <ContactsScreen onNavigate={setCurrentScreen} />;
+       case 'edit-profile':
+         return <EditProfileScreen onBack={() => setCurrentScreen('profile')} />;
+       case 'contact-profile':
+         return <ContactProfileScreen onBack={() => setCurrentScreen('contacts')} onNavigate={setCurrentScreen} />;
+       case 'notifications':
+         return <NotificationsScreen onBack={() => setCurrentScreen('feed')} />;
+       default:
+         return <ChatListScreen onNavigate={setCurrentScreen} />;
     }
   };
 

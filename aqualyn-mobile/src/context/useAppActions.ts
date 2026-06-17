@@ -3,6 +3,7 @@ import { ENDPOINTS, API_BASE_URL } from '../config/api';
 import { apiFetch } from '../utils/fetcher';
 import { Socket } from 'socket.io-client';
 import { ToastType, Toast } from './AppContextType';
+import { useRouter } from 'expo-router';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -29,6 +30,8 @@ export const useAppActions = (
   setActiveChatId: (id: string | null) => void,
   activeChatId: string | null
 ) => {
+  const router = useRouter();
+
   const logout = async () => {
     // Step 1: Get the token BEFORE clearing it so we can send it for revocation
     let token: string | null = null;
@@ -70,6 +73,9 @@ export const useAppActions = (
     setPosts([]);
     setNotifications([]);
     setGlobalUsers([]);
+
+    // Step 5: Navigate to the login screen
+    router.replace('/login');
   };
 
   const archiveChat = (chatId: string) => {

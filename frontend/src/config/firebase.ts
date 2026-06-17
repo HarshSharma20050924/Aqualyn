@@ -17,11 +17,16 @@ setPersistence(auth, browserLocalPersistence).catch(console.error);
 
 export const googleProvider = new GoogleAuthProvider();
 
+let recaptchaVerifierInstance: RecaptchaVerifier | null = null;
+
 export const setupRecaptcha = (containerId: string) => {
-    return new RecaptchaVerifier(auth, containerId, {
-        size: 'invisible',
-        callback: (response: any) => {
-            console.log('Recaptcha solved', response);
-        }
-    });
+    if (!recaptchaVerifierInstance) {
+        recaptchaVerifierInstance = new RecaptchaVerifier(auth, containerId, {
+            size: 'invisible',
+            callback: (response: any) => {
+                console.log('Recaptcha solved', response);
+            }
+        });
+    }
+    return recaptchaVerifierInstance;
 };

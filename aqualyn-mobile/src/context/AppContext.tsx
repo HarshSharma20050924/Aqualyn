@@ -1,7 +1,7 @@
 import React, { useState, ReactNode, useEffect, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRouter } from 'expo-router';
 import { User, Chat, Message, Folder, ThemeSettings, Post, Story, Notification } from '../types';
-export type { Story };
 import { io, Socket } from 'socket.io-client';
 import { API_BASE_URL, ENDPOINTS } from '../config/api';
 import { apiFetch } from '../utils/fetcher';
@@ -122,7 +122,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     let isMounted = true;
     const bootstrap = async () => {
       try {
-        // Check if user explicitly logged out — if so, skip auto-login entirely
+        // Check if user explicitly logged out — skip auto-login
         const explicitLogout = await AsyncStorage.getItem('explicit_logout').catch(() => null);
         if (explicitLogout === '1') {
           await AsyncStorage.removeItem('explicit_logout').catch(() => {});
@@ -153,7 +153,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
           };
           setCurrentUser(mappedUser);
         } else if (isMounted && res.status === 401) {
-          console.log("[Auth] Session invalid (401)");
+          // Stale JWT — clear local token and cookie via logout
+          console.log("[Auth] Session invalid (401) — clearing stale session...");
+          await apiFetch(`${API_BASE_URL}/api/auth/logout`, { method: 'POST' }).catch(() => {});
+          await AsyncStorage.removeItem('auth_token').catch(() => {});
           setCurrentUser(null);
         }
       } catch (e) {
@@ -300,7 +303,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       newSocket.on('receive_post_like', (data: { postId: string, userId: string, liked: boolean }) => {
         setPosts(prev => prev.map(p => {
           if (p.id === data.postId) {
-            const likes = [...(p.likes || [])];
+            const likes = [...p.likes];
             const newLikes = data.liked
               ? (likes.includes(data.userId) ? likes : [...likes, data.userId])
               : likes.filter(id => id !== data.userId);
@@ -313,7 +316,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       newSocket.on('receive_post_comment', (data: { postId: string, comment: any }) => {
         setPosts(prev => prev.map(p => {
           if (p.id === data.postId) {
-            return { ...p, comments: [...(p.comments || []), data.comment] };
+            return {
+              ...p, comments: [...(p.comments || []), data.comment]
+            };
           }
           return p;
         }));
