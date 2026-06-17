@@ -1,3 +1,4 @@
+import BubbleLoader from '../components/ui/BubbleLoader';
 import React from 'react';
 import { motion } from 'motion/react';
 import { ArrowLeft, MessageCircle, Phone, Video, Info, Bell, Ban, Trash2, Lock, ShieldCheck, UserPlus, UserCheck, Clock, Grid, PlayCircle } from 'lucide-react';
@@ -79,13 +80,16 @@ export default function ContactProfileScreen({ onBack, onNavigate }: { onBack: (
     if (activeContactId) {
       const fetchData = async () => {
         try {
-          // Fetch profile if missing
-          if (!contact) {
-            const res = await apiFetch(ENDPOINTS.USER_PROFILE(activeContactId));
-            if (res.ok) {
-              const data = await res.json();
-              setGlobalUsers(prev => prev.some(u => u.id === data.id) ? prev : [...prev, data]);
-            }
+          const res = await apiFetch(ENDPOINTS.USER_PROFILE(activeContactId));
+          if (res.ok) {
+            const data = await res.json();
+            setGlobalUsers(prev => {
+              const exists = prev.find(u => u.id === data.id);
+              if (exists) {
+                return prev.map(u => u.id === data.id ? { ...u, ...data } : u);
+              }
+              return [...prev, data];
+            });
           }
 
           // Fetch media count
@@ -110,7 +114,7 @@ export default function ContactProfileScreen({ onBack, onNavigate }: { onBack: (
       <div className="min-h-screen bg-surface flex flex-col items-center justify-center gap-4">
         {activeContactId ? (
           <div className="flex flex-col items-center gap-4">
-            <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+            <BubbleLoader width={24} height={24} />
             <p className="text-on-surface-variant font-bold tracking-widest uppercase text-xs">Fetching Identity...</p>
           </div>
         ) : (

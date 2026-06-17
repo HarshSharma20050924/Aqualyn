@@ -11,7 +11,7 @@ import DeleteChatDialog from '../components/chat/DeleteChatDialog';
 import { apiFetch } from '../utils/fetcher';
 
 export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string) => void }) {
-  const { currentUser, chats, setActiveChatId, messages, isLoading, folders, archiveChat, pinChat, muteChat, deleteChat, clearHistory, markAsRead, addChatToFolder, addToast, archiveLockPin, theme, setTheme, globalUsers, setGlobalUsers, followUser, startChatWithContact, setActiveContactId } = useAppContext();
+  const { currentUser, chats, setActiveChatId, messages, isLoading, isFetchingData, folders, archiveChat, pinChat, muteChat, deleteChat, clearHistory, markAsRead, addChatToFolder, addToast, archiveLockPin, theme, setTheme, globalUsers, setGlobalUsers, followUser, startChatWithContact, setActiveContactId } = useAppContext();
   const [activeTab, setActiveTab] = useState<string>('all');
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -31,8 +31,11 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
   const [chatToDelete, setChatToDelete] = useState<string | null>(null);
   const peekTimer = React.useRef<NodeJS.Timeout | null>(null);
 
+  const [isSearchLoading, setIsSearchLoading] = useState(false);
+
   React.useEffect(() => {
     if (searchQuery && isSearching) {
+      setIsSearchLoading(true);
       const timer = setTimeout(() => {
         apiFetch(ENDPOINTS.USER_SEARCH(searchQuery))
           .then(res => res.json())
@@ -44,12 +47,17 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
               const newUsers = data.filter((u: any) => !existingIds.has(u.id));
               return [...prev, ...newUsers];
             });
+            setIsSearchLoading(false);
           })
-          .catch(e => console.error(e));
+          .catch(e => {
+            console.error(e);
+            setIsSearchLoading(false);
+          });
       }, 300); // debounce 300ms
       return () => clearTimeout(timer);
     } else {
       setGlobalSearchResults([]);
+      setIsSearchLoading(false);
     }
   }, [searchQuery, isSearching]);
 
@@ -361,12 +369,12 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
         )}
       </header>
 
-      <main className={`px-4 max-w-2xl mx-auto ${isSearching ? 'pt-20' : 'pt-32'}`}>
-        {isLoading ? (
-          <div className="space-y-2">
-            {[1, 2, 3, 4, 5].map(i => <SkeletonChat key={i} />)}
-          </div>
-        ) : (
+        <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar relative z-0 p-2 sm:p-4">
+          {(isLoading || isFetchingData) ? (
+            <div className="space-y-2">
+              {[1, 2, 3, 4, 5, 6].map(i => <SkeletonChat key={`skel-${i}`} />)}
+            </div>
+          ) : (
           <>
             {filteredChats.length === 0 && !searchQuery && (
               <div className="text-center mt-20 opacity-60">
@@ -383,9 +391,13 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
                   <h2 className="font-headline font-bold text-sm tracking-tight uppercase">Global Search Results</h2>
                 </div>
                 
-                {/* User Search Results */}
-                <div className="space-y-3 mb-6">
-                  {globalSearchResults
+                {isSearchLoading ? (
+                  <div className="space-y-2">
+                    {[1, 2, 3].map(i => <SkeletonChat key={`search-skel-${i}`} />)}
+                  </div>
+                ) : (
+                  <div className="space-y-3 mb-6">
+                    {globalSearchResults
                     .filter(u => u.id !== currentUser?.id)
                     .map(user => {
                       const isFollowing = currentUser?.following?.includes(user.id);
@@ -439,7 +451,8 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
                         </div>
                       );
                     })}
-                </div>
+                  </div>
+                )}
 
                 {/* Real Search Results */}
               </div>

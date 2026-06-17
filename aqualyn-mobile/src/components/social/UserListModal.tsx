@@ -1,3 +1,4 @@
+import BubbleLoader from '../../components/ui/BubbleLoader';
 import React, { useState, useMemo } from 'react';
 import { 
   View, 
@@ -74,7 +75,7 @@ export default function UserListModal({ isOpen, onClose, title, users, isLoading
           <ScrollView contentContainerStyle={styles.scrollContent} style={styles.flex1}>
             {isLoading ? (
                <View style={styles.loadingContainer}>
-                  <ActivityIndicator size="large" color="#0284C7" />
+                  <BubbleLoader size={48} />
                   <Text style={styles.loadingText}>Synchronizing Identity</Text>
                </View>
             ) : filteredUsers.length > 0 ? (

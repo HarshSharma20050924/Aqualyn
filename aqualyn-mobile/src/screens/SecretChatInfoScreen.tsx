@@ -1,3 +1,4 @@
+import BubbleLoader from '../components/ui/BubbleLoader';
 import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
@@ -216,7 +217,7 @@ export default function SecretChatInfoScreen({ chat, onBack }: SecretChatInfoScr
                 </View>
               ) : (
                 <View style={styles.innerLoadingSpinnerFlexCenterSpacer}>
-                  <ActivityIndicator size="small" color="#0057bd" />
+                  <BubbleLoader size={24} />
                 </View>
               )}
             </View>

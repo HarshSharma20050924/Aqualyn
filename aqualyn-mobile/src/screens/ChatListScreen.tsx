@@ -72,6 +72,7 @@ export default function ChatListScreen({ onNavigate }: Props) {
     setActiveChatId,
     messages,
     isLoading,
+    isFetchingData,
     folders,
     archiveChat,
     pinChat,
@@ -87,7 +88,9 @@ export default function ChatListScreen({ onNavigate }: Props) {
     setGlobalUsers,
     followUser,
     startChatWithContact,
-    setActiveContactId
+    setActiveContactId,
+    globalUsers,
+    createGroupChat
   } = useAppContext();
 
   const [activeTab, setActiveTab] = useState<string>('all');
@@ -111,9 +114,12 @@ export default function ChatListScreen({ onNavigate }: Props) {
   const [peekChatId, setPeekChatId] = useState<string | null>(null);
   const [chatToDelete, setChatToDelete] = useState<string | null>(null);
 
+  const [isSearchLoading, setIsSearchLoading] = useState(false);
+
   // Global Context Search Debouncer
   useEffect(() => {
     if (searchQuery && isSearching) {
+      setIsSearchLoading(true);
       const timer = setTimeout(() => {
         apiFetch(ENDPOINTS.USER_SEARCH(searchQuery))
           .then((res) => res.json())
@@ -124,12 +130,17 @@ export default function ChatListScreen({ onNavigate }: Props) {
               const newUsers = data.filter((u: any) => !existingIds.has(u.id));
               return [...prev, ...newUsers];
             });
+            setIsSearchLoading(false);
           })
-          .catch((e) => console.error(e));
+          .catch((e) => {
+            console.error(e);
+            setIsSearchLoading(false);
+          });
       }, 300);
       return () => clearTimeout(timer);
     } else {
       setGlobalSearchResults([]);
+      setIsSearchLoading(false);
     }
   }, [searchQuery, isSearching]);
 
@@ -163,7 +174,7 @@ export default function ChatListScreen({ onNavigate }: Props) {
 
   // Custom Touch Handlers for Long-Press Context Menus
   const handleTouchStart = (e: any, id: string) => {
-    const nativeEvent = e.nativeEvent;
+    const nativeEvent = e?.nativeEvent || {};
     const clientX = nativeEvent.pageX || nativeEvent.clientX || 0;
     const clientY = nativeEvent.pageY || nativeEvent.clientY || 0;
 
@@ -379,7 +390,7 @@ export default function ChatListScreen({ onNavigate }: Props) {
 
       {/* Main Messaging / Streams Center */}
       <ScrollView contentContainerStyle={[styles.mainScroll, { paddingTop: isSearching ? 90 : 150, paddingBottom: insets.bottom + 100 }]}>
-        {isLoading ? (
+        {(isLoading || isFetchingData) ? (
           <View style={styles.skeletonContainer}>
             {[1, 2, 3, 4, 5].map((i) => renderSkeletonChat(i))}
           </View>
@@ -401,8 +412,13 @@ export default function ChatListScreen({ onNavigate }: Props) {
                   <Globe size={14} color="#64748b" />
                   <Text style={styles.globalSearchTitle}>Global Search Results</Text>
                 </View>
-                <View style={styles.globalResultsList}>
-                  {globalSearchResults
+                {isSearchLoading ? (
+                  <View style={styles.skeletonContainer}>
+                    {[1, 2, 3].map((i) => renderSkeletonChat(i))}
+                  </View>
+                ) : (
+                  <View style={styles.globalResultsList}>
+                    {globalSearchResults
                     .filter((u) => u.id !== currentUser?.id)
                     .map((user) => {
                       const isFollowing = currentUser?.following?.includes(user.id);
@@ -444,7 +460,8 @@ export default function ChatListScreen({ onNavigate }: Props) {
                         </View>
                       );
                     })}
-                </View>
+                  </View>
+                )}
               </View>
             ) : null}
 
@@ -465,7 +482,7 @@ export default function ChatListScreen({ onNavigate }: Props) {
                         key={chat.id}
                         onPress={() => handleChatClick(chat.id)}
                         delayLongPress={500}
-                        onPressIn={() => handleTouchStart(null as any, chat.id)}
+                        onPressIn={(e) => handleTouchStart(e, chat.id)}
                         onPressOut={handleTouchEnd}
                         style={[styles.chatCardItem, styles.chatCardPinned, isSelected && styles.chatCardSelected]}
                       >
@@ -524,7 +541,7 @@ export default function ChatListScreen({ onNavigate }: Props) {
                       <TouchableOpacity
                         key={chat.id}
                         onPress={() => handleChatClick(chat.id)}
-                        onPressIn={() => handleTouchStart(null as any, chat.id)}
+                        onPressIn={(e) => handleTouchStart(e, chat.id)}
                         onPressOut={handleTouchEnd}
                         style={[styles.chatCardItem, isSelected && styles.chatCardSelected]}
                       >
@@ -683,7 +700,7 @@ export default function ChatListScreen({ onNavigate }: Props) {
       </Modal>
 
       {/* Auxiliary Operational Overlays */}
-      <NewChatModal isOpen={isNewChatModalOpen} onClose={() => setIsNewChatModalOpen(false)} onNavigate={onNavigate} appContext={{ chats, contacts, currentUser, addToast }} />
+      <NewChatModal isOpen={isNewChatModalOpen} onClose={() => setIsNewChatModalOpen(false)} onNavigate={onNavigate} appContext={{ chats, contacts, currentUser, addToast, globalUsers, startChatWithContact, createGroupChat }} />
       <NewFolderModal isOpen={isNewFolderModalOpen} onClose={() => setIsNewFolderModalOpen(false)} appContext={{ addToast }} />
       {peekChatId && (
         <ChatPeekPreview

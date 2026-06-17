@@ -1,3 +1,4 @@
+import BubbleLoader from '../components/ui/BubbleLoader';
 import React, { useState, useRef } from 'react';
 import {
   StyleSheet,
@@ -109,7 +110,7 @@ export default function EditProfileScreen({ onBack }: Props) {
             style={[styles.headerSaveBtn, isSaving && styles.btnDisabled]}
           >
             {isSaving ? (
-              <ActivityIndicator size="small" color="#fff" />
+              <BubbleLoader size={24} />
             ) : (
               <>
                 <Save size={18} color="#fff" />
@@ -141,7 +142,7 @@ export default function EditProfileScreen({ onBack }: Props) {
             )}
             {isUploadingAvatar && (
               <View style={styles.avatarLoadingOverlay}>
-                <ActivityIndicator size="small" color="#fff" />
+                <BubbleLoader size={24} />
               </View>
             )}
             <TouchableOpacity onPress={handleAvatarPick} style={styles.avatarPickerBadgeBtn}>

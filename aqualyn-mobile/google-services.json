@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "833661381458",
+    "project_id": "bybp-3f1aa",
+    "storage_bucket": "bybp-3f1aa.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:833661381458:android:c26d86c7c0fff5bacf688b",
+        "android_client_info": {
+          "package_name": "com.aqualyn.com"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "833661381458-daicgklo33jlbdond7akpqomr5k8hv1f.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDEtGsicNUtJjpumshoRbKYe7fnqKFD0Jg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "833661381458-3jrkgrbcpltrsttv9o59io7npgqce8v2.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

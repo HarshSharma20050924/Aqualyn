@@ -36,6 +36,7 @@ import BottomNav from './components/BottomNav';
 import ToastContainer from './components/ui/ToastContainer';
 import AppLockScreen from './components/AppLockScreen';
 import { CallOverlay } from './components/CallOverlay';
+import BubbleLoader from './components/ui/BubbleLoader';
 
 export default function App() {
   const { currentUser, isLoading, isAppLocked, appLockPin, theme, aquaIntensity } = useAppContext();
@@ -63,7 +64,7 @@ export default function App() {
       <View style={[styles.centerContainer, { backgroundColor: activeColors.background }]}>
         <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
         <View style={styles.spinnerWrapper}>
-          <ActivityIndicator size="large" color={theme.accentColor || activeColors.primary} />
+          <BubbleLoader size={120} />
         </View>
         <Text style={[
           styles.brandHeadline, 

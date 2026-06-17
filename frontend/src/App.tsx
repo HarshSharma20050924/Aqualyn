@@ -18,6 +18,7 @@ import { CallOverlay } from './components/CallOverlay';
 import { ENDPOINTS } from './config/api';
 import { getRedirectResult } from 'firebase/auth';
 import { auth } from './config/firebase';
+import BubbleLoader from './components/ui/BubbleLoader';
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState('login');
@@ -88,10 +89,7 @@ export default function App() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-surface flex flex-col items-center justify-center">
-         <div className="w-24 h-24 relative">
-            <div className="absolute inset-0 border-4 border-secondary/20 rounded-full"></div>
-            <div className="absolute inset-0 border-4 border-secondary border-t-transparent rounded-full animate-spin"></div>
-         </div>
+         <BubbleLoader width={120} height={120} />
          <h1 className="mt-8 text-2xl font-black font-headline text-secondary tracking-tighter">AQUALYN</h1>
       </div>
     );

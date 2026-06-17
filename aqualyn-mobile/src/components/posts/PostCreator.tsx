@@ -13,7 +13,9 @@ import {
 } from 'react-native';
 import Animated, { FadeIn, FadeOut, ZoomIn, ZoomOut } from 'react-native-reanimated';
 import { X, Image as ImageIcon, Video, Check, MapPin, Tag, Music } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useAppContext } from '../../context/AppContext';
+import { uploadFile } from '../../utils/uploads';
 
 interface PostCreatorProps {
   isOpen: boolean;
@@ -30,14 +32,22 @@ export default function PostCreator({ isOpen, onClose }: PostCreatorProps) {
 
   if (!isOpen) return null;
 
-  const handleSimulatedFileSelect = (type: 'image' | 'video') => {
-    // Bridges asset library selection logic targets internally
-    const mockUrl = type === 'video' 
-      ? 'https://player.vimeo.com/external/371433846.sd.mp4?s=236da2f3c087f4d95290b3e2b24057dbacaf920a&profile_id=165&oauth2_token_id=57447761'
-      : 'https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=800';
-    
-    setMediaUrl(mockUrl);
-    setMediaType(type);
+  const handleFileSelect = async (type: 'image' | 'video') => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: type === 'video' ? ImagePicker.MediaTypeOptions.Videos : ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setMediaUrl(result.assets[0].uri);
+        setMediaType(type);
+      }
+    } catch (error) {
+      console.error('ImagePicker Error:', error);
+      addToast('Failed to select media', 'error');
+    }
   };
 
   const handlePost = async () => {
@@ -48,9 +58,14 @@ export default function PostCreator({ isOpen, onClose }: PostCreatorProps) {
 
     setIsUploading(true);
     try {
+      let finalMediaUrl = mediaUrl;
+      if (mediaUrl && !mediaUrl.startsWith('http')) {
+        finalMediaUrl = await uploadFile({ uri: mediaUrl, type: mediaType === 'video' ? 'video/mp4' : 'image/jpeg' });
+      }
+
       await addPost({
         caption,
-        mediaUrl: mediaUrl || undefined,
+        mediaUrl: finalMediaUrl || undefined,
         mediaType: mediaType || undefined,
         userId: currentUser?.id,
         userName: currentUser?.name,
@@ -145,7 +160,7 @@ export default function PostCreator({ isOpen, onClose }: PostCreatorProps) {
             ) : (
               <View style={styles.pickerGridTwinCellsHorizontalRow}>
                 <TouchableOpacity 
-                  onPress={() => handleSimulatedFileSelect('image')}
+                  onPress={() => handleFileSelect('image')}
                   style={[styles.pickerSquareInteractiveCellCard, styles.photoPickerCellCustomBorderSpec]}
                 >
                   <View style={styles.pickerGraphicCircularBackdropFrame}>
@@ -155,7 +170,7 @@ export default function PostCreator({ isOpen, onClose }: PostCreatorProps) {
                 </TouchableOpacity>
 
                 <TouchableOpacity 
-                  onPress={() => handleSimulatedFileSelect('video')}
+                  onPress={() => handleFileSelect('video')}
                   style={[styles.pickerSquareInteractiveCellCard, styles.videoPickerCellCustomBorderSpec]}
                 >
                   <View style={styles.pickerGraphicCircularBackdropFrame}>

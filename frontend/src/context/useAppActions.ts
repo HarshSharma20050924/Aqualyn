@@ -318,11 +318,12 @@ export const useAppActions = (
       });
       if (res.ok) {
         const data = await res.json();
+        const author = data.post.author || currentUser;
         const newPost: Post = {
           ...data.post,
-          userId: currentUser.id,
-          userName: currentUser.displayName || currentUser.username,
-          userAvatar: currentUser.avatar,
+          userId: author.id,
+          userName: author.displayName || author.username,
+          userAvatar: author.avatar,
           likes: [],
           comments: [],
           timestamp: 'Just now',

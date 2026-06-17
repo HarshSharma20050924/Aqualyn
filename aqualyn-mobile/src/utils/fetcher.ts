@@ -5,11 +5,12 @@
  */
 
 import { API_BASE_URL } from '../config/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /**
  * A robust fetch wrapper tailored for React Native environments.
  * 1. Base URL prefixing (cross-platform target resolution)
- * 2. Native Cookie management integration
+ * 2. Token injection from AsyncStorage
  * 3. Conditional Content-Type payload configuration
  */
 export async function apiFetch(url: string, options: RequestInit = {}) {
@@ -21,6 +22,17 @@ export async function apiFetch(url: string, options: RequestInit = {}) {
 
     if (!isFormData && !headers['Content-Type']) {
         headers['Content-Type'] = 'application/json';
+    }
+
+    if (!headers['Authorization']) {
+        try {
+            const token = await AsyncStorage.getItem('auth_token');
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+        } catch (e) {
+            console.error('[apiFetch] Error reading auth token:', e);
+        }
     }
 
     const targetUrl = url.startsWith('http') ? url : `${API_BASE_URL}${url}`;
@@ -38,6 +50,11 @@ export async function apiFetch(url: string, options: RequestInit = {}) {
         // Global Session Expiry Hook
         // Tip: You can dispatch a global event or trigger your authentication store logout sequence here.
         console.warn('[apiFetch] Unauthorised 401 response detected.');
+        try {
+            await AsyncStorage.removeItem('auth_token');
+        } catch (e) {
+            console.error('[apiFetch] Error clearing auth token on 401:', e);
+        }
     }
 
     return response;

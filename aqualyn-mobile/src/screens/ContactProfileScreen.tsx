@@ -1,3 +1,4 @@
+import BubbleLoader from '../components/ui/BubbleLoader';
 import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
@@ -132,14 +133,17 @@ export default function ContactProfileScreen({ onBack, onNavigate }: Props) {
     if (activeContactId) {
       const fetchData = async () => {
         try {
-          if (!contact) {
-            const res = await apiFetch(ENDPOINTS.USER_PROFILE(activeContactId));
-            if (res.ok) {
-              const data = await res.json();
-              setGlobalUsers(prev => prev.some(u => u.id === data.id) ? prev : [...prev, data]);
-            }
+          const res = await apiFetch(ENDPOINTS.USER_PROFILE(activeContactId));
+          if (res.ok) {
+            const data = await res.json();
+            setGlobalUsers(prev => {
+              const exists = prev.find(u => u.id === data.id);
+              if (exists) {
+                return prev.map(u => u.id === data.id ? { ...u, ...data } : u);
+              }
+              return [...prev, data];
+            });
           }
-
           if (chat) {
             const mediaRes = await apiFetch(ENDPOINTS.CHAT_MEDIA(chat.id));
             if (mediaRes.ok) {
@@ -161,7 +165,7 @@ export default function ContactProfileScreen({ onBack, onNavigate }: Props) {
       <View style={styles.loadingFallbackContainer}>
         {activeContactId ? (
           <View style={styles.centerAlignGap}>
-            <ActivityIndicator size="large" color="#0057bd" />
+            <BubbleLoader size={48} />
             <Text style={styles.loadingIdentityText}>Fetching Identity...</Text>
           </View>
         ) : (
@@ -359,7 +363,7 @@ export default function ContactProfileScreen({ onBack, onNavigate }: Props) {
             <View style={styles.contentMatrixWindow}>
               {isLoadingContent ? (
                 <View style={styles.matrixInlineLoading}>
-                  <ActivityIndicator size="small" color="#64748b" />
+                  <BubbleLoader size={24} />
                 </View>
               ) : activeTab === 'posts' ? (
                 <View style={styles.postResponsiveGrid}>

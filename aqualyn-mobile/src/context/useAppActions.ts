@@ -4,17 +4,9 @@ import { apiFetch } from '../utils/fetcher';
 import { Socket } from 'socket.io-client';
 import { ToastType, Toast } from './AppContextType';
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// If using expo, import * as Contacts from 'expo-contacts';
-// If using bare React Native, import Contacts from 'react-native-contacts';
-// We reference a generic Native Contacts interface matching your framework injection paradigm.
-let NativeContacts: any = null;
-try {
-  // Gracefully adapt placeholder dependency if available
-  NativeContacts = require('react-native-contacts').default;
-} catch (e) {
-  // Fallback for custom configured modules
-}
+import * as Contacts from 'expo-contacts';
 
 export const useAppActions = (
   currentUser: User | null,
@@ -38,15 +30,46 @@ export const useAppActions = (
   activeChatId: string | null
 ) => {
   const logout = async () => {
+    // Step 1: Get the token BEFORE clearing it so we can send it for revocation
+    let token: string | null = null;
     try {
-      await apiFetch(`${API_BASE_URL}/api/auth/logout`, { method: 'POST' });
+      token = await AsyncStorage.getItem('auth_token');
+    } catch (e) {}
+
+    // Step 2: Call the backend to revoke the session & clear the httpOnly cookie
+    try {
+      await apiFetch(`${API_BASE_URL}/api/auth/logout`, {
+        method: 'POST',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      });
     } catch (e) {
-      console.error("Logout API failed", e);
+      console.error('[Logout] Backend revocation failed (continuing local logout):', e);
     }
-    // Safe context teardown matching theme design bounds without web localStorage dependency
+
+    // Step 3: Aggressively wipe ALL local storage — every key
+    try {
+      await AsyncStorage.multiRemove([
+        'auth_token',
+        'aqualyn_user',
+        'aqualyn_theme',
+        'aqualyn_pin',
+        'aqualyn_archive_pin',
+      ]);
+      // Mark explicit logout so bootstrap skips auto-login
+      await AsyncStorage.setItem('explicit_logout', '1');
+    } catch (e) {
+      console.error('[Logout] Failed to clear AsyncStorage:', e);
+    }
+
+    // Step 4: Tear down all React context state synchronously
     setCurrentUser(null);
     setChats([]);
     setMessages({});
+    setContacts([]);
+    setStories([]);
+    setPosts([]);
+    setNotifications([]);
+    setGlobalUsers([]);
   };
 
   const archiveChat = (chatId: string) => {
@@ -330,11 +353,12 @@ export const useAppActions = (
       });
       if (res.ok) {
         const data = await res.json();
+        const author = data.post.author || currentUser;
         const newPost: Post = {
           ...data.post,
-          userId: currentUser.id,
-          userName: currentUser.displayName || currentUser.username,
-          userAvatar: currentUser.avatar,
+          userId: author.id,
+          userName: author.displayName || author.username,
+          userAvatar: author.avatar,
           likes: [],
           comments: [],
           timestamp: 'Just now',
@@ -875,29 +899,44 @@ export const useAppActions = (
 
   const syncContacts = async () => {
     try {
-      // Swapped out Capacitor Web lookup layers securely for Native platform checking
       if (Platform.OS === 'ios' || Platform.OS === 'android') {
-        if (!NativeContacts) {
-           addToast('Contacts plugin not found. Ensure react-native-contacts is linked.', 'error');
-           return;
-        }
-
-        // Implementation leverages standard check & request authorization cycles safely
-        NativeContacts.checkPermission(async (err: string, permission: string) => {
-          if (permission === 'undefined') {
-            NativeContacts.requestPermission(async (err: string, newPermission: string) => {
-              if (newPermission === 'authorized') {
-                await processNativeContacts();
-              } else {
-                addToast('Contact mapping requires permission', 'info');
+        const { status } = await Contacts.requestPermissionsAsync();
+        if (status === 'granted') {
+          const { data } = await Contacts.getContactsAsync({
+            fields: [Contacts.Fields.PhoneNumbers],
+          });
+          const phones = new Set<string>();
+          data.forEach(c => {
+            c.phoneNumbers?.forEach(p => {
+              if (p.number) {
+                const clean = p.number.replace(/\D/g, '');
+                if (clean.length >= 10) phones.add(clean);
               }
             });
-          } else if (permission === 'authorized') {
-            await processNativeContacts();
-          } else {
-            addToast('Contact mapping requires permission', 'info');
+          });
+
+          if (phones.size === 0) {
+              addToast('No contacts found on device', 'info');
+              return;
           }
-        });
+
+          const res = await apiFetch(ENDPOINTS.CONTACT_SYNC, {
+            method: 'POST',
+            body: JSON.stringify({ phones: Array.from(phones) })
+          });
+
+          if (res.ok) {
+            const matches = await res.json();
+            setContacts(prev => {
+              const existingIds = new Set(prev.map(c => c.id));
+              const newOnes = matches.filter((m: any) => !existingIds.has(m.id));
+              return [...prev, ...newOnes];
+            });
+            addToast(`Synced ${matches.length} matching friends!`, 'success');
+          }
+        } else {
+          addToast('Contact mapping requires permission', 'info');
+        }
       } else {
         addToast('Contact Sync only available on native mobile apps', 'info');
       }
@@ -905,47 +944,6 @@ export const useAppActions = (
       console.error('Contact sync failed', e);
       addToast('Sync failed', 'error');
     }
-  };
-
-  // Internal helper to handle phone iteration over cross platform address buffers
-  const processNativeContacts = async () => {
-    if (!NativeContacts) return;
-    NativeContacts.getAll(async (err: any, nativeContactsList: any[]) => {
-      if (err) {
-        addToast('Sync failed reading device address book', 'error');
-        return;
-      }
-
-      const phones = new Set<string>();
-      nativeContactsList.forEach((c: any) => {
-        c.phoneNumbers?.forEach((p: any) => {
-          if (p.number) {
-            const clean = p.number.replace(/\D/g, '');
-            if (clean.length >= 10) phones.add(clean);
-          }
-        });
-      });
-
-      if (phones.size === 0) {
-          addToast('No contacts found on device', 'info');
-          return;
-      }
-
-      const res = await apiFetch(ENDPOINTS.CONTACT_SYNC, {
-        method: 'POST',
-        body: JSON.stringify({ phones: Array.from(phones) })
-      });
-
-      if (res.ok) {
-        const matches = await res.json();
-        setContacts(prev => {
-          const existingIds = new Set(prev.map(c => c.id));
-          const newOnes = matches.filter((m: any) => !existingIds.has(m.id));
-          return [...prev, ...newOnes];
-        });
-        addToast(`Synced ${matches.length} matching friends!`, 'success');
-      }
-    });
   };
 
   return {

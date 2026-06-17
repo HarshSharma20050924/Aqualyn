@@ -1,3 +1,4 @@
+import BubbleLoader from '../components/ui/BubbleLoader';
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, Lock, Trash2, Shield, Clock, EyeOff, Smartphone, Key, CheckCircle, ChevronRight } from 'lucide-react';
@@ -129,7 +130,7 @@ export default function SecretChatInfoScreen({ chat, onBack }: { chat: Chat, onB
                      </>
                    ) : (
                      <div className="h-12 flex items-center justify-center">
-                        <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                        <BubbleLoader width={24} height={24} />
                      </div>
                    )}
                 </div>

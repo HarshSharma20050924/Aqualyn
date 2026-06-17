@@ -8,3 +8,10 @@ coverage/
 !.env.example
 everything-claude-code
 everything-claude-code/.agent
+
+.kilo
+/Aqualyn/.agents
+Aqualyn/graphify
+graphify
+graphify-out
+/graphify-out

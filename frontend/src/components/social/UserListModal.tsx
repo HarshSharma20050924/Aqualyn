@@ -1,3 +1,4 @@
+import BubbleLoader from '../../components/ui/BubbleLoader';
 import React from 'react';
 import { motion } from 'motion/react';
 import { X, UserPlus, Search } from 'lucide-react';
@@ -65,7 +66,7 @@ export default function UserListModal({ isOpen, onClose, title, users, isLoading
         <div className="flex-1 overflow-y-auto p-4 space-y-2">
           {isLoading ? (
              <div className="py-20 flex flex-col items-center gap-4">
-                <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+                <BubbleLoader width={24} height={24} />
                 <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em]">Synchronizing Identity</p>
              </div>
           ) : filteredUsers.length > 0 ? (

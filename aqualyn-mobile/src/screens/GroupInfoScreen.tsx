@@ -1,3 +1,4 @@
+import BubbleLoader from '../components/ui/BubbleLoader';
 import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
@@ -119,7 +120,7 @@ export default function GroupInfoScreen({ chat, onBack, onNavigate }: GroupInfoS
   if (loading) {
     return (
       <View style={[styles.loadingCenterDeck, { paddingTop: insets.top }]}>
-        <ActivityIndicator size="large" color="#0057bd" />
+        <BubbleLoader size={48} />
       </View>
     );
   }

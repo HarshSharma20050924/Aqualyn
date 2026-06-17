@@ -1,3 +1,4 @@
+import BubbleLoader from '../../components/ui/BubbleLoader';
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, TextInput, Modal, ScrollView, ActivityIndicator, StyleSheet, Platform } from 'react-native';
 import { Shield, Smartphone, Download, Trash2, MonitorSmartphone, Lock, Key, X } from 'lucide-react-native';
@@ -260,7 +261,7 @@ export default function SecuritySettings() {
             <ScrollView contentContainerStyle={styles.sessionsList} style={styles.flex1}>
               {loadingSessions ? (
                  <View style={styles.loadingContainer}>
-                   <ActivityIndicator size="large" color="#0284C7" />
+                   <BubbleLoader size={48} />
                  </View>
               ) : sessions.length === 0 ? (
                 <Text style={styles.noSessionsText}>No other active sessions found.</Text>

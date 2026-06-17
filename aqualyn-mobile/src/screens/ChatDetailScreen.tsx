@@ -46,10 +46,11 @@ import {
   User 
 } from 'lucide-react-native';
 
-// State & Context (Kept exactly identical to your web architecture)
 import { useAppContext } from '../context/AppContext';
 import { useCall } from '../context/CallContext';
 import { Message } from '../types';
+import { ENDPOINTS } from '../config/api';
+import { apiFetch } from '../utils/fetcher';
 
 // Mobile Equivalent Sub-Components
 import MediaAttachmentPicker from '../components/chat/MediaAttachmentPicker';
@@ -174,6 +175,37 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
       markAsRead(activeChatId);
     }
   }, [activeChatId, chatMessages.length]);
+
+  // Fetch messages from API when opening a chat
+  useEffect(() => {
+    if (!activeChatId) return;
+    // Only fetch if we have no messages yet for this chat
+    if (messages[activeChatId] && messages[activeChatId].length > 0) return;
+    setIsLoadingMessages(true);
+    apiFetch(ENDPOINTS.CHAT_MESSAGES(activeChatId))
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          setMessages(prev => ({
+            ...prev,
+            [activeChatId]: data.map((m: any) => ({
+              id: m.id,
+              chatId: activeChatId,
+              senderId: m.senderId,
+              text: m.content || m.text || '',
+              timestamp: m.createdAt ? new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Now',
+              isRead: m.isRead ?? true,
+              imageUrl: m.imageUrl,
+              videoUrl: m.videoUrl,
+              audioUrl: m.audioUrl,
+              replyToId: m.replyToId,
+            }))
+          }));
+        }
+      })
+      .catch(() => {})
+      .finally(() => setIsLoadingMessages(false));
+  }, [activeChatId]);
 
   // Handle typing presence
   useEffect(() => {
@@ -558,20 +590,20 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
               onPress={() => setIsAttachmentPickerOpen(!isAttachmentPickerOpen)}
               style={[styles.plusButton, isAttachmentPickerOpen ? styles.plusButtonActive : styles.plusButtonInactive]}
             >
-              <Plus size={24} color="#fff" style={{ transform: [{ rotate: isAttachmentPickerOpen ? '45deg' : '0deg' }] }} />
+              <Plus size={24} color={isAttachmentPickerOpen ? "#fff" : "#475569"} style={{ transform: [{ rotate: isAttachmentPickerOpen ? '45deg' : '0deg' }] }} />
             </TouchableOpacity>
 
-            <View style={styles.inputWrapper}>
+            <View style={[styles.inputWrapper, isSecret ? styles.inputSecret : styles.inputNormal]}>
               <TextInput
-                style={[styles.textInput, isSecret ? styles.inputSecret : styles.inputNormal]}
-                placeholder={`Message ${chat.name}...`}
-                placeholderTextColor={isSecret ? '#475569' : '#94a3b8'}
+                style={[styles.textInput, isSecret ? { color: '#f8fafc' } : { color: '#0f172a' }]}
+                placeholder={`Message...`}
+                placeholderTextColor={isSecret ? '#64748b' : '#94a3b8'}
                 value={text}
                 onChangeText={setText}
                 multiline
               />
               <TouchableOpacity style={styles.smileButton}>
-                <Smile size={22} color="#64748b" />
+                <Smile size={22} color="#94a3b8" />
               </TouchableOpacity>
             </View>
 
@@ -590,8 +622,16 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
       <AudioRecorderUI isRecording={isRecordingAudio} onStop={handleAudioStop} onCancel={() => setIsRecordingAudio(false)} />
       <CameraUI isOpen={isCameraOpen} onClose={() => setIsCameraOpen(false)} onCapture={handleCameraCapture} />
       {isGalleryOpen && <MediaGallery items={galleryMedia} initialIndex={galleryInitialIndex} onClose={() => setIsGalleryOpen(false)} />}
-      {isGroupInfoOpen && chat.isGroup && <GroupInfoScreen chat={chat} onBack={() => setIsGroupInfoOpen(false)} onNavigate={onNavigate} />}
-      {isSecretInfoOpen && chat.isSecret && <SecretChatInfoScreen chat={chat} onBack={() => setIsSecretInfoOpen(false)} />}
+      {isGroupInfoOpen && chat.isGroup && (
+        <View style={[StyleSheet.absoluteFill, { zIndex: 999 }]}>
+          <GroupInfoScreen chat={chat} onBack={() => setIsGroupInfoOpen(false)} onNavigate={onNavigate} />
+        </View>
+      )}
+      {isSecretInfoOpen && chat.isSecret && (
+        <View style={[StyleSheet.absoluteFill, { zIndex: 999 }]}>
+          <SecretChatInfoScreen chat={chat} onBack={() => setIsSecretInfoOpen(false)} />
+        </View>
+      )}
       <ShareContactModal isOpen={isShareContactOpen} onClose={() => setIsShareContactOpen(false)} appContext={{ chats, currentUser }} onShare={(contactId) => {
          const contact = contacts.find(c => c.id === contactId);
          if (contact && activeChatId) {
@@ -686,17 +726,17 @@ const styles = StyleSheet.create({
   typingText: { fontSize: 13, color: '#64748b', fontWeight: '500' },
 
   // System Dock System Styles
-  footerWrapper: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: 16 },
-  inputContainerRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  plusButton: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center' },
-  plusButtonActive: { backgroundColor: '#2563eb' },
-  plusButtonInactive: { backgroundColor: 'rgba(0,0,0,0.7)' },
-  inputWrapper: { flex: 1, flexDirection: 'row', alignItems: 'center', borderRadius: 24, paddingHorizontal: 12, height: 48 },
-  inputSecret: { backgroundColor: '#000', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', color: '#e2e8f0' },
-  inputNormal: { backgroundColor: '#fff', color: '#0f172a' },
-  textInput: { flex: 1, height: '100%', fontSize: 15, paddingRight: 36 },
-  smileButton: { position: 'absolute', right: 12 },
-  sendButtonCircle: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#0057bd', justifyContent: 'center', alignItems: 'center' },
+  footerWrapper: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: 16, backgroundColor: 'transparent' },
+  inputContainerRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10, marginBottom: 4 },
+  plusButton: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
+  plusButtonActive: { backgroundColor: '#3b82f6' },
+  plusButtonInactive: { backgroundColor: 'rgba(255,255,255,0.9)', borderWidth: 1, borderColor: 'rgba(226,232,240,0.6)' },
+  inputWrapper: { flex: 1, flexDirection: 'row', alignItems: 'flex-end', borderRadius: 24, paddingHorizontal: 16, minHeight: 44, maxHeight: 120, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
+  inputSecret: { backgroundColor: 'rgba(15,23,42,0.85)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  inputNormal: { backgroundColor: 'rgba(255,255,255,0.95)', borderWidth: 1, borderColor: 'rgba(226,232,240,0.8)' },
+  textInput: { flex: 1, fontSize: 15, paddingTop: 12, paddingBottom: 12, paddingRight: 36, minHeight: 44, outlineWidth: 0, outlineStyle: 'none' } as any,
+  smileButton: { position: 'absolute', right: 12, bottom: 11 },
+  sendButtonCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#3b82f6', justifyContent: 'center', alignItems: 'center', shadowColor: '#3b82f6', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
 
   // Reply contextual banner
   contextBar: { position: 'absolute', bottom: 60, left: 0, right: 0, backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: 16, padding: 12, flexDirection: 'row', alignItems: 'center', borderLeftWidth: 4, borderColor: '#0057bd' },

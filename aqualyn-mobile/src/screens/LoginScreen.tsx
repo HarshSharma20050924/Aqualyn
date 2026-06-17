@@ -1,3 +1,4 @@
+import BubbleLoader from '../components/ui/BubbleLoader';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   StyleSheet,
@@ -41,6 +42,8 @@ import GlassyDatePicker from '../components/GlassyDatePicker';
 import { auth, googleProvider } from '../config/firebase';
 import { useAppContext } from '../context/AppContext';
 import { ENDPOINTS } from '../config/api';
+import { apiFetch } from '../utils/fetcher';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -129,7 +132,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
           setActiveIdentifier(identifier);
       }
 
-      const res = await fetch(ENDPOINTS.AUTH_SEND_OTP, {
+      const res = await apiFetch(ENDPOINTS.AUTH_SEND_OTP, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ identifier })
@@ -179,7 +182,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
     const code = otp.join('');
     const identifier = activeIdentifier;
     try {
-      const res = await fetch(ENDPOINTS.AUTH_VERIFY_OTP, {
+      const res = await apiFetch(ENDPOINTS.AUTH_VERIFY_OTP, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ identifier, otp: code })
@@ -187,6 +190,10 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
       if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
           throw new Error(errData.error || 'Failed to verify OTP');
+      }
+      const data = await res.json();
+      if (data.token) {
+          await AsyncStorage.setItem('auth_token', data.token);
       }
       await syncProfileWithBackend({});
     } catch (error: any) {
@@ -204,7 +211,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
           payload.phone = `${selectedCountry.code}${phoneNumber}`;
       }
 
-      const res = await fetch(ENDPOINTS.AUTH_SYNC, {
+      const res = await apiFetch(ENDPOINTS.AUTH_SYNC, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -289,8 +296,8 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
         <Animated.View style={styles.centralInteractiveShellDeck}>
           {step === 'intro' && (
             <Animated.View 
-              entering={SlideInRight.springify().damping(22)} 
-              exiting={FadeOut}
+              entering={FadeIn.duration(300)} 
+              exiting={FadeOut.duration(200)}
               style={styles.stepAlignerCenter}
             >
               <View style={styles.logoBadgeContainerFrame}>
@@ -314,8 +321,8 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
 
           {(step === 'phone' || step === 'email') && (
             <Animated.View 
-              entering={SlideInRight.springify().damping(22)} 
-              exiting={FadeOut}
+              entering={FadeIn.duration(300)} 
+              exiting={FadeOut.duration(200)}
               style={styles.glassFormWrapperCard}
             >
               <Text style={styles.formHeaderTitleTypography}>
@@ -375,7 +382,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
                   style={[styles.mainActionStadiumButton, (step === 'phone' ? !phoneNumber : !email) && styles.disabledButtonStateOpacity]}
                 >
                   {isLoading ? (
-                    <ActivityIndicator size="small" color="#ffffff" />
+                    <BubbleLoader size={24} />
                   ) : (
                     <>
                       <Text style={styles.mainActionStadiumButtonLabelText}>Continue</Text>
@@ -396,7 +403,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
                   style={styles.secondaryGlassOutlineActionButton}
                 >
                   {isGoogleLoading ? (
-                    <ActivityIndicator size="small" color="#0057bd" />
+                    <BubbleLoader size={24} />
                   ) : (
                     <>
                       <GoogleIcon />
@@ -419,8 +426,8 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
 
           {step === 'otp' && (
             <Animated.View 
-              entering={SlideInRight.springify().damping(22)} 
-              exiting={FadeOut}
+              entering={FadeIn.duration(300)} 
+              exiting={FadeOut.duration(200)}
               style={styles.glassFormWrapperCard}
             >
               <Text style={styles.formHeaderTitleTypography}>Verify it's you</Text>
@@ -453,7 +460,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
                   style={[styles.mainActionStadiumButton, otp.some(d => !d) && styles.disabledButtonStateOpacity]}
                 >
                   {isLoading ? (
-                    <ActivityIndicator size="small" color="#ffffff" />
+                    <BubbleLoader size={24} />
                   ) : (
                     <>
                       <Text style={styles.mainActionStadiumButtonLabelText}>Verify & Enter</Text>
@@ -477,8 +484,8 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
 
           {step === 'profile' && (
             <Animated.View 
-              entering={SlideInRight.springify().damping(22)} 
-              exiting={FadeOut}
+              entering={FadeIn.duration(300)} 
+              exiting={FadeOut.duration(200)}
               style={styles.glassFormWrapperCard}
             >
               <Text style={styles.formHeaderTitleTypography}>Complete Profile</Text>
@@ -524,7 +531,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
                   style={[styles.mainActionStadiumButton, (!displayName.trim() || !dob) && styles.disabledButtonStateOpacity, { marginTop: 16 }]}
                 >
                   {isLoading ? (
-                    <ActivityIndicator size="small" color="#ffffff" />
+                    <BubbleLoader size={24} />
                   ) : (
                     <>
                       <Text style={styles.mainActionStadiumButtonLabelText}>Complete Setup</Text>

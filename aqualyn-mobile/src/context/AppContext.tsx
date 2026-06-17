@@ -1,4 +1,5 @@
 import React, { useState, ReactNode, useEffect, useRef } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { User, Chat, Message, Folder, ThemeSettings, Post, Story, Notification } from '../types';
 export type { Story };
 import { io, Socket } from 'socket.io-client';
@@ -121,6 +122,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     let isMounted = true;
     const bootstrap = async () => {
       try {
+        // Check if user explicitly logged out — if so, skip auto-login entirely
+        const explicitLogout = await AsyncStorage.getItem('explicit_logout').catch(() => null);
+        if (explicitLogout === '1') {
+          await AsyncStorage.removeItem('explicit_logout').catch(() => {});
+          console.log('[Auth] Explicit logout detected — skipping bootstrap sync.');
+          if (isMounted) setIsLoading(false);
+          return;
+        }
+
         console.log("[Auth] Starting bootstrap sync...");
         const res = await apiFetch(ENDPOINTS.AUTH_SYNC, {
           method: 'POST',

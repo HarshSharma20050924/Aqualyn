@@ -1,3 +1,4 @@
+import BubbleLoader from '../../components/ui/BubbleLoader';
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import { Bell } from 'lucide-react-native';
@@ -70,7 +71,7 @@ export default function NotificationsSettings() {
               >
                 {isItemLoading ? (
                   <View style={styles.spinnerWrapper}>
-                    <ActivityIndicator size="small" color="#FFFFFF" />
+                    <BubbleLoader size={24} />
                   </View>
                 ) : (
                   <View style={[

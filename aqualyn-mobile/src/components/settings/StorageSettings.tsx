@@ -1,3 +1,4 @@
+import BubbleLoader from '../../components/ui/BubbleLoader';
 import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, Platform } from 'react-native';
 import { Database, Trash2 } from 'lucide-react-native';
@@ -65,7 +66,7 @@ export default function StorageSettings() {
       <View style={styles.card}>
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#0284C7" />
+            <BubbleLoader size={48} />
           </View>
         ) : (
           <>

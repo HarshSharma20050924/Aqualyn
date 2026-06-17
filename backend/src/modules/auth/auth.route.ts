@@ -21,7 +21,7 @@ router.post('/logout', verifyToken, async (req: any, res: any) => {
         const token = req.cookies.token || (req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.split(' ')[1] : null);
         
         if (token) {
-            const { AuthService } = require('../services/AuthService');
+            const { AuthService } = require('./auth.service');
             await AuthService.logout(userId, token);
         }
 

@@ -10,7 +10,7 @@ import {
   Dimensions,
   Platform
 } from 'react-native';
-import Animated, { SlideInRight, SlideOutLeft, FadeIn, FadeOut } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { 
   ArrowLeft, 
@@ -121,8 +121,8 @@ export default function SettingsScreen({ onBack, onNavigate }: SettingsScreenPro
       case 'folders':
         return (
           <Animated.View 
-            entering={SlideInRight.springify().damping(22)} 
-            exiting={SlideOutLeft} 
+            entering={FadeIn.duration(250)} 
+            exiting={FadeOut.duration(200)} 
             style={styles.subviewAbsoluteOverlayDeckContainer}
           >
             <SubViewHeader title="Chat Folders" />
@@ -193,8 +193,8 @@ export default function SettingsScreen({ onBack, onNavigate }: SettingsScreenPro
       case 'appearance':
         return (
           <Animated.View 
-            entering={SlideInRight.springify().damping(22)} 
-            exiting={SlideOutLeft} 
+            entering={FadeIn.duration(250)} 
+            exiting={FadeOut.duration(200)} 
             style={styles.subviewAbsoluteOverlayDeckContainer}
           >
             <SubViewHeader title="Appearance" />
@@ -276,8 +276,8 @@ export default function SettingsScreen({ onBack, onNavigate }: SettingsScreenPro
       case 'wallet':
         return (
           <Animated.View 
-            entering={SlideInRight.springify().damping(22)} 
-            exiting={SlideOutLeft} 
+            entering={FadeIn.duration(250)} 
+            exiting={FadeOut.duration(200)} 
             style={styles.subviewAbsoluteOverlayDeckContainer}
           >
             <SubViewHeader title="Wallet" />

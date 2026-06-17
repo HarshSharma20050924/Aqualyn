@@ -1,3 +1,4 @@
+import BubbleLoader from '../components/ui/BubbleLoader';
 import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, Save, Camera, ChevronDown } from 'lucide-react';
@@ -109,7 +110,7 @@ export default function EditProfileScreen({ onBack }: { onBack: () => void }) {
         </div>
         <button onClick={handleSave} disabled={isSaving} className="text-primary font-bold flex items-center gap-2 hover:opacity-80 disabled:opacity-50">
           {isSaving ? (
-            <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin"></div>
+            <BubbleLoader width={24} height={24} />
           ) : (
             <Save className="w-5 h-5" />
           )}
@@ -126,7 +127,7 @@ export default function EditProfileScreen({ onBack }: { onBack: () => void }) {
             <img src={avatar} alt="Profile" className="w-full h-full object-cover" />
             <div className={`absolute inset-0 bg-black/40 flex flex-col items-center justify-center transition-opacity ${isUploadingAvatar ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
               {isUploadingAvatar ? (
-                <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin mb-1"></div>
+                <BubbleLoader width={24} height={24} />
               ) : (
                 <>
                   <Camera className="w-6 h-6 text-white mb-1" />

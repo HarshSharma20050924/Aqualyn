@@ -1,3 +1,4 @@
+import BubbleLoader from '../../components/ui/BubbleLoader';
 import React, { useState } from 'react';
 import { 
   View, 
@@ -17,7 +18,9 @@ import {
   Send, ChevronLeft, Star, RefreshCw, 
   MapPin, Hash, AtSign, Search, Heart, Check, Settings
 } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useAppContext } from '../../context/AppContext';
+import { uploadFile } from '../../utils/uploads';
 
 const { width: WINDOW_WIDTH, height: WINDOW_HEIGHT } = Dimensions.get('window');
 
@@ -62,10 +65,23 @@ export default function StoryCreator({ onClose }: { onClose: () => void }) {
     setStep('edit');
   };
 
-  const handleFileUploadMock = () => {
-    setMediaUrl('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe');
-    setMediaType('image');
-    setStep('edit');
+  const handleFileSelect = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.All,
+        allowsEditing: true,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setMediaUrl(result.assets[0].uri);
+        setMediaType(result.assets[0].type === 'video' ? 'video' : 'image');
+        setStep('edit');
+      }
+    } catch (error) {
+      console.error('ImagePicker Error:', error);
+      addToast('Failed to select media', 'error');
+    }
   };
 
   const handleAddText = () => {
@@ -101,8 +117,13 @@ export default function StoryCreator({ onClose }: { onClose: () => void }) {
     if (mediaUrl) {
       setIsUploading(true);
       try {
+        let finalMediaUrl = mediaUrl;
+        if (mediaUrl && !mediaUrl.startsWith('http')) {
+          finalMediaUrl = await uploadFile({ uri: mediaUrl, type: mediaType === 'video' ? 'video/mp4' : 'image/jpeg' });
+        }
+
         await addStory({
-          mediaUrl: mediaUrl,
+          mediaUrl: finalMediaUrl,
           mediaType,
           stickers,
           isCloseFriends: isCloseFriendsOnly,
@@ -163,7 +184,7 @@ export default function StoryCreator({ onClose }: { onClose: () => void }) {
             
             {/* Control Dashboard Overlay */}
             <View style={styles.controls}>
-              <TouchableOpacity onPress={handleFileUploadMock} style={styles.sideButton}>
+              <TouchableOpacity onPress={handleFileSelect} style={styles.sideButton}>
                 <ImageIcon size={24} color="#FFF" />
               </TouchableOpacity>
               
@@ -257,7 +278,7 @@ export default function StoryCreator({ onClose }: { onClose: () => void }) {
                 style={styles.shareButton}
               >
                 <Text style={styles.shareButtonText}>{isUploading ? 'Sharing...' : 'Share'}</Text> 
-                {isUploading ? <ActivityIndicator size="small" color="#000" /> : <Send size={18} color="#000" />}
+                {isUploading ? <BubbleLoader size={24} /> : <Send size={18} color="#000" />}
               </TouchableOpacity>
             </View>
           </View>

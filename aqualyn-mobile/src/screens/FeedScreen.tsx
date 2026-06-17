@@ -31,6 +31,185 @@ import StoryCreator from '../components/stories/StoryCreator';
 
 const { width: WINDOW_WIDTH } = Dimensions.get('window');
 
+// Interactive Modular Post Card Architecture (Standalone to prevent invalid hook calls)
+const PostCard = ({ post }: { post: Post }) => {
+  const {
+    commentPost,
+    deletePost,
+    likePost,
+    savePost,
+    addToast,
+    currentUser,
+    globalUsers
+  } = useAppContext();
+
+  const user = globalUsers.find(u => u.id === post.userId) || currentUser;
+  const isLiked = currentUser && post.likes.includes(currentUser.id);
+  const isSaved = currentUser?.savedPostIds?.includes(post.id);
+  
+  const [commentText, setCommentText] = useState('');
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [showHeartAnimation, setShowHeartAnimation] = useState(false);
+  
+  // Custom Double-Tap Multi-Platform Mechanics Engine Tracking
+  let lastTapRef = useRef<number | null>(null);
+  const handleImageTap = () => {
+    const now = Date.now();
+    const DOUBLE_TAP_DELAY = 300;
+    if (lastTapRef.current && (now - lastTapRef.current < DOUBLE_TAP_DELAY)) {
+      setShowHeartAnimation(true);
+      if (!isLiked) {
+        likePost(post.id);
+      }
+      setTimeout(() => setShowHeartAnimation(false), 1000);
+    } else {
+      lastTapRef.current = now;
+    }
+  };
+
+  const handleAddComment = () => {
+    if (commentText.trim()) {
+      commentPost(post.id, commentText);
+      setCommentText('');
+    }
+  };
+
+  const handleDelete = async () => {
+    try {
+      await (deletePost as any)(post.id);
+      addToast('Post deleted', 'success');
+    } catch (e) {
+      addToast('Failed to delete', 'error');
+    }
+    setIsMenuOpen(false);
+  };
+
+  return (
+    <View style={styles.postCardFrameContainer}>
+      {/* Post Header Element Structure */}
+      <View style={styles.postHeaderRow}>
+        <View style={styles.postHeaderProfileLeft}>
+          <View style={styles.postCardAvatarOuterCircle}>
+            <Image source={{ uri: user?.avatar }} style={styles.postAvatarImgFluid} />
+          </View>
+          <Text style={styles.postHeaderUsernameHeadlineText}>
+            {user?.username || user?.name || 'anonymous'}
+          </Text>
+        </View>
+        <View style={styles.relativeMenuBoxAnchor}>
+          <TouchableOpacity onPress={() => setIsMenuOpen(!isMenuOpen)} style={styles.moreActionInteractBtn}>
+            <MoreVertical size={20} color="#64748b" />
+          </TouchableOpacity>
+
+          {isMenuOpen && (
+            <View style={styles.dropdownAbsoluteMenuOverlayCard}>
+              {post.userId === currentUser?.id ? (
+                <TouchableOpacity onPress={handleDelete} style={styles.dropdownMenuItemBtn}>
+                  <Text style={styles.dropdownItemLabelTextError}>Delete Post</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity onPress={() => setIsMenuOpen(false)} style={styles.dropdownMenuItemBtn}>
+                  <Text style={styles.dropdownItemLabelTextStandard}>Report Post</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity onPress={() => setIsMenuOpen(false)} style={[styles.dropdownMenuItemBtn, { borderBottomWidth: 0 }]}>
+                <Text style={styles.dropdownItemLabelTextCancel}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      </View>
+
+      {/* Post Media Display Window */}
+      <TouchableOpacity activeOpacity={0.95} onPress={handleImageTap} style={styles.mediaContainerAspectSquareWindow}>
+        <Image source={{ uri: post.mediaUrl }} style={styles.mediaImgFluidDisplay} />
+        {post.mediaType === 'video' && (
+          <View style={styles.videoOverlayIndicatorCircle}>
+            <PlayCircle size={28} color="#fff" />
+          </View>
+        )}
+
+        {showHeartAnimation && (
+          <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={styles.absoluteDoubleTapHeartBadgeCenter}>
+            <Heart size={80} color="#fff" fill="#fff" style={styles.doubleTapHeartDropShadow} />
+          </Animated.View>
+        )}
+      </TouchableOpacity>
+
+      {/* Post Metadata Interacting Deck Footer */}
+      <View style={styles.postContentPaddingBox}>
+        <View style={styles.actionToolbarRow}>
+          <View style={styles.actionToolbarLeftGroup}>
+            <TouchableOpacity onPress={() => likePost(post.id)} style={styles.toolbarIconInteractionBtn}>
+              <Heart size={24} color={isLiked ? '#ef4444' : '#1e293b'} fill={isLiked ? '#ef4444' : 'transparent'} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.toolbarIconInteractionBtn}>
+              <MessageCircle size={24} color="#1e293b" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.toolbarIconInteractionBtn}>
+              <Send size={24} color="#1e293b" />
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity
+            onPress={() => {
+              savePost(post.id);
+              addToast(isSaved ? 'Removed from saved' : 'Saved to collection', 'success');
+            }}
+            style={styles.toolbarIconInteractionBtn}
+          >
+            <Bookmark size={24} color="#1e293b" fill={isSaved ? '#1e293b' : 'transparent'} />
+          </TouchableOpacity>
+        </View>
+
+        <Text style={styles.likesMetricsCountText}>{post.likes.length} likes</Text>
+
+        {post.caption ? (
+          <Text style={styles.captionWrappedLabelParagraphText}>
+            <Text style={styles.inlineBoldUsernameLabelText}>{user?.username || user?.name} </Text>
+            <Text style={styles.inlineCaptionContentBodyText}>{post.caption}</Text>
+          </Text>
+        ) : null}
+
+        {/* Secondary Level Inner Comments Stack Stream */}
+        {post.comments.length > 0 && (
+          <View style={styles.commentsCondensedContainerStack}>
+            {post.comments.map((c: any, i: number) => (
+              <Text key={i} numberOfLines={2} style={styles.commentItemLineParagraphText}>
+                <Text style={styles.commentInlineBoldUserHandleText}>{c.user?.username || 'User'} </Text>
+                <Text style={styles.commentInlineContentBodyText}>{c.content}</Text>
+              </Text>
+            ))}
+          </View>
+        )}
+
+        {/* Dynamic Interactive Keyboard Comments Field Input Inline Form Row */}
+        <View style={styles.commentFormRowInlineBordered}>
+          <TextInput
+            style={styles.commentFieldTextInputBox}
+            placeholder="Add a comment..."
+            placeholderTextColor="#94a3b8"
+            value={commentText}
+            onChangeText={setCommentText}
+          />
+          <TouchableOpacity
+            disabled={!commentText.trim()}
+            onPress={handleAddComment}
+            style={styles.commentSubmissionActionBtn}
+          >
+            <Text style={[styles.commentSubmissionActionText, !commentText.trim() && styles.commentSubmissionDisabledOpacity]}>
+              Post
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <Text style={styles.timestampDisplayCapsLabelText}>
+          {new Date(post.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+        </Text>
+      </View>
+    </View>
+  );
+};
+
 interface Props {
   onNavigate: (screen: string) => void;
 }
@@ -90,176 +269,7 @@ export default function FeedScreen({ onNavigate }: Props) {
     return [...posts].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   }, [posts]);
 
-  // Interactive Modular Post Card Architecture
-  const PostCard = ({ item: post }: { item: Post }) => {
-    const { commentPost, deletePost } = useAppContext();
-    const user = globalUsers.find(u => u.id === post.userId) || currentUser;
-    const isLiked = currentUser && post.likes.includes(currentUser.id);
-    const isSaved = currentUser?.savedPostIds?.includes(post.id);
-    
-    const [commentText, setCommentText] = useState('');
-    const [isMenuOpen, setIsMenuOpen] = useState(false);
-    const [showHeartAnimation, setShowHeartAnimation] = useState(false);
-    
-    // Custom Double-Tap Multi-Platform Mechanics Engine Tracking
-    let lastTapRef = useRef<number | null>(null);
-    const handleImageTap = () => {
-      const now = Date.now();
-      const DOUBLE_TAP_DELAY = 300;
-      if (lastTapRef.current && (now - lastTapRef.current < DOUBLE_TAP_DELAY)) {
-        setShowHeartAnimation(true);
-        if (!isLiked) {
-          likePost(post.id);
-        }
-        setTimeout(() => setShowHeartAnimation(false), 1000);
-      } else {
-        lastTapRef.current = now;
-      }
-    };
 
-    const handleAddComment = () => {
-      if (commentText.trim()) {
-        commentPost(post.id, commentText);
-        setCommentText('');
-      }
-    };
-
-    const handleDelete = async () => {
-      // Swapped dangerous browser window.confirm systems to explicit platform workflows
-      try {
-        await (deletePost as any)(post.id);
-        addToast('Post deleted', 'success');
-      } catch (e) {
-        addToast('Failed to delete', 'error');
-      }
-      setIsMenuOpen(false);
-    };
-
-    return (
-      <View style={styles.postCardFrameContainer}>
-        {/* Post Header Element Structure */}
-        <View style={styles.postHeaderRow}>
-          <View style={styles.postHeaderProfileLeft}>
-            <View style={styles.postCardAvatarOuterCircle}>
-              <Image source={{ uri: user?.avatar }} style={styles.postAvatarImgFluid} />
-            </View>
-            <Text style={styles.postHeaderUsernameHeadlineText}>
-              {user?.username || user?.name || 'anonymous'}
-            </Text>
-          </View>
-          <View style={styles.relativeMenuBoxAnchor}>
-            <TouchableOpacity onPress={() => setIsMenuOpen(!isMenuOpen)} style={styles.moreActionInteractBtn}>
-              <MoreVertical size={20} color="#64748b" />
-            </TouchableOpacity>
-
-            {isMenuOpen && (
-              <View style={styles.dropdownAbsoluteMenuOverlayCard}>
-                {post.userId === currentUser?.id ? (
-                  <TouchableOpacity onPress={handleDelete} style={styles.dropdownMenuItemBtn}>
-                    <Text style={styles.dropdownItemLabelTextError}>Delete Post</Text>
-                  </TouchableOpacity>
-                ) : (
-                  <TouchableOpacity onPress={() => setIsMenuOpen(false)} style={styles.dropdownMenuItemBtn}>
-                    <Text style={styles.dropdownItemLabelTextStandard}>Report Post</Text>
-                  </TouchableOpacity>
-                )}
-                <TouchableOpacity onPress={() => setIsMenuOpen(false)} style={[styles.dropdownMenuItemBtn, { borderBottomWidth: 0 }]}>
-                  <Text style={styles.dropdownItemLabelTextCancel}>Cancel</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-        </View>
-
-        {/* Post Media Display Window */}
-        <TouchableOpacity activeOpacity={0.95} onPress={handleImageTap} style={styles.mediaContainerAspectSquareWindow}>
-          <Image source={{ uri: post.mediaUrl }} style={styles.mediaImgFluidDisplay} />
-          {post.mediaType === 'video' && (
-            <View style={styles.videoOverlayIndicatorCircle}>
-              <PlayCircle size={28} color="#fff" />
-            </View>
-          )}
-
-          {showHeartAnimation && (
-            <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={styles.absoluteDoubleTapHeartBadgeCenter}>
-              <Heart size={80} color="#fff" fill="#fff" style={styles.doubleTapHeartDropShadow} />
-            </Animated.View>
-          )}
-        </TouchableOpacity>
-
-        {/* Post Metadata Interacting Deck Footer */}
-        <View style={styles.postContentPaddingBox}>
-          <View style={styles.actionToolbarRow}>
-            <View style={styles.actionToolbarLeftGroup}>
-              <TouchableOpacity onPress={() => likePost(post.id)} style={styles.toolbarIconInteractionBtn}>
-                <Heart size={24} color={isLiked ? '#ef4444' : '#1e293b'} fill={isLiked ? '#ef4444' : 'transparent'} />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.toolbarIconInteractionBtn}>
-                <MessageCircle size={24} color="#1e293b" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.toolbarIconInteractionBtn}>
-                <Send size={24} color="#1e293b" />
-              </TouchableOpacity>
-            </View>
-            <TouchableOpacity
-              onPress={() => {
-                savePost(post.id);
-                addToast(isSaved ? 'Removed from saved' : 'Saved to collection', 'success');
-              }}
-              style={styles.toolbarIconInteractionBtn}
-            >
-              <Bookmark size={24} color="#1e293b" fill={isSaved ? '#1e293b' : 'transparent'} />
-            </TouchableOpacity>
-          </View>
-
-          <Text style={styles.likesMetricsCountText}>{post.likes.length} likes</Text>
-
-          {post.caption ? (
-            <Text style={styles.captionWrappedLabelParagraphText}>
-              <Text style={styles.inlineBoldUsernameLabelText}>{user?.username || user?.name} </Text>
-              <Text style={styles.inlineCaptionContentBodyText}>{post.caption}</Text>
-            </Text>
-          ) : null}
-
-          {/* Secondary Level Inner Comments Stack Stream */}
-          {post.comments.length > 0 && (
-            <View style={styles.commentsCondensedContainerStack}>
-              {post.comments.map((c: any, i: number) => (
-                <Text key={i} numberOfLines={2} style={styles.commentItemLineParagraphText}>
-                  <Text style={styles.commentInlineBoldUserHandleText}>{c.user?.username || 'User'} </Text>
-                  <Text style={styles.commentInlineContentBodyText}>{c.content}</Text>
-                </Text>
-              ))}
-            </View>
-          )}
-
-          {/* Dynamic Interactive Keyboard Comments Field Input Inline Form Row */}
-          <View style={styles.commentFormRowInlineBordered}>
-            <TextInput
-              style={styles.commentFieldTextInputBox}
-              placeholder="Add a comment..."
-              placeholderTextColor="#94a3b8"
-              value={commentText}
-              onChangeText={setCommentText}
-            />
-            <TouchableOpacity
-              disabled={!commentText.trim()}
-              onPress={handleAddComment}
-              style={styles.commentSubmissionActionBtn}
-            >
-              <Text style={[styles.commentSubmissionActionText, !commentText.trim() && styles.commentSubmissionDisabledOpacity]}>
-                Post
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          <Text style={styles.timestampDisplayCapsLabelText}>
-            {new Date(post.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-          </Text>
-        </View>
-      </View>
-    );
-  };
 
   const PostSkeleton = () => (
     <View style={styles.skeletonContainerCardBlock}>
@@ -297,7 +307,7 @@ export default function FeedScreen({ onNavigate }: Props) {
       <FlatList
         data={isFetchingData ? [] : feedPosts}
         keyExtractor={(item) => item.id}
-        renderItem={PostCard}
+        renderItem={({ item }) => <PostCard post={item} />}
         contentContainerStyle={[styles.mainScrollableContentTrack, { paddingBottom: insets.bottom + 120 }]}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={

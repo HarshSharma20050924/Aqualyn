@@ -12,6 +12,8 @@ const COUNTRIES = [
 ];
 
 import GlassyDatePicker from '../components/GlassyDatePicker';
+import BubbleLoader from '../components/ui/BubbleLoader';
+
 
 import { auth, googleProvider, setupRecaptcha } from '../config/firebase';
 import { signInWithPhoneNumber, signInWithPopup, ConfirmationResult, signInWithEmailLink, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithCustomToken, signInWithRedirect, getRedirectResult } from 'firebase/auth';
@@ -391,7 +393,8 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
           {step === 'intro' && (
             <motion.div 
               key="intro"
-              initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
+              initial={{ opacity: 0, y: 30, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -20, scale: 0.95 }}
+              transition={{ type: "spring", damping: 25, stiffness: 120, duration: 0.5 }}
               className="flex flex-col items-center text-center w-full"
             >
               <div className="w-28 h-28 mb-8 relative group">
@@ -415,7 +418,8 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
           {(step === 'phone' || step === 'email') && (
             <motion.div 
               key="auth"
-              initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
+              initial={{ opacity: 0, x: 30, scale: 0.95 }} animate={{ opacity: 1, x: 0, scale: 1 }} exit={{ opacity: 0, x: -30, scale: 0.95 }}
+              transition={{ type: "spring", damping: 25, stiffness: 120, duration: 0.5 }}
               className="w-full glass-card border border-white/30 rounded-[2.5rem] p-8 sm:p-10 inner-glow shadow-2xl"
             >
               <div className="mb-8">
@@ -501,7 +505,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
                   className="w-full h-14 bg-gradient-to-br from-secondary to-primary-container text-white font-headline font-bold rounded-2xl shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:pointer-events-none"
                 >
                   {isLoading ? (
-                    <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    <BubbleLoader width={24} height={24} />
                   ) : (
                     <>
                       Continue
@@ -522,7 +526,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
                   className="w-full h-14 glass-card bg-white/40 border border-white/40 text-on-surface font-headline font-bold rounded-2xl hover:bg-white/60 active:scale-[0.98] transition-all flex items-center justify-center gap-3 shadow-sm disabled:opacity-50 disabled:pointer-events-none"
                 >
                   {isGoogleLoading ? (
-                    <div className="w-6 h-6 border-2 border-secondary/30 border-t-secondary rounded-full animate-spin"></div>
+                    <BubbleLoader width={24} height={24} />
                   ) : (
                     <>
                       <GoogleIcon />
@@ -545,7 +549,8 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
           {step === 'otp' && (
             <motion.div 
               key="otp"
-              initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
+              initial={{ opacity: 0, x: 30, scale: 0.95 }} animate={{ opacity: 1, x: 0, scale: 1 }} exit={{ opacity: 0, x: -30, scale: 0.95 }}
+              transition={{ type: "spring", damping: 25, stiffness: 120, duration: 0.5 }}
               className="w-full glass-card border border-white/30 rounded-[2.5rem] p-8 sm:p-10 inner-glow shadow-2xl"
             >
               <div className="mb-8">
@@ -578,7 +583,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
                     className="w-full h-14 bg-gradient-to-br from-secondary to-primary-container text-white font-headline font-bold rounded-2xl shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:pointer-events-none"
                   >
                     {isLoading ? (
-                      <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                      <BubbleLoader width={24} height={24} />
                     ) : (
                       <>
                         Verify & Enter
@@ -602,7 +607,8 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
           {step === 'profile' && (
             <motion.div 
               key="profile"
-              initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
+              initial={{ opacity: 0, x: 30, scale: 0.95 }} animate={{ opacity: 1, x: 0, scale: 1 }} exit={{ opacity: 0, x: -30, scale: 0.95 }}
+              transition={{ type: "spring", damping: 25, stiffness: 120, duration: 0.5 }}
               className="w-full glass-card border border-white/30 rounded-[2.5rem] p-8 sm:p-10 inner-glow shadow-2xl"
             >
               <div className="mb-8">
@@ -654,7 +660,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
                   className="w-full h-14 bg-gradient-to-br from-secondary to-primary-container text-white font-headline font-bold rounded-2xl shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:pointer-events-none mt-4"
                 >
                   {isLoading ? (
-                    <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    <BubbleLoader width={24} height={24} />
                   ) : (
                     <>
                       Complete Setup
