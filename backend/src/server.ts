@@ -33,7 +33,8 @@ const allowedOrigins = [
     'http://127.0.0.1:8082',
     'http://localhost',
     'https://aqualyn.onrender.com',
-    'https://aqualyn-admin.vercel.app'
+    'https://aqualyn-admin.vercel.app',
+    'https://aqualyn.vercel.app'
 ];
 
 if (process.env.FRONTEND_URL) {
