@@ -39,7 +39,7 @@ import {
 // Custom component placeholder - replace with your actual native picker sheet/module
 import GlassyDatePicker from '../components/GlassyDatePicker';
 
-import { auth, googleProvider } from '../config/firebase';
+import { auth, googleProvider, requestNativePhoneOtp } from '../config/firebase';
 import { useAppContext } from '../context/AppContext';
 import { ENDPOINTS } from '../config/api';
 import { apiFetch } from '../utils/fetcher';
@@ -127,25 +127,42 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
       if (step === 'phone') {
           identifier = `${selectedCountry.code}${phoneNumber}`;
           setActiveIdentifier(identifier);
+          
+          // Use Firebase for phone OTP
+          if (Platform.OS === 'web') {
+            // For web, we need to use RecaptchaVerifier
+            const { RecaptchaVerifier } = require('firebase/auth');
+            const recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {});
+            const confirmationResult = await requestNativePhoneOtp(identifier, recaptchaVerifier);
+            // Store confirmationResult for later use in verification
+            (global as any).confirmationResult = confirmationResult;
+          } else {
+            // For native platforms
+            const confirmationResult = await requestNativePhoneOtp(identifier);
+            // Store confirmationResult for later use in verification
+            (global as any).confirmationResult = confirmationResult;
+          }
+          
+          alert('OTP sent successfully. Please check your phone.');
       } else if (step === 'email') {
           identifier = email;
           setActiveIdentifier(identifier);
+          
+          // For email, we'll still use our backend endpoint
+          const res = await apiFetch(ENDPOINTS.AUTH_SEND_OTP, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ identifier })
+          });
+          if (!res.ok) {
+              const errData = await res.json().catch(() => ({}));
+              throw new Error(errData.error || 'Failed to send OTP');
+          }
+          const data = await res.json();
+          setIsExistingUser(data.isExisting);
+          
+          alert(`Verification Code Received: ${data.otp}`);
       }
-
-      const res = await apiFetch(ENDPOINTS.AUTH_SEND_OTP, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ identifier })
-      });
-      if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.error || 'Failed to send OTP');
-      }
-      const data = await res.json();
-      setIsExistingUser(data.isExisting);
-
-      // On Mobile applications, handle OTP alerts via native modal modules or background services
-      alert(`Verification Code Received: ${data.otp}`);
 
       setStep('otp');
       setResendTimer(30);
@@ -182,22 +199,60 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
     const code = otp.join('');
     const identifier = activeIdentifier;
     try {
-      const res = await apiFetch(ENDPOINTS.AUTH_VERIFY_OTP, {
+      if (step === 'phone') {
+        // For phone verification, use Firebase
+        const confirmationResult = (global as any).confirmationResult;
+        if (!confirmationResult) {
+          throw new Error('No verification in progress. Please request a new code.');
+        }
+        
+        // Confirm the OTP with Firebase
+        const result = await confirmationResult.confirm(code);
+        const idToken = await result.user.getIdToken();
+        
+        // Send the token to our backend for verification
+        const res = await apiFetch(ENDPOINTS.AUTH_VERIFY_OTP, {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`
+          },
+          body: JSON.stringify({ identifier, otp: code, type: 'phone' })
+        });
+        
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || 'Failed to verify OTP');
+        }
+        
+        const data = await res.json();
+        if (data.token) {
+          await AsyncStorage.setItem('auth_token', data.token);
+        }
+        
+        await syncProfileWithBackend({});
+      } else {
+        // For email verification, use our backend
+        const res = await apiFetch(ENDPOINTS.AUTH_VERIFY_OTP, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ identifier, otp: code })
-      });
-      if (!res.ok) {
+        });
+        
+        if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
           throw new Error(errData.error || 'Failed to verify OTP');
-      }
-      const data = await res.json();
-      if (data.token) {
+        }
+        
+        const data = await res.json();
+        if (data.token) {
           await AsyncStorage.setItem('auth_token', data.token);
+        }
+        
+        await syncProfileWithBackend({});
       }
-      await syncProfileWithBackend({});
     } catch (error: any) {
-      alert("Invalid OTP or connection issue");
+      alert(error.message || "Invalid OTP or connection issue");
     } finally {
       setIsLoading(false);
     }
@@ -259,9 +314,38 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
     if (isLoading || isGoogleLoading) return;
     setIsGoogleLoading(true);
     try {
-      // Integration Stub: Hook your native Firebase Auth provider workflow here
-      // For instance: using `@react-native-google-signin/google-signin`
-      alert("Google Sign In workflow needs your native credentials configuration.");
+      // Use Firebase Google sign-in
+      if (Platform.OS === 'web') {
+        const { signInWithPopup } = require('firebase/auth');
+        const result = await signInWithPopup(auth, googleProvider);
+        const idToken = await result.user.getIdToken();
+        
+        // Send the token to our backend for verification
+        const res = await apiFetch(ENDPOINTS.AUTH_GOOGLE_SIGNIN, {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`
+          },
+          body: JSON.stringify({ idToken })
+        });
+        
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || 'Failed to sign in with Google');
+        }
+        
+        const data = await res.json();
+        if (data.token) {
+          await AsyncStorage.setItem('auth_token', data.token);
+        }
+        
+        await syncProfileWithBackend({});
+      } else {
+        // For native platforms, we would use @react-native-google-signin/google-signin
+        // Since it's not installed, we'll show an alert
+        alert("Google Sign In workflow needs your native credentials configuration.");
+      }
     } catch (error: any) {
       alert(error.message);
     } finally {

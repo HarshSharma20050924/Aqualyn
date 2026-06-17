@@ -21,6 +21,7 @@ import { Theme } from './config/theme';
 
 // Native Screen Alternatives (Map to your React Navigation configuration or stack screens)
 import LoginScreen from './screens/LoginScreen';
+import AuthScreen from './screens/AuthScreen';
 import ChatListScreen from './screens/ChatListScreen';
 import ChatDetailScreen from './screens/ChatDetailScreen';
 import ProfileScreen from './screens/ProfileScreen';
@@ -92,8 +93,8 @@ export default function App() {
   // Dynamic Navigation Screen Router
   const renderActiveScreen = () => {
     switch (currentScreen) {
-      case 'login':
-        return <LoginScreen onLogin={() => setCurrentScreen('chats')} />;
+case 'auth':
+  return <AuthScreen onLogin={() => setCurrentScreen('chats')} />;
       case 'feed':
         return <FeedScreen onNavigate={setCurrentScreen} />;
       case 'chats':
@@ -118,12 +119,13 @@ export default function App() {
   };
 
   // Determine visibility parameters for Bottom Navigation bar
-  const shouldShowBottomNav = 
-    currentScreen !== 'login' && 
-    currentScreen !== 'chat-detail' && 
-    currentScreen !== 'contact-profile' && 
-    currentScreen !== 'edit-profile' && 
-    currentScreen !== 'notifications';
+const shouldShowBottomNav = 
+  currentScreen !== 'auth' && 
+  currentScreen !== 'login' && 
+  currentScreen !== 'chat-detail' && 
+  currentScreen !== 'contact-profile' && 
+  currentScreen !== 'edit-profile' && 
+  currentScreen !== 'notifications';
 
   return (
     <SafeAreaView style={[styles.rootContainer, { backgroundColor: activeColors.background }]}>

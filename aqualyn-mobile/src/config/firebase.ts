@@ -12,14 +12,22 @@ const firebaseConfig = {
 
 let auth: any = null;
 let requestNativePhoneOtp: any = null;
+let googleProvider: any = null;
 
 if (Platform.OS === 'web') {
   // Web SDK imports (using require so it doesn't crash React Native bundler if unlinked)
   const { initializeApp } = require('firebase/app');
-  const { getAuth, RecaptchaVerifier, signInWithPhoneNumber } = require('firebase/auth');
+  const { getAuth, RecaptchaVerifier, signInWithPhoneNumber, GoogleAuthProvider, setPersistence, browserSessionPersistence } = require('firebase/auth/compat');
   
   const app = initializeApp(firebaseConfig);
   auth = getAuth(app);
+  
+  // Set persistence to LOCAL for web to avoid popup issues
+  setPersistence(auth, browserSessionPersistence)
+    .then(() => console.log('[Firebase Web] Persistence set to LOCAL'))
+    .catch(error => console.error('[Firebase Web] Persistence error:', error));
+
+  googleProvider = new GoogleAuthProvider();
 
   requestNativePhoneOtp = async (phoneNumber: string, applicationVerifier: any) => {
     try {
@@ -34,7 +42,9 @@ if (Platform.OS === 'web') {
 } else {
   // Native SDK imports
   const authModule = require('@react-native-firebase/auth').default;
+  const { GoogleAuthProvider } = require('@react-native-firebase/auth');
   auth = authModule();
+  googleProvider = new GoogleAuthProvider();
 
   requestNativePhoneOtp = async (phoneNumber: string) => {
     try {
@@ -48,4 +58,24 @@ if (Platform.OS === 'web') {
   };
 }
 
-export { auth, requestNativePhoneOtp };
+export { auth, requestNativePhoneOtp, googleProvider };
+} else {
+  // Native SDK imports
+  const authModule = require('@react-native-firebase/auth').default;
+  const { GoogleAuthProvider } = require('@react-native-firebase/auth');
+  auth = authModule();
+  googleProvider = new GoogleAuthProvider();
+
+  requestNativePhoneOtp = async (phoneNumber: string) => {
+    try {
+      console.log('[Firebase Native] Requesting OTP for:', phoneNumber);
+      const confirmation = await auth.signInWithPhoneNumber(phoneNumber);
+      return confirmation; // Contains .confirm(code) method
+    } catch (error) {
+      console.error('[Firebase Native] Error:', error);
+      throw error;
+    }
+  };
+}
+
+export { auth, requestNativePhoneOtp, googleProvider };
