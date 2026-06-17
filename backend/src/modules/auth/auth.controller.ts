@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
 import { catchAsync } from '../../core/utils/catchAsync';
 import { AppError } from '../../core/exceptions/AppError';
+import admin from '../../config/firebaseAdmin';
 
 const JWT_SECRET = process.env.JWT_SECRET || '07f4aa247bb2789d402af105e7fc416e57aebb266facfb2c30ad2843a86e4e61';
 
@@ -79,6 +80,81 @@ export const verifyOtp = catchAsync(async (req: Request, res: Response, next: Ne
     });
 
     res.status(200).json({ token, isExisting: !!user });
+});
+
+export const googleSignin = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const { idToken } = req.body;
+    if (!idToken) return next(new AppError('ID token is required', 400));
+
+    try {
+        // Verify the ID token with Firebase
+        const decodedToken = await admin.auth().verifyIdToken(idToken);
+        const { uid, email, phone_number, name, picture } = decodedToken;
+
+        // Check if user exists in our database
+        let user = await (prisma as any).user.findFirst({
+            where: { firebaseUid: uid }
+        });
+
+        if (!user) {
+            // User doesn't exist, create a new account
+            const generatedUsername = email?.split('@')[0].substring(0, 15) + '_' + Math.floor(1000 + Math.random() * 9000);
+            
+            user = await (prisma as any).user.create({
+                data: {
+                    username: generatedUsername,
+                    email: email || null,
+                    phone: phone_number || null,
+                    displayName: name || email?.split('@')[0],
+                    avatar: picture || `https://api.dicebear.com/7.x/initials/svg?seed=${name || email?.split('@')[0]}`,
+                    largeAvatar: picture || `https://api.dicebear.com/7.x/initials/svg?seed=${name || email?.split('@')[0]}`,
+                    dob: new Date(),
+                    lastLogin: new Date(),
+                    firebaseUid: uid,
+                    settings: {}
+                },
+                include: { followers: true, following: true }
+            });
+        } else {
+            // Update last login
+            user = await (prisma as any).user.update({
+                where: { id: user.id },
+                data: { lastLogin: new Date() },
+                include: { followers: true, following: true }
+            });
+        }
+
+        // Generate JWT token for our system
+        const token = jwt.sign(
+            { id: user.id, uid: user.firebaseUid, email: user.email, phone_number: user.phone },
+            JWT_SECRET,
+            { expiresIn: '30d' }
+        );
+
+        // Create session
+        await (prisma as any).session.upsert({
+            where: { token },
+            update: { expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) },
+            create: {
+                userId: user.id,
+                token,
+                device: req.headers['user-agent'] || 'unknown',
+                expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+            }
+        });
+
+        res.cookie('token', token, {
+            httpOnly: true,
+            secure: true,
+            sameSite: 'none',
+            maxAge: 30 * 24 * 60 * 60 * 1000
+        });
+
+        res.status(200).json({ token, user });
+    } catch (error) {
+        console.error('Google sign-in error:', error);
+        return next(new AppError('Failed to verify Google ID token', 400));
+    }
 });
 
 export const syncToken = catchAsync(async (req: Request, res: Response, next: NextFunction) => {

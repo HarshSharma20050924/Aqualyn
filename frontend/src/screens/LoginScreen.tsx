@@ -16,18 +16,18 @@ import BubbleLoader from '../components/ui/BubbleLoader';
 
 
 import { auth, googleProvider, setupRecaptcha } from '../config/firebase';
-import { signInWithPhoneNumber, signInWithPopup, ConfirmationResult, signInWithEmailLink, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithCustomToken, signInWithRedirect, getRedirectResult } from 'firebase/auth';
+import { signInWithPhoneNumber, signInWithPopup, signInWithRedirect, ConfirmationResult, signInWithEmailLink, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithCustomToken, getRedirectResult } from 'firebase/auth';
 import { User } from '../types';
 import { useAppContext } from '../context/AppContext';
 import { ENDPOINTS } from '../config/api';
 
 export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
-  const { setCurrentUser, currentUser } = useAppContext() || { setCurrentUser: () => {}, currentUser: null };
+  const { setCurrentUser, currentUser } = useAppContext() || { setCurrentUser: () => { }, currentUser: null };
   const [step, setStep] = useState<'intro' | 'phone' | 'email' | 'otp' | 'profile'>('intro');
   const [isExistingUser, setIsExistingUser] = useState<boolean | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
-  
+
   // Auth States
   const [phoneNumber, setPhoneNumber] = useState('');
   const [email, setEmail] = useState('');
@@ -36,7 +36,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
   const [isCountryDropdownOpen, setIsCountryDropdownOpen] = useState(false);
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
-  
+
   // OTP Timer
   const [resendTimer, setResendTimer] = useState(30);
   const [canResend, setCanResend] = useState(false);
@@ -71,10 +71,10 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
 
   useEffect(() => {
     if (currentUser && !currentUser.id) {
-       setStep('profile');
-       if (currentUser.displayName) setDisplayName(currentUser.displayName);
-       if (currentUser.email) setEmail(currentUser.email);
-       if (currentUser.phone) setPhoneNumber(currentUser.phone.replace(/\D/g, ''));
+      setStep('profile');
+      if (currentUser.displayName) setDisplayName(currentUser.displayName);
+      if (currentUser.email) setEmail(currentUser.email);
+      if (currentUser.phone) setPhoneNumber(currentUser.phone.replace(/\D/g, ''));
     }
   }, [currentUser]);
 
@@ -91,12 +91,12 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
         reg.active?.postMessage({ type: 'SHOW_NOTIFICATION', title: t, body: b, icon: '/pwa-192.png' });
         return true;
       }
-    } catch {}
+    } catch { }
     if (fallbackAlert) {
       try {
         new Notification(t, { body: b, icon: '/pwa-192.png' });
         return true;
-      } catch {}
+      } catch { }
       alert(`🔔 ${t} 🔔\n\n${b}`);
       return true;
     }
@@ -108,43 +108,24 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
     try {
       let identifier = activeIdentifier;
       if (step === 'phone') {
-          identifier = `${selectedCountry.code}${phoneNumber}`;
-          setActiveIdentifier(identifier);
+        identifier = `${selectedCountry.code}${phoneNumber}`;
+        setActiveIdentifier(identifier);
+
+        // ── Firebase Phone Auth ──
+        const recaptchaVerifier = setupRecaptcha('recaptcha-container');
+        const result: ConfirmationResult = await signInWithPhoneNumber(auth, identifier, recaptchaVerifier);
+        setConfirmationResult(result);
       } else if (step === 'email') {
-          identifier = email;
-          setActiveIdentifier(identifier);
-      }
+        identifier = email;
+        setActiveIdentifier(identifier);
 
-      const res = await fetch(ENDPOINTS.AUTH_SEND_OTP, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ identifier })
-      });
-      if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.error || 'Failed to send OTP');
-      }
-      const data = await res.json();
-      setIsExistingUser(data.isExisting);
-
-      const title = 'Aqualyn Verification';
-      const body = `Your OTP code is: ${data.otp}`;
-
-      // On mobile / PWA we ALWAYS use Notification API or ServiceWorker
-      // Never fall back to alert() during send — that breaks the flow
-      if ("Notification" in window) {
-        if (Notification.permission === "granted") {
-          await showNotif(title, body, true);
-        } else if (Notification.permission !== "denied") {
-          const permission = await Notification.requestPermission();
-          if (permission === "granted") {
-            await showNotif(title, body, true);
-          } else {
-            // User denied permission → still show OTP screen, skip alert
-            console.warn('[OTP] Notification permission denied');
-          }
-        }
-        // If permanently denied → silently skip the alert fallback on all platforms
+        // ── Firebase Email Link Auth ──
+        const actionCodeSettings = {
+          url: `${window.location.origin}/auth/callback?email=${encodeURIComponent(identifier)}`,
+          handleCodeInApp: true,
+        };
+        await sendSignInLinkToEmail(auth, identifier, actionCodeSettings);
+        window.localStorage.setItem('emailForSignIn', identifier);
       }
 
       setStep('otp');
@@ -152,7 +133,16 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
       setCanResend(false);
       setOtp(['', '', '', '', '', '']);
     } catch (error: any) {
-      alert(error.message);
+      console.error('[Auth Send Error]', error);
+      if (error.code === 'auth/invalid-phone-number') {
+        alert('Invalid phone number. Please check the format.');
+      } else if (error.code === 'auth/too-many-requests') {
+        alert('Too many attempts. Please try again later.');
+      } else if (error.code === 'auth/captcha-check-failed') {
+        alert('reCAPTCHA verification failed. Please try again.');
+      } else {
+        alert(error.message || 'Failed to send verification code');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -167,7 +157,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
     const newOtp = [...otp];
     newOtp[index] = value;
     setOtp(newOtp);
-    
+
     if (value && index < 5) {
       const nextInput = document.getElementById(`otp-${index + 1}`);
       nextInput?.focus();
@@ -179,23 +169,44 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
     const code = otp.join('');
     const identifier = activeIdentifier;
     try {
-      const res = await fetch(ENDPOINTS.AUTH_VERIFY_OTP, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ identifier, otp: code })
-      });
-      if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.error || 'Failed to verify OTP');
+      if (step === 'phone' && confirmationResult) {
+        // ── Firebase Phone OTP verification ──
+        const result = await confirmationResult.confirm(code);
+        const user = result.user;
+        const idToken = await user.getIdToken();
+
+        // Sync with backend using Firebase token
+        await syncProfileWithBackend({ firebaseIdToken: idToken });
+      } else if (step === 'email') {
+        // ── Firebase Email Link verification ──
+        const storedEmail = window.localStorage.getItem('emailForSignIn');
+        if (isSignInWithEmailLink(auth, window.location.href)) {
+          const result = await signInWithEmailLink(auth, storedEmail || identifier, window.location.href);
+          const user = result.user;
+          const idToken = await user.getIdToken();
+          window.localStorage.removeItem('emailForSignIn');
+          await syncProfileWithBackend({ firebaseIdToken: idToken });
+        } else {
+          // On web, email link opens in same tab — user clicks link directly.
+          // If they're back on the OTP screen, they may need to check their email.
+          alert('Please check your email and click the verification link.');
+          setIsLoading(false);
+          return;
+        }
+      } else {
+        throw new Error('No verification method available');
       }
-      const data = await res.json();
-      
-      // Perform initial sync to check if user exists
-      await syncProfileWithBackend({});
     } catch (error: any) {
-      console.error("[OTP Error]", error);
-      alert("Invalid OTP or connection issue");
+      console.error('[OTP Error]', error);
+      if (error.code === 'auth/invalid-verification-code') {
+        alert('Invalid code. Please try again.');
+      } else if (error.code === 'auth/code-expired') {
+        alert('Code expired. Please request a new one.');
+      } else if (error.code === 'auth/invalid-verification-id') {
+        alert('Session expired. Please request a new code.');
+      } else {
+        alert(error.message || 'Invalid code or connection issue');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -206,12 +217,17 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
     try {
       const payload = { ...data };
       if (!payload.phone && phoneNumber) {
-          payload.phone = `${selectedCountry.code}${phoneNumber}`;
+        payload.phone = `${selectedCountry.code}${phoneNumber}`;
+      }
+
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (data.firebaseIdToken) {
+        headers['Authorization'] = `Bearer ${data.firebaseIdToken}`;
       }
 
       const res = await fetch(ENDPOINTS.AUTH_SYNC, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         credentials: 'include',
         body: JSON.stringify(payload)
       });
@@ -219,29 +235,29 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
       const resData = await res.json().catch(() => ({}));
 
       if (res.status === 401) {
-          setStep('intro');
-          return;
+        setStep('intro');
+        return;
       }
 
       if (!res.ok) {
         throw new Error(resData.error || resData.details || 'Sync failed');
       }
-      
+
       // If backend says profile is incomplete
       if (resData.status === 'needs_profile') {
-          setStep('profile');
-          if (resData.user?.displayName) setDisplayName(resData.user.displayName);
-          return;
+        setStep('profile');
+        if (resData.user?.displayName) setDisplayName(resData.user.displayName);
+        return;
       }
 
       if (resData.user) {
-          setCurrentUser(resData.user);
-          // Only proceed to home if setup is complete
-          if (resData.user.dob && resData.user.displayName) {
-              onLogin();
-          } else {
-              setStep('profile');
-          }
+        setCurrentUser(resData.user);
+        // Only proceed to home if setup is complete
+        if (resData.user.dob && resData.user.displayName) {
+          onLogin();
+        } else {
+          setStep('profile');
+        }
       }
     } catch (error: any) {
       console.error('[Sync Error]', error);
@@ -300,7 +316,19 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
         }
       }
     } catch (error: any) {
-      alert(error.message);
+      // Gracefully handle popup-closed-by-user (not a real error)
+      if (error.code === 'auth/popup-closed-by-user' ||
+        error.code === 'auth/popup-blocked' ||
+        error.code === 'auth/cancelled-popup-request') {
+        console.log('[Google Auth] Popup closed or blocked by user');
+        return;
+      }
+      if (error.code === 'auth/account-exists-with-different-credential') {
+        alert('An account with this email already exists using a different sign-in method.');
+        return;
+      }
+      console.error('[Google Auth Error]', error);
+      alert(error.message || 'Google sign-in failed');
     } finally {
       if (!isMobile) setIsGoogleLoading(false);
     }
@@ -373,15 +401,15 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
 
   const GoogleIcon = () => (
     <svg className="w-5 h-5" viewBox="0 0 24 24">
-      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
     </svg>
   );
 
   return (
-    <motion.div 
+    <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="min-h-screen flex items-center justify-center liquid-bg px-4 py-8 relative overflow-hidden"
     >
@@ -391,7 +419,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
       <div className="relative z-10 w-full max-w-[420px] flex flex-col items-center">
         <AnimatePresence mode="wait">
           {step === 'intro' && (
-            <motion.div 
+            <motion.div
               key="intro"
               initial={{ opacity: 0, y: 30, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -20, scale: 0.95 }}
               transition={{ type: "spring", damping: 25, stiffness: 120, duration: 0.5 }}
@@ -416,7 +444,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
           )}
 
           {(step === 'phone' || step === 'email') && (
-            <motion.div 
+            <motion.div
               key="auth"
               initial={{ opacity: 0, x: 30, scale: 0.95 }} animate={{ opacity: 1, x: 0, scale: 1 }} exit={{ opacity: 0, x: -30, scale: 0.95 }}
               transition={{ type: "spring", damping: 25, stiffness: 120, duration: 0.5 }}
@@ -427,9 +455,9 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
                   {isExistingUser === true ? 'Welcome Back' : 'Join Aqualyn'}
                 </h2>
                 <p className="text-on-surface-variant text-sm text-balance">
-                   {isExistingUser === true 
-                     ? 'Sign in to continue your conversations.' 
-                     : 'Create an account to experience India\'s best messaging app.'}
+                  {isExistingUser === true
+                    ? 'Sign in to continue your conversations.'
+                    : 'Create an account to experience India\'s best messaging app.'}
                 </p>
               </div>
 
@@ -438,7 +466,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
                   <div className="space-y-2">
                     <label className="font-label text-sm font-semibold text-on-surface-variant ml-1">Phone Number</label>
                     <div className="flex gap-2 relative w-full" ref={dropdownRef}>
-                      <button 
+                      <button
                         onClick={() => setIsCountryDropdownOpen(!isCountryDropdownOpen)}
                         className="h-14 px-3 sm:px-4 bg-white/40 border-outline-variant/20 border rounded-2xl flex items-center gap-1 sm:gap-2 hover:bg-white/60 transition-colors shadow-inner shrink-0"
                       >
@@ -446,10 +474,10 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
                         <span className="font-semibold text-on-surface text-sm sm:text-base">{selectedCountry.code}</span>
                         <ChevronDown className="w-4 h-4 text-on-surface-variant" />
                       </button>
-                      
+
                       <AnimatePresence>
                         {isCountryDropdownOpen && (
-                          <motion.div 
+                          <motion.div
                             initial={{ opacity: 0, y: 10, scale: 0.95 }}
                             animate={{ opacity: 1, y: 0, scale: 1 }}
                             exit={{ opacity: 0, y: 10, scale: 0.95 }}
@@ -470,11 +498,11 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
                         )}
                       </AnimatePresence>
 
-                      <input 
-                        type="tel" 
+                      <input
+                        type="tel"
                         value={phoneNumber}
                         onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ''))}
-                        placeholder="000 000 0000" 
+                        placeholder="000 000 0000"
                         className="flex-1 min-w-0 h-14 bg-white/40 border-outline-variant/20 border rounded-2xl px-3 sm:px-4 focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all outline-none placeholder:text-on-surface-variant/50 font-body text-on-surface font-semibold tracking-wide shadow-inner text-sm sm:text-base"
                         autoFocus
                       />
@@ -484,11 +512,11 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
                   <div className="space-y-2">
                     <label className="font-label text-sm font-semibold text-on-surface-variant ml-1">Email Address</label>
                     <div className="relative group">
-                      <input 
-                        type="email" 
+                      <input
+                        type="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        placeholder="name@example.com" 
+                        placeholder="name@example.com"
                         className="w-full h-14 bg-white/40 border-outline-variant/20 border rounded-2xl pl-12 pr-4 focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all outline-none placeholder:text-on-surface-variant/50 font-body text-on-surface shadow-inner"
                         autoFocus
                       />
@@ -499,8 +527,8 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
                   </div>
                 )}
 
-                <button 
-                  onClick={handleSendOtp} 
+                <button
+                  onClick={handleSendOtp}
                   disabled={step === 'phone' ? (!phoneNumber || isLoading) : (!email || isLoading)}
                   className="w-full h-14 bg-gradient-to-br from-secondary to-primary-container text-white font-headline font-bold rounded-2xl shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:pointer-events-none"
                 >
@@ -520,7 +548,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
                   <div className="flex-grow border-t border-white/20"></div>
                 </div>
 
-                <button 
+                <button
                   onClick={handleGoogleSignIn}
                   disabled={isLoading || isGoogleLoading}
                   className="w-full h-14 glass-card bg-white/40 border border-white/40 text-on-surface font-headline font-bold rounded-2xl hover:bg-white/60 active:scale-[0.98] transition-all flex items-center justify-center gap-3 shadow-sm disabled:opacity-50 disabled:pointer-events-none"
@@ -535,7 +563,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
                   )}
                 </button>
 
-                <button 
+                <button
                   onClick={() => setStep(step === 'phone' ? 'email' : 'phone')}
                   className="w-full py-2 text-sm font-bold text-secondary hover:text-primary transition-colors text-center"
                 >
@@ -547,38 +575,61 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
           )}
 
           {step === 'otp' && (
-            <motion.div 
+            <motion.div
               key="otp"
-              initial={{ opacity: 0, x: 30, scale: 0.95 }} animate={{ opacity: 1, x: 0, scale: 1 }} exit={{ opacity: 0, x: -30, scale: 0.95 }}
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95, y: -20 }}
               transition={{ type: "spring", damping: 25, stiffness: 120, duration: 0.5 }}
               className="w-full glass-card border border-white/30 rounded-[2.5rem] p-8 sm:p-10 inner-glow shadow-2xl"
             >
               <div className="mb-8">
-                <h2 className="text-2xl font-bold font-headline text-on-surface mb-2">Verify it's you</h2>
-                <p className="text-on-surface-variant text-sm">
-                  We sent a 6-digit code to <span className="font-semibold text-on-surface">{email || `${selectedCountry.code} ${phoneNumber}`}</span>
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: "spring", delay: 0.2, stiffness: 200 }}
+                  className="w-16 h-16 mx-auto mb-4 bg-gradient-to-br from-secondary/20 to-primary-container/20 rounded-full flex items-center justify-center"
+                >
+                  <Shield className="w-8 h-8 text-secondary" />
+                </motion.div>
+                <h2 className="text-2xl font-bold font-headline text-on-surface mb-2 text-center">Verify it's you</h2>
+                <p className="text-on-surface-variant text-sm text-center">
+                  {step === 'phone'
+                    ? `We sent a 6-digit code via SMS to`
+                    : `We sent a verification link to`}
+                  {' '}
+                  <span className="font-semibold text-on-surface">{email || `${selectedCountry.code} ${phoneNumber}`}</span>
                 </p>
               </div>
 
               <div className="space-y-8">
-                <div className="flex justify-between gap-2 sm:gap-3">
+                <motion.div
+                  className="flex justify-between gap-2 sm:gap-3"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.3, duration: 0.4 }}
+                >
                   {otp.map((digit, i) => (
-                    <input 
-                      key={i} 
+                    <motion.input
+                      key={i}
                       id={`otp-${i}`}
-                      type="text" 
-                      maxLength={1} 
+                      type="text"
+                      maxLength={1}
                       value={digit}
                       onChange={(e) => handleOtpChange(i, e.target.value.replace(/\D/g, ''))}
-                      className="w-10 h-12 sm:w-12 sm:h-14 glass-card bg-white/50 border border-white/40 rounded-xl sm:rounded-2xl text-center text-xl sm:text-2xl font-headline font-bold text-primary focus:ring-2 focus:ring-secondary/50 focus:border-secondary transition-all outline-none shadow-inner" 
+                      className="w-10 h-12 sm:w-12 sm:h-14 glass-card bg-white/50 border border-white/40 rounded-xl sm:rounded-2xl text-center text-xl sm:text-2xl font-headline font-bold text-primary focus:ring-2 focus:ring-secondary/50 focus:border-secondary transition-all outline-none shadow-inner"
                       autoFocus={i === 0}
+                      initial={{ scale: 0.8, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ delay: 0.3 + i * 0.05, type: "spring", stiffness: 300 }}
+                      whileFocus={{ scale: 1.1, boxShadow: "0 0 20px rgba(0, 200, 255, 0.3)" }}
                     />
                   ))}
-                </div>
+                </motion.div>
 
                 <div className="flex flex-col gap-4">
-                  <button 
-                    onClick={handleVerifyOtp} 
+                  <button
+                    onClick={handleVerifyOtp}
                     disabled={otp.some(d => !d) || isLoading}
                     className="w-full h-14 bg-gradient-to-br from-secondary to-primary-container text-white font-headline font-bold rounded-2xl shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:pointer-events-none"
                   >
@@ -591,8 +642,8 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
                       </>
                     )}
                   </button>
-                  
-                  <button 
+
+                  <button
                     onClick={handleResendOtp}
                     disabled={!canResend}
                     className={`text-sm font-bold transition-colors text-center ${canResend ? 'text-secondary hover:text-primary' : 'text-on-surface-variant/50 cursor-not-allowed'}`}
@@ -605,7 +656,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
           )}
 
           {step === 'profile' && (
-            <motion.div 
+            <motion.div
               key="profile"
               initial={{ opacity: 0, x: 30, scale: 0.95 }} animate={{ opacity: 1, x: 0, scale: 1 }} exit={{ opacity: 0, x: -30, scale: 0.95 }}
               transition={{ type: "spring", damping: 25, stiffness: 120, duration: 0.5 }}
@@ -619,11 +670,11 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
               <div className="space-y-6">
                 <div className="space-y-2">
                   <label className="font-label text-sm font-semibold text-on-surface-variant ml-1">Display Name</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     value={displayName}
                     onChange={(e) => setDisplayName(e.target.value)}
-                    placeholder="e.g. Alex Rivero" 
+                    placeholder="e.g. Alex Rivero"
                     className="w-full h-14 bg-white/40 border-outline-variant/20 border rounded-2xl px-4 focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all outline-none placeholder:text-on-surface-variant/50 font-body text-on-surface shadow-inner"
                     autoFocus
                   />
@@ -642,11 +693,11 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
                       <p className="text-xs text-on-surface-variant">Let friends know it's your special day</p>
                     </div>
                   </div>
-                  <button 
+                  <button
                     onClick={() => setShowBirthday(!showBirthday)}
                     className={`w-12 h-6 rounded-full p-1 transition-colors ${showBirthday ? 'bg-secondary' : 'bg-surface-container-highest'}`}
                   >
-                    <motion.div 
+                    <motion.div
                       className="w-4 h-4 rounded-full bg-white shadow-sm"
                       animate={{ x: showBirthday ? 24 : 0 }}
                       transition={{ type: "spring", stiffness: 500, damping: 30 }}
@@ -654,8 +705,8 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
                   </button>
                 </div>
 
-                <button 
-                  onClick={handleCompleteSetup} 
+                <button
+                  onClick={handleCompleteSetup}
                   disabled={!displayName.trim() || !dob || isLoading}
                   className="w-full h-14 bg-gradient-to-br from-secondary to-primary-container text-white font-headline font-bold rounded-2xl shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:pointer-events-none mt-4"
                 >
@@ -685,7 +736,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
           </footer>
         )}
       </div>
-      
+
       <div className="fixed bottom-0 left-0 p-6 sm:p-8 flex items-center gap-3">
         <div className="w-3 h-3 rounded-full bg-secondary-fixed shadow-[0_0_10px_#0bfbff] animate-pulse"></div>
         <span className="text-[10px] font-bold tracking-[0.2em] text-on-surface-variant uppercase">Network Secure</span>

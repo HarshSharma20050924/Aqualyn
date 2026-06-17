@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { verifyToken } from '../../middleware/auth';
-import { login, register, getProfile, sendOtp, verifyOtp, syncToken } from './auth.controller';
+import { login, register, getProfile, sendOtp, verifyOtp, syncToken, googleSignin } from './auth.controller';
 
 const router = Router();
 
@@ -11,7 +11,7 @@ router.post('/sync-token', verifyToken, syncToken);
 router.get('/profile', verifyToken, getProfile);
 router.post('/send-otp', sendOtp);
 router.post('/verify-otp', verifyOtp);
-
+router.post('/google-signin', googleSignin);
 
 router.post('/logout', verifyToken, async (req: any, res: any) => {
     try {
