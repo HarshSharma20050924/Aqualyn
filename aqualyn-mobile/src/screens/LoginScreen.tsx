@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet, View, Text, TouchableOpacity, TextInput,
-  ScrollView, KeyboardAvoidingView, Platform, Dimensions
+  ScrollView, KeyboardAvoidingView, Platform, Dimensions, Image
 } from 'react-native';
 import Animated, {
   FadeIn, FadeOut,
@@ -76,9 +76,27 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
 
   const handleOtpChange = (i: number, val: string) => {
     const clean = val.replace(/\D/g, '');
-    if (clean.length > 1) return;
+    if (!clean) {
+      const next = [...otp]; next[i] = ''; setOtp(next);
+      return;
+    }
+    
+    // Handle pasting a full code
+    if (clean.length > 1) {
+      const chars = clean.split('').slice(0, 6);
+      const next = [...otp];
+      for (let j = 0; j < chars.length; j++) {
+        if (i + j < 6) next[i + j] = chars[j];
+      }
+      setOtp(next);
+      const nextFocus = Math.min(i + chars.length, 5);
+      otpRefs.current[nextFocus]?.focus();
+      return;
+    }
+
+    // Handle single digit input
     const next = [...otp]; next[i] = clean; setOtp(next);
-    if (clean && i < 5) otpRefs.current[i + 1]?.focus();
+    if (i < 5) otpRefs.current[i + 1]?.focus();
   };
 
   // ── Verify OTP via Supabase then sync with backend ──
@@ -170,12 +188,14 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
           {/* ── INTRO ── */}
           {step === 'intro' && (
             <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={s.center}>
-              <View style={s.logoBg}><View style={s.logoCard}><Droplet size={54} color="#0057bd" fill="#0057bd" /></View></View>
-              <Text style={s.brand}>Aqualyn</Text>
-              <Text style={s.subtitle}>India's Best Messaging App</Text>
-              <Text style={s.body}>Experience crystal clear, fluid communication designed for the modern world.</Text>
-              <TouchableOpacity style={s.btn} onPress={() => setStep('email')}>
-                <Text style={s.btnTxt}>Get Started</Text><ArrowRight size={20} color="#fff" />
+              <View style={{ marginBottom: 40, alignItems: 'center', justifyContent: 'center' }}>
+                <Image source={require('../../assets/images/aqualyn.png')} style={{ width: 140, height: 140, resizeMode: 'contain', borderRadius: 32 }} />
+              </View>
+              <Text style={[s.brand, { fontSize: 44, marginBottom: 8 }]}>Aqualyn</Text>
+              <Text style={[s.subtitle, { fontSize: 24, marginBottom: 12 }]}>India's Best Messaging App</Text>
+              <Text style={[s.body, { fontSize: 16, marginBottom: 40, paddingHorizontal: 10 }]}>Experience crystal clear, fluid communication designed for the modern world.</Text>
+              <TouchableOpacity style={[s.btn, { height: 60, borderRadius: 9999, width: '90%' }]} onPress={() => setStep('email')}>
+                <Text style={[s.btnTxt, { fontSize: 18 }]}>Get Started</Text><ArrowRight size={24} color="#fff" />
               </TouchableOpacity>
             </Animated.View>
           )}
@@ -216,8 +236,9 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
 
               <View style={s.otpRow}>
                 {otp.map((d, i) => (
-                  <TextInput key={i} ref={el => { otpRefs.current[i] = el; }} keyboardType="number-pad"
-                    maxLength={1} value={d} onChangeText={v => handleOtpChange(i, v)}
+                  <TextInput key={i} ref={el => { otpRefs.current[i] = el; }} 
+                    keyboardType="number-pad" textContentType="oneTimeCode"
+                    maxLength={6} value={d} onChangeText={v => handleOtpChange(i, v)}
                     onKeyPress={({ nativeEvent }) => { if (nativeEvent.key === 'Backspace' && !d && i > 0) otpRefs.current[i - 1]?.focus(); }}
                     style={s.otpBox} />
                 ))}

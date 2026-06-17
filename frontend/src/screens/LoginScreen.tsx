@@ -79,11 +79,28 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
   };
 
   const handleOtpChange = (index: number, value: string) => {
-    if (value.length > 1) return;
+    const clean = value.replace(/\D/g, '');
+    if (!clean) {
+      const newOtp = [...otp]; newOtp[index] = ''; setOtp(newOtp);
+      return;
+    }
+
+    if (clean.length > 1) {
+      const chars = clean.split('').slice(0, 6);
+      const newOtp = [...otp];
+      for (let j = 0; j < chars.length; j++) {
+        if (index + j < 6) newOtp[index + j] = chars[j];
+      }
+      setOtp(newOtp);
+      const nextFocus = Math.min(index + chars.length, 5);
+      document.getElementById(`otp-${nextFocus}`)?.focus();
+      return;
+    }
+
     const newOtp = [...otp];
-    newOtp[index] = value;
+    newOtp[index] = clean;
     setOtp(newOtp);
-    if (value && index < 5) document.getElementById(`otp-${index + 1}`)?.focus();
+    if (index < 5) document.getElementById(`otp-${index + 1}`)?.focus();
   };
 
   // ── Verify OTP via Supabase then sync with backend ──
@@ -268,21 +285,18 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
           {/* ── INTRO ── */}
           {step === 'intro' && (
             <motion.div key="intro" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
-              className="flex flex-col items-center text-center w-full">
-              <div className="w-28 h-28 mb-8 relative group">
-                <div className="absolute inset-0 bg-gradient-to-br from-secondary-fixed to-primary-container rounded-[2.5rem] rotate-12 opacity-40 group-hover:rotate-45 transition-transform duration-700" />
-                <div className="relative w-full h-full bg-surface-container-lowest rounded-[2.5rem] flex items-center justify-center glass-card inner-glow aqua-glow shadow-2xl">
-                  <Droplet className="text-secondary w-14 h-14 fill-secondary" />
-                </div>
+              className="flex flex-col items-center text-center w-full max-w-md mx-auto px-4">
+              <div className="mb-10 relative group">
+                <img src="/aqualyn.png" alt="Aqualyn" className="w-32 h-32 sm:w-40 sm:h-40 object-contain drop-shadow-2xl group-hover:scale-105 transition-transform duration-500 rounded-3xl" />
               </div>
-              <h1 className="font-headline text-5xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-br from-primary to-secondary mb-4">Aqualyn</h1>
-              <h2 className="font-headline text-2xl font-bold text-on-surface mb-3">India's Best Messaging App</h2>
-              <p className="font-body text-on-surface-variant text-base font-medium tracking-wide mb-12 max-w-xs leading-relaxed">
+              <h1 className="font-headline text-5xl sm:text-6xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-br from-primary to-secondary mb-4 drop-shadow-sm">Aqualyn</h1>
+              <h2 className="font-headline text-2xl sm:text-3xl font-bold text-on-surface mb-4">India's Best Messaging App</h2>
+              <p className="font-body text-on-surface-variant text-lg font-medium tracking-wide mb-12 max-w-sm mx-auto leading-relaxed">
                 Experience crystal clear, fluid communication designed for the modern world.
               </p>
               <button onClick={() => setStep('email')}
-                className="w-full h-14 bg-gradient-to-br from-secondary to-primary-container text-white font-headline font-bold rounded-full shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 text-lg">
-                Get Started <ArrowRight className="w-5 h-5" />
+                className="w-full h-16 bg-gradient-to-br from-secondary to-primary text-white font-headline font-bold rounded-full shadow-xl shadow-primary/20 hover:scale-[1.02] hover:shadow-primary/30 active:scale-[0.98] transition-all flex items-center justify-center gap-3 text-xl">
+                Get Started <ArrowRight className="w-6 h-6" />
               </button>
             </motion.div>
           )}
@@ -351,8 +365,8 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
               <div className="space-y-8">
                 <div className="flex justify-between gap-2 sm:gap-3">
                   {otp.map((digit, i) => (
-                    <motion.input key={i} id={`otp-${i}`} type="text" maxLength={1} value={digit}
-                      onChange={e => handleOtpChange(i, e.target.value.replace(/\D/g, ''))}
+                    <motion.input key={i} id={`otp-${i}`} type="text" maxLength={6} value={digit}
+                      onChange={e => handleOtpChange(i, e.target.value)}
                       onKeyDown={e => { if (e.key === 'Backspace' && !digit && i > 0) document.getElementById(`otp-${i - 1}`)?.focus(); }}
                       className="w-10 h-12 sm:w-12 sm:h-14 glass-card bg-white/50 border border-white/40 rounded-xl sm:rounded-2xl text-center text-xl sm:text-2xl font-headline font-bold text-primary focus:ring-2 focus:ring-secondary/50 focus:border-secondary transition-all outline-none shadow-inner"
                       autoFocus={i === 0}
