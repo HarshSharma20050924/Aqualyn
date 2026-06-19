@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Droplet, ArrowRight, Mail, Eye, EyeOff, Check, Shield, Globe, Headset, Phone } from 'lucide-react';
+import { ArrowRight, Mail, Eye, EyeOff, Check, Shield, Globe, Headset, QrCode, RefreshCw, Smartphone } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 
 import GlassyDatePicker from '../components/GlassyDatePicker';
 import BubbleLoader from '../components/ui/BubbleLoader';
@@ -12,7 +13,7 @@ import { ENDPOINTS } from '../config/api';
 
 export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
   const { setCurrentUser, currentUser } = useAppContext() || { setCurrentUser: () => {}, currentUser: null };
-  const [step, setStep] = useState<'intro' | 'email' | 'otp' | 'profile'>('intro');
+  const [step, setStep] = useState<'intro' | 'email' | 'otp' | 'profile' | 'qr'>('intro');
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [email, setEmail] = useState('');
@@ -23,6 +24,10 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
   const [dob, setDob] = useState('');
   const [showBirthday, setShowBirthday] = useState(true);
   const [isExistingUser, setIsExistingUser] = useState<boolean | null>(null);
+  const [qrToken, setQrToken] = useState<string | null>(null);
+  const [qrExpired, setQrExpired] = useState(false);
+  const [qrScanned, setQrScanned] = useState(false);
+  const qrPollRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -39,6 +44,52 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
       if (currentUser.email) setEmail(currentUser.email);
     }
   }, [currentUser]);
+
+  // ── QR Code flow ──
+  const generateQr = useCallback(async () => {
+    setQrExpired(false);
+    setQrScanned(false);
+    setQrToken(null);
+    try {
+      const res = await fetch(ENDPOINTS.QR_GENERATE, { method: 'POST', credentials: 'include' });
+      const data = await res.json();
+      if (data.qrToken) {
+        setQrToken(data.qrToken);
+        // Expire after 5 min
+        setTimeout(() => { setQrExpired(true); if (qrPollRef.current) clearInterval(qrPollRef.current); }, 5 * 60 * 1000);
+      }
+    } catch (e) { console.error('QR generate failed', e); }
+  }, []);
+
+  useEffect(() => {
+    if (step !== 'qr' || !qrToken) return;
+    if (qrPollRef.current) clearInterval(qrPollRef.current);
+    qrPollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(ENDPOINTS.QR_STATUS(qrToken), { credentials: 'include' });
+        if (res.status === 404) { setQrExpired(true); clearInterval(qrPollRef.current!); return; }
+        const data = await res.json();
+        if (data.status === 'linked') {
+          clearInterval(qrPollRef.current!);
+          setQrScanned(true);
+          // Fetch user profile now that cookie is set
+          const profileRes = await fetch(ENDPOINTS.AUTH_SYNC_TOKEN, { method: 'POST', credentials: 'include' });
+          const profileData = await profileRes.json();
+          if (profileData?.user) {
+            const mapped = { ...profileData.user, following: profileData.user.following?.map((f: any) => f.followingId || f.userId).filter(Boolean) || [], followers: profileData.user.followers?.map((f: any) => f.followerId || f.userId).filter(Boolean) || [] };
+            setCurrentUser(mapped);
+          }
+          setTimeout(onLogin, 800);
+        }
+      } catch (e) { /* network glitch, keep polling */ }
+    }, 2000);
+    return () => { if (qrPollRef.current) clearInterval(qrPollRef.current); };
+  }, [step, qrToken]);
+
+  useEffect(() => {
+    if (step === 'qr') generateQr();
+    else { if (qrPollRef.current) clearInterval(qrPollRef.current); }
+  }, [step]);
 
   // ── Detect mobile ──
   const isMobile = typeof window !== 'undefined' && (
@@ -291,13 +342,19 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
               </div>
               <h1 className="font-headline text-5xl sm:text-6xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-br from-primary to-secondary mb-4 drop-shadow-sm">Aqualyn</h1>
               <h2 className="font-headline text-2xl sm:text-3xl font-bold text-on-surface mb-4">India's Best Messaging App</h2>
-              <p className="font-body text-on-surface-variant text-lg font-medium tracking-wide mb-12 max-w-sm mx-auto leading-relaxed">
+              <p className="font-body text-on-surface-variant text-lg font-medium tracking-wide mb-10 max-w-sm mx-auto leading-relaxed">
                 Experience crystal clear, fluid communication designed for the modern world.
               </p>
-              <button onClick={() => setStep('email')}
-                className="w-full h-16 bg-gradient-to-br from-secondary to-primary text-white font-headline font-bold rounded-full shadow-xl shadow-primary/20 hover:scale-[1.02] hover:shadow-primary/30 active:scale-[0.98] transition-all flex items-center justify-center gap-3 text-xl">
-                Get Started <ArrowRight className="w-6 h-6" />
-              </button>
+              <div className="flex flex-col gap-4 w-full">
+                <button onClick={() => setStep('email')}
+                  className="w-full h-16 bg-gradient-to-br from-secondary to-primary text-white font-headline font-bold rounded-full shadow-xl shadow-primary/20 hover:scale-[1.02] hover:shadow-primary/30 active:scale-[0.98] transition-all flex items-center justify-center gap-3 text-xl">
+                  <Mail className="w-6 h-6" /> Login with Email
+                </button>
+                <button onClick={() => setStep('qr')}
+                  className="w-full h-14 glass-card border border-white/30 text-on-surface font-headline font-semibold rounded-full hover:bg-white/40 active:scale-[0.98] transition-all flex items-center justify-center gap-3 text-base">
+                  <QrCode className="w-5 h-5 text-secondary" /> Scan QR Code from Mobile
+                </button>
+              </div>
             </motion.div>
           )}
 
@@ -431,6 +488,92 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
                 <button onClick={handleCompleteSetup} disabled={!displayName.trim() || !dob || isLoading}
                   className="w-full h-14 bg-gradient-to-br from-secondary to-primary-container text-white font-headline font-bold rounded-2xl shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:pointer-events-none mt-4">
                   {isLoading ? <BubbleLoader width={24} height={24} /> : <><span>Complete Setup</span><Check className="w-5 h-5" /></>}
+                </button>
+              </div>
+            </motion.div>
+          )}
+
+          {/* ── QR CODE STEP ── */}
+          {step === 'qr' && (
+            <motion.div key="qr" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
+              className="w-full glass-card border border-white/30 rounded-[2.5rem] p-8 sm:p-10 inner-glow shadow-2xl">
+              <div className="mb-6 text-center">
+                <div className="w-16 h-16 mx-auto mb-4 bg-gradient-to-br from-secondary/20 to-primary-container/20 rounded-full flex items-center justify-center">
+                  <Smartphone className="w-8 h-8 text-secondary" />
+                </div>
+                <h2 className="text-2xl font-bold font-headline text-on-surface mb-1">Scan to Log In</h2>
+                <p className="text-on-surface-variant text-sm">Open Aqualyn on your phone and scan this code</p>
+              </div>
+
+              <div className="flex flex-col items-center gap-5">
+                {/* QR Code display */}
+                <div className="relative">
+                  <div className={`p-4 bg-white rounded-3xl shadow-xl transition-all duration-300 ${qrExpired ? 'blur-sm opacity-40' : ''}`}>
+                    {qrToken ? (
+                      <QRCodeSVG
+                        value={`aqualyn://qr-login/${qrToken}`}
+                        size={200}
+                        bgColor="#ffffff"
+                        fgColor="#0057BD"
+                        level="H"
+                        imageSettings={{ src: '/aqualyn.png', height: 36, width: 36, excavate: true }}
+                      />
+                    ) : (
+                      <div className="w-[200px] h-[200px] flex items-center justify-center">
+                        <BubbleLoader />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Expired overlay */}
+                  {qrExpired && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
+                      <p className="text-on-surface font-bold text-sm">Code expired</p>
+                      <button onClick={generateQr}
+                        className="flex items-center gap-1.5 px-4 py-2 bg-secondary text-white rounded-full text-sm font-bold hover:brightness-110 transition-all">
+                        <RefreshCw className="w-4 h-4" /> Refresh
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Scanned success overlay */}
+                  {qrScanned && (
+                    <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}
+                      className="absolute inset-0 flex flex-col items-center justify-center bg-white/90 rounded-3xl gap-2">
+                      <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 300 }}
+                        className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center">
+                        <Check className="w-8 h-8 text-white" />
+                      </motion.div>
+                      <p className="text-green-700 font-bold text-sm">Device linked!</p>
+                      <BubbleLoader />
+                    </motion.div>
+                  )}
+                </div>
+
+                {/* Status indicator */}
+                {!qrExpired && !qrScanned && qrToken && (
+                  <div className="flex items-center gap-2 text-on-surface-variant text-xs font-medium">
+                    <span className="w-2 h-2 rounded-full bg-secondary animate-pulse inline-block" />
+                    Waiting for scan…
+                  </div>
+                )}
+
+                {/* Steps */}
+                <div className="w-full space-y-2 pt-2">
+                  {[
+                    { n: '1', text: 'Open Aqualyn on your mobile' },
+                    { n: '2', text: 'Go to Settings → Linked Devices' },
+                    { n: '3', text: 'Tap "Link a Device" and scan' },
+                  ].map(({ n, text }) => (
+                    <div key={n} className="flex items-center gap-3 p-3 glass-card bg-white/20 border border-white/10 rounded-xl">
+                      <span className="w-6 h-6 rounded-full bg-secondary/20 text-secondary font-black text-xs flex items-center justify-center shrink-0">{n}</span>
+                      <span className="text-on-surface text-sm font-medium">{text}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <button onClick={() => setStep('intro')} className="text-xs text-on-surface-variant/60 hover:text-secondary transition-colors">
+                  ← Back to login options
                 </button>
               </div>
             </motion.div>

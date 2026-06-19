@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import BubbleLoader from '../components/ui/BubbleLoader';
 import { ArrowLeft, Video, Phone, MoreVertical, Plus, Smile, Mic, CheckCheck, Users, X, Clock, Lock, Search, Download, Trash2, Edit2, Share2, UserPlus, User } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { useCall } from '../context/CallContext';
@@ -20,7 +21,7 @@ import { uploadFile } from '../utils/uploads';
 import { dataURLtoFile } from '../utils/media';
 
 export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () => void, onNavigate: (s: string) => void }) {
-  const { messages, setMessages, sendMessage, editMessage, deleteMessage, currentUser, chats, activeChatId, addToast, setActiveChatId, setActiveContactId, contacts, globalUsers, followUser, typingUsers, setTyping, markAsRead, handleSecretChatInvitation } = useAppContext();
+  const { messages, setMessages, sendMessage, editMessage, deleteMessage, currentUser, chats, activeChatId, addToast, setActiveChatId, setOriginChatId, setActiveContactId, contacts, globalUsers, followUser, typingUsers, setTyping, markAsRead, handleSecretChatInvitation } = useAppContext();
   const { startCall } = useCall();
   const [text, setText] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -50,6 +51,9 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
   const chatMessages = activeChatId ? (messages[activeChatId] || []) : [];
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [screenshotAlert, setScreenshotAlert] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [isFetchingMore, setIsFetchingMore] = useState(false);
 
   const triggerScreenshotAlert = () => {
     const settings = (chat as any)?.settings || {};
@@ -99,28 +103,18 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
     }
   }, [activeChatId, chatMessages.length]);
 
-  // Skeleton message bubble component
-  const SkeletonBubble = ({ isMe }: { isMe: boolean }) => (
-    <div className={`flex flex-col space-y-1 max-w-[85%] ${isMe ? 'items-end ml-auto' : 'items-start'}`}>
-      <div className={`chat-bubble rounded-2xl p-4 w-[220px] ${isMe ? 'bg-secondary/20' : 'bg-black/5 dark:bg-white/5'}`}>
-        <div className="h-3 bg-black/10 dark:bg-white/10 rounded-full animate-pulse w-3/4 mb-2" />
-        <div className="h-3 bg-black/10 dark:bg-white/10 rounded-full animate-pulse w-1/2" />
-      </div>
-      <div className={`flex items-center gap-1 ${isMe ? 'mr-1' : 'ml-1'}`}>
-        <div className="h-2 bg-black/10 dark:bg-white/10 rounded-full animate-pulse w-8" />
-      </div>
-    </div>
-  );
-
   useEffect(() => {
     if (activeChatId && (!messages[activeChatId] || messages[activeChatId].length === 0)) {
       setIsLoadingMessages(true);
+      setPage(1);
+      setHasMore(true);
       const fetchHistory = async () => {
         try {
-          const res = await apiFetch(ENDPOINTS.CHAT_MESSAGES(activeChatId));
+          const res = await apiFetch(`${ENDPOINTS.CHAT_MESSAGES(activeChatId)}?page=1&limit=50`);
           if (res.ok) {
             const data = await res.json();
             setMessages(prev => ({ ...prev, [activeChatId]: data }));
+            if (data.length < 50) setHasMore(false);
           }
         } catch (e) {
           console.error("Failed to fetch history:", e);
@@ -130,7 +124,38 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
       };
       fetchHistory();
     }
-  }, [activeChatId, messages, setMessages]);
+  }, [activeChatId]);
+
+  const handleScroll = async (e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.currentTarget;
+    if (target.scrollTop < 100 && hasMore && !isFetchingMore && !isLoadingMessages) {
+      setIsFetchingMore(true);
+      try {
+        const nextPage = page + 1;
+        const res = await apiFetch(`${ENDPOINTS.CHAT_MESSAGES(activeChatId as string)}?page=${nextPage}&limit=50`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.length > 0) {
+            const previousScrollHeight = target.scrollHeight;
+            setMessages(prev => {
+              const currentMessages = prev[activeChatId as string] || [];
+              const newMessages = data.filter((d: any) => !currentMessages.some((m: any) => m.id === d.id));
+              return { ...prev, [activeChatId as string]: [...newMessages, ...currentMessages] };
+            });
+            setPage(nextPage);
+            setTimeout(() => {
+              target.scrollTop = target.scrollHeight - previousScrollHeight;
+            }, 0);
+          }
+          if (data.length < 50) setHasMore(false);
+        }
+      } catch (e) {
+        console.error("Failed to fetch more messages:", e);
+      } finally {
+        setIsFetchingMore(false);
+      }
+    }
+  };
 
   useEffect(() => {
     if (!activeChatId) return;
@@ -156,17 +181,17 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
       editMessage(activeChatId, editingMessage.id, text);
       setEditingMessage(null);
     } else {
-      sendMessage(activeChatId, text, { replyToId: replyingTo?.id });
+      sendMessage(activeChatId, text, {
+        replyToId: replyingTo?.id
+      });
     }
 
     setText('');
     setReplyingTo(null);
     if (activeChatId) setTyping(activeChatId, false);
 
-    // Force scroll to bottom
-    setTimeout(() => {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, 100);
+    // Force scroll to bottom immediately
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   const handleEdit = (msg: Message) => {
@@ -337,8 +362,8 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: 20 }}
       className={`min-h-screen flex flex-col transition-all duration-500 relative overflow-hidden ${chat.isSecret
-          ? 'bg-[#0a0f14] text-slate-300 font-sans selection:bg-blue-500/30 selection:text-white'
-          : 'bg-aqua-depth'
+        ? 'bg-[#0a0f14] text-slate-300 font-sans selection:bg-blue-500/30 selection:text-white'
+        : 'bg-aqua-depth'
         }`}
     >
       {/* Incognito Cyber Grid & Scanning Scanlines */}
@@ -372,8 +397,8 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
       </AnimatePresence>
 
       <header className={`fixed top-0 w-full z-50 border-b shadow-[0_8px_32px_0_rgba(0,87,189,0.06)] flex flex-col px-6 max-w-none transition-all duration-300 ${chat.isSecret
-          ? 'bg-[#0a0f14]/95 border-slate-800/80 backdrop-blur-2xl text-slate-300'
-          : 'bg-slate-50/70 backdrop-blur-xl border-white/15'
+        ? 'bg-[#0a0f14]/95 border-slate-800/80 backdrop-blur-2xl text-slate-300'
+        : 'bg-slate-50/70 backdrop-blur-xl border-white/15'
         }`}>
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center gap-3">
@@ -385,6 +410,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
               else if (chat.isSecret) setIsSecretInfoOpen(true);
               else {
                 const effectiveTargetId = targetUserId || chat.participantIds?.find(id => id !== currentUser?.id) || chat.id;
+                setOriginChatId(activeChatId);
                 setActiveContactId(effectiveTargetId);
                 onNavigate('contact-profile');
               }
@@ -446,6 +472,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
                           setIsGroupInfoOpen(true);
                         } else {
                           const tid = chat.participantIds?.find(id => id !== currentUser?.id) || chat.id;
+                          setOriginChatId(activeChatId);
                           setActiveContactId(tid);
                           onNavigate('contact-profile');
                         }
@@ -504,7 +531,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
         </AnimatePresence>
       </header>
 
-      <main ref={scrollRef} className={`flex-1 ${isSearchOpen ? 'pt-28' : 'pt-20'} pb-28 px-4 md:px-8 max-w-4xl mx-auto w-full flex flex-col overflow-y-auto`}>
+      <main ref={scrollRef} onScroll={handleScroll} className={`flex-1 ${isSearchOpen ? 'pt-28' : 'pt-20'} pb-28 px-4 md:px-8 max-w-4xl mx-auto w-full flex flex-col overflow-y-auto`}>
         <div className="flex-1 min-h-[20px]"></div>
         <div className="flex justify-center my-8">
           <span className="bg-surface-container-low px-4 py-1 rounded-full text-[11px] font-semibold text-on-surface-variant uppercase tracking-widest border border-white/40">Today, Oct 24</span>
@@ -512,102 +539,106 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
 
         <div className="space-y-6 flex flex-col justify-end">
           {isLoadingMessages ? (
-            // Skeleton chat bubbles while loading
-            <>
-              {[0, 1, 2, 3, 4, 5].map((i) => (
-                <SkeletonBubble key={i} isMe={i % 3 === 0} />
-              ))}
-            </>
+            <div className="flex justify-center py-8">
+              <BubbleLoader />
+            </div>
           ) : (
-            filteredMessages.map((msg, i) => {
-                if (msg.text?.startsWith('[System] 🔒 Secret Chat Request:::')) {
-                  const secretChatId = msg.text.split(':::')[1];
-                  const isSender = msg.senderId === currentUser?.id;
-                  return (
-                    <div key={msg.id} className="flex justify-center my-4">
-                      <div className="bg-surface-container border border-blue-500/30 p-4 rounded-2xl w-full max-w-sm flex flex-col items-center shadow-[0_8px_32px_rgba(0,122,255,0.1)]">
-                        <div className="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-500 mb-3">
-                          <Lock className="w-6 h-6" />
-                        </div>
-                        <h4 className="text-on-surface font-bold text-lg mb-1">Secret Chat Request</h4>
-                        <p className="text-sm text-on-surface-variant text-center mb-4">
-                          {isSender
-                            ? 'Waiting for the other user to accept your request to start an end-to-end encrypted session.'
-                            : 'Wants to start an end-to-end encrypted secret chat with you.'}
-                        </p>
-
-                        {!isSender && (
-                          <div className="flex w-full gap-2 mt-2">
-                            <button
-                              onClick={async () => {
-                                await handleSecretChatInvitation(secretChatId, 'accept');
-                                setActiveChatId(secretChatId);
-                              }}
-                              className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-medium py-2 rounded-xl transition-colors"
-                            >
-                              Accept
-                            </button>
-                            <button
-                              onClick={() => handleSecretChatInvitation(secretChatId, 'decline')}
-                              className="flex-1 bg-surface-container-highest hover:bg-surface-container-high text-on-surface-variant font-medium py-2 rounded-xl transition-colors"
-                            >
-                              Decline
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                }
-                return (
-                  <MessageBubble
-                    key={msg.id}
-                    msg={msg}
-                    isMe={msg.senderId === currentUser?.id}
-                    onReply={setReplyingTo}
-                    onEdit={handleEdit}
-                    replyMessage={msg.replyToId ? chatMessages.find(m => m.id === msg.replyToId) : undefined}
-                    onMediaClick={handleMediaClick}
-                    isSecret={chat.isSecret}
-                  />
-                );
-              })
-            )}
-
-            {!isLoadingMessages && filteredMessages.length === 0 && (
-              <div className="py-14 text-center text-on-surface-variant">
-                <p className="text-sm font-medium">No messages yet. Start the conversation now.</p>
-              </div>
-            )}
-
-            <div ref={bottomRef} className="h-4 w-full" />
-
-            {typingInThisChat.length > 0 && (
-              <div className="flex items-center gap-2 text-on-surface-variant text-sm p-4 animate-pulse">
-                <div className="flex gap-1">
-                  <span className="w-1.5 h-1.5 bg-secondary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <span className="w-1.5 h-1.5 bg-secondary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <span className="w-1.5 h-1.5 bg-secondary rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+            <>
+              {isFetchingMore && (
+                <div className="flex justify-center py-4">
+                  <BubbleLoader />
                 </div>
-                <span className="font-medium">
-                  {typingInThisChat.length === 1
-                    ? `${typingInThisChat[0]} is typing...`
-                    : `${typingInThisChat.length} people are typing...`}
-                </span>
+              )}
+              {filteredMessages.map((msg, i) => {
+              if (msg.text?.startsWith('[System] 🔒 Secret Chat Request:::')) {
+                const secretChatId = msg.text.split(':::')[1];
+                const isSender = msg.senderId === currentUser?.id;
+                return (
+                  <div key={msg.id} className="flex justify-center my-4">
+                    <div className="bg-surface-container border border-blue-500/30 p-4 rounded-2xl w-full max-w-sm flex flex-col items-center shadow-[0_8px_32px_rgba(0,122,255,0.1)]">
+                      <div className="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-500 mb-3">
+                        <Lock className="w-6 h-6" />
+                      </div>
+                      <h4 className="text-on-surface font-bold text-lg mb-1">Secret Chat Request</h4>
+                      <p className="text-sm text-on-surface-variant text-center mb-4">
+                        {isSender
+                          ? 'Waiting for the other user to accept your request to start an end-to-end encrypted session.'
+                          : 'Wants to start an end-to-end encrypted secret chat with you.'}
+                      </p>
+
+                      {!isSender && (
+                        <div className="flex w-full gap-2 mt-2">
+                          <button
+                            onClick={async () => {
+                              await handleSecretChatInvitation(secretChatId, 'accept');
+                              setActiveChatId(secretChatId);
+                            }}
+                            className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-medium py-2 rounded-xl transition-colors"
+                          >
+                            Accept
+                          </button>
+                          <button
+                            onClick={() => handleSecretChatInvitation(secretChatId, 'decline')}
+                            className="flex-1 bg-surface-container-highest hover:bg-surface-container-high text-on-surface-variant font-medium py-2 rounded-xl transition-colors"
+                          >
+                            Decline
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              }
+              return (
+                <MessageBubble
+                  key={msg.id}
+                  msg={msg}
+                  isMe={msg.senderId === currentUser?.id}
+                  onReply={setReplyingTo}
+                  onEdit={handleEdit}
+                  replyMessage={msg.replyToId ? chatMessages.find(m => m.id === msg.replyToId) : undefined}
+                  onMediaClick={handleMediaClick}
+                  isSecret={chat.isSecret}
+                />
+              );
+            })}
+            </>
+          )}
+
+          {!isLoadingMessages && filteredMessages.length === 0 && (
+            <div className="py-14 text-center text-on-surface-variant">
+              <p className="text-sm font-medium">No messages yet. Start the conversation now.</p>
+            </div>
+          )}
+
+          <div ref={bottomRef} className="h-4 w-full" />
+
+          {typingInThisChat.length > 0 && (
+            <div className="flex items-center gap-2 text-on-surface-variant text-sm p-4 animate-pulse">
+              <div className="flex gap-1">
+                <span className="w-1.5 h-1.5 bg-secondary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                <span className="w-1.5 h-1.5 bg-secondary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                <span className="w-1.5 h-1.5 bg-secondary rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
               </div>
-            )}
-          </div>
-        </main>
+              <span className="font-medium">
+                {typingInThisChat.length === 1
+                  ? `${typingInThisChat[0]} is typing...`
+                  : `${typingInThisChat.length} people are typing...`}
+              </span>
+            </div>
+          )}
+        </div>
+      </main>
 
       <div className={`fixed bottom-0 left-0 w-full p-4 md:p-6 z-50 transition-colors duration-300 ${chat.isSecret
-          ? 'bg-gradient-to-t from-black via-black/95 to-transparent'
-          : 'bg-gradient-to-t from-background via-background/90 to-transparent'
+        ? 'bg-gradient-to-t from-black via-black/95 to-transparent'
+        : 'bg-gradient-to-t from-background via-background/90 to-transparent'
         }`}>
         <div className="max-w-4xl mx-auto w-full relative">
           {isPrivateRestricted ? (
             <div className={`flex flex-col items-center gap-3 py-4 border rounded-[2rem] shadow-xl ${chat.isSecret
-                ? 'bg-[#0a0f14] border-slate-800 text-slate-400'
-                : 'glass-card border-white/40 text-on-surface-variant'
+              ? 'bg-[#0a0f14] border-slate-800 text-slate-400'
+              : 'glass-card border-white/40 text-on-surface-variant'
               }`}>
               <div className="flex items-center gap-2 text-sm font-medium">
                 <Lock className="w-4 h-4 text-blue-400" />
@@ -616,8 +647,8 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
               {isRequested ? (
                 <button
                   className={`w-full max-w-xs py-3 rounded-2xl font-bold border flex items-center justify-center gap-2 cursor-default ${chat.isSecret
-                      ? 'bg-[#121820] text-blue-400 border-slate-800'
-                      : 'bg-surface-container text-on-surface-variant border-white/40'
+                    ? 'bg-[#121820] text-blue-400 border-slate-800'
+                    : 'bg-surface-container text-on-surface-variant border-white/40'
                     }`}
                 >
                   <Clock className="w-5 h-5" />
@@ -627,8 +658,8 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
                 <button
                   onClick={() => followUser(targetUser!.id)}
                   className={`w-full max-w-xs py-3 rounded-2xl font-bold shadow-lg flex items-center justify-center gap-2 transition-all active:scale-95 ${chat.isSecret
-                      ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-500/10'
-                      : 'liquid-gradient text-white shadow-primary/20'
+                    ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-500/10'
+                    : 'liquid-gradient text-white shadow-primary/20'
                     }`}
                 >
                   <UserPlus className="w-5 h-5" />
@@ -656,8 +687,8 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
                   <motion.div
                     initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}
                     className={`absolute bottom-full left-0 right-0 mb-4 mx-4 p-3 border rounded-2xl shadow-lg flex items-center justify-between ${chat.isSecret
-                        ? 'bg-[#0a0f14]/95 border-slate-800 text-slate-300'
-                        : 'bg-surface/90 backdrop-blur-xl border-white/20 text-on-surface'
+                      ? 'bg-[#0a0f14]/95 border-slate-800 text-slate-300'
+                      : 'bg-surface/90 backdrop-blur-xl border-white/20 text-on-surface'
                       }`}
                   >
                     <div className={`flex-1 min-w-0 border-l-4 pl-3 ${chat.isSecret ? 'border-slate-700' : 'border-primary'}`}>
@@ -673,8 +704,8 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
                   <motion.div
                     initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}
                     className={`absolute bottom-full left-0 right-0 mb-4 mx-4 p-3 border rounded-2xl shadow-lg flex items-center justify-between ${chat.isSecret
-                        ? 'bg-[#0a0f14]/95 border-slate-800 text-slate-300'
-                        : 'bg-surface/90 backdrop-blur-xl border-white/20 text-on-surface'
+                      ? 'bg-[#0a0f14]/95 border-slate-800 text-slate-300'
+                      : 'bg-surface/90 backdrop-blur-xl border-white/20 text-on-surface'
                       }`}
                   >
                     <div className={`flex-1 min-w-0 border-l-4 pl-3 ${chat.isSecret ? 'border-slate-700' : 'border-secondary'}`}>
@@ -700,8 +731,8 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
                     type="button"
                     onClick={() => setIsAttachmentPickerOpen(!isAttachmentPickerOpen)}
                     className={`w-12 h-12 flex items-center justify-center rounded-full backdrop-blur-md border transition-all active:scale-90 duration-200 ${isAttachmentPickerOpen
-                        ? (chat.isSecret ? 'bg-blue-600 text-white border-blue-500 shadow-lg shadow-blue-500/10' : 'bg-secondary text-white border-secondary shadow-lg shadow-secondary/20')
-                        : (chat.isSecret ? 'bg-black/60 border-slate-700/30 text-slate-400 hover:bg-slate-800/50 shadow-sm' : 'bg-white/60 border-white/40 text-on-surface-variant hover:bg-white shadow-sm')
+                      ? (chat.isSecret ? 'bg-blue-600 text-white border-blue-500 shadow-lg shadow-blue-500/10' : 'bg-secondary text-white border-secondary shadow-lg shadow-secondary/20')
+                      : (chat.isSecret ? 'bg-black/60 border-slate-700/30 text-slate-400 hover:bg-slate-800/50 shadow-sm' : 'bg-white/60 border-white/40 text-on-surface-variant hover:bg-white shadow-sm')
                       }`}
                   >
                     <Plus className={`w-6 h-6 transition-transform duration-300 ${isAttachmentPickerOpen ? 'rotate-45' : ''}`} />
@@ -714,8 +745,8 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
                       onChange={e => setText(e.target.value)}
                       placeholder={`Message ${chat.name}...`}
                       className={`w-full h-12 pl-4 pr-20 rounded-full border outline-none transition-all ${chat.isSecret
-                          ? 'bg-black border-slate-700/30 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/50 text-slate-200 placeholder:text-slate-600 font-sans'
-                          : 'bg-white/70 backdrop-blur-2xl border-white/40 focus:ring-2 focus:ring-secondary/20 focus:border-secondary text-on-surface placeholder:text-on-surface-variant/50'
+                        ? 'bg-black border-slate-700/30 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/50 text-slate-200 placeholder:text-slate-600 font-sans'
+                        : 'bg-white/70 backdrop-blur-2xl border-white/40 focus:ring-2 focus:ring-secondary/20 focus:border-secondary text-on-surface placeholder:text-on-surface-variant/50'
                         }`}
                     />
                     <div className="absolute right-2 flex items-center">
@@ -727,8 +758,8 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
 
                   {text.trim() ? (
                     <button type="submit" className={`w-12 h-12 flex items-center justify-center rounded-full transition-all active:scale-90 duration-200 ${chat.isSecret
-                        ? 'bg-blue-600 text-white shadow-[0_4px_16px_rgba(59,130,246,0.2)] hover:bg-blue-500'
-                        : 'glass-sent text-white shadow-[0_4px_16px_rgba(0,87,189,0.2)]'
+                      ? 'bg-blue-600 text-white shadow-[0_4px_16px_rgba(59,130,246,0.2)] hover:bg-blue-500'
+                      : 'glass-sent text-white shadow-[0_4px_16px_rgba(0,87,189,0.2)]'
                       }`}>
                       <CheckCheck className="w-5 h-5" />
                     </button>
@@ -738,8 +769,8 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
                       onMouseDown={() => setIsRecordingAudio(true)}
                       onTouchStart={() => setIsRecordingAudio(true)}
                       className={`w-12 h-12 flex items-center justify-center rounded-full transition-all active:scale-90 duration-200 ${chat.isSecret
-                          ? 'bg-blue-600 text-white shadow-[0_4px_16px_rgba(59,130,246,0.2)] hover:bg-blue-500'
-                          : 'glass-sent text-white shadow-[0_4px_16px_rgba(0,87,189,0.2)]'
+                        ? 'bg-blue-600 text-white shadow-[0_4px_16px_rgba(59,130,246,0.2)] hover:bg-blue-500'
+                        : 'glass-sent text-white shadow-[0_4px_16px_rgba(0,87,189,0.2)]'
                         }`}
                     >
                       <Mic className="w-5 h-5 fill-current" />

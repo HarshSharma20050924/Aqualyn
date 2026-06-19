@@ -46,7 +46,8 @@ import {
   Eraser,
   ChevronRight,
   X,
-  Check
+  Check,
+  MonitorSmartphone
 } from 'lucide-react-native';
 
 import { useAppContext } from '../context/AppContext';
@@ -65,6 +66,7 @@ interface Props {
 
 export default function ChatListScreen({ onNavigate }: Props) {
   const insets = useSafeAreaInsets();
+  const [headerHeight, setHeaderHeight] = useState(0); // Added header height tracking
   const {
     currentUser,
     chats,
@@ -276,7 +278,10 @@ export default function ChatListScreen({ onNavigate }: Props) {
     <Animated.View entering={FadeIn} style={styles.screenContainer}>
       
       {/* Absolute Header Dock System */}
-      <View style={[styles.headerContainer, { paddingTop: insets.top }]}>
+      <View 
+        onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
+        style={[styles.headerContainer, { paddingTop: insets.top }]}
+      >
         <View style={styles.headerToolbar}>
           {isSelectionMode ? (
             <View style={styles.selectionToolbarRow}>
@@ -388,9 +393,9 @@ export default function ChatListScreen({ onNavigate }: Props) {
         )}
       </View>
 
-      {/* Main Messaging / Streams Center */}
-      <ScrollView contentContainerStyle={[styles.mainScroll, { paddingTop: isSearching ? 90 : 150, paddingBottom: insets.bottom + 100 }]}>
-        {(isLoading || isFetchingData) ? (
+{/* Main Messaging / Streams Center */}
+       <ScrollView contentContainerStyle={[styles.mainScroll, { paddingTop: headerHeight + 12, paddingBottom: insets.bottom + 100 }]}>
+        {((isLoading || isFetchingData) && chats.length === 0) ? (
           <View style={styles.skeletonContainer}>
             {[1, 2, 3, 4, 5].map((i) => renderSkeletonChat(i))}
           </View>
@@ -609,6 +614,10 @@ export default function ChatListScreen({ onNavigate }: Props) {
             <TouchableOpacity style={styles.menuDropOption} onPress={() => { setIsSelectionMode(true); setShowHeaderMenu(false); }}>
               <CheckSquare size={16} color="#475569" />
               <Text style={styles.menuDropText}>Select Chats</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuDropOption} onPress={() => { setShowHeaderMenu(false); onNavigate('linked-devices'); }}>
+              <MonitorSmartphone size={16} color="#475569" />
+              <Text style={styles.menuDropText}>Linked Devices</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.menuDropOption} onPress={toggleTheme}>
               {theme.mode === 'dark' ? <Sun size={16} color="#475569" /> : <Moon size={16} color="#475569" />}

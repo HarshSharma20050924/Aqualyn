@@ -7,7 +7,7 @@ import {
   Modal,
   Platform,
 } from 'react-native';
-import Animated, { FadeIn, FadeOut, SlideInUp, SlideOutDown } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { Image as ImageIcon, FileText, MapPin, Camera, Wallet, Clock } from 'lucide-react-native';
 
 interface MediaAttachmentPickerProps {
@@ -41,8 +41,8 @@ export default function MediaAttachmentPicker({ isOpen, onClose, onSelect }: Med
 
         {/* Attachment Card Panel Popover */}
         <Animated.View
-          entering={SlideInUp.duration(200)}
-          exiting={SlideOutDown.duration(150)}
+          entering={FadeIn.duration(200)}
+          exiting={FadeOut.duration(150)}
           style={styles.popoverMenuSheetBodyFrame}
         >
           <View style={styles.threeColumnGridMatrixTrack}>

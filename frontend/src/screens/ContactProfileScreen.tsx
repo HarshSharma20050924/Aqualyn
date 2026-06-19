@@ -11,7 +11,7 @@ import { User } from '../types';
 import UserListModal from '../components/social/UserListModal';
 
 export default function ContactProfileScreen({ onBack, onNavigate }: { onBack: () => void, onNavigate: (s: string) => void }) {
-  const { contacts, activeContactId, setActiveContactId, startChatWithContact, addToast, chats, setChats, currentUser, blockContact, reportContact, muteChat, followUser, unfollowUser, posts, globalUsers, setGlobalUsers, requestSecretChat, createGroupChat } = useAppContext();
+  const { contacts, activeContactId, setActiveContactId, setActiveChatId, originChatId, setOriginChatId, startChatWithContact, addToast, chats, setChats, currentUser, blockContact, reportContact, muteChat, followUser, unfollowUser, posts, globalUsers, setGlobalUsers, requestSecretChat, createGroupChat } = useAppContext();
   const { startCall } = useCall();
   const [requestSent, setRequestSent] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState<'posts' | 'highlights'>('posts');

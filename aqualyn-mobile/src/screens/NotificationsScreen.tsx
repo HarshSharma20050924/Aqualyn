@@ -71,10 +71,9 @@ export default function NotificationsScreen({ onBack }: NotificationsScreenProps
         {/* Avatar badge configuration */}
         <View style={styles.avatarContainer}>
           <Image 
-            source={{ uri: avatarUrl }} 
-            style={styles.actorAvatarImage} 
-            resizeMode="cover"
-          />
+              source={{ uri: avatarUrl }} 
+              style={[styles.actorAvatarImage, { resizeMode: 'cover' }]} 
+            />
           <View style={styles.iconBadgeAbsolutePosition}>
             {getIcon(notification.type)}
           </View>
@@ -264,6 +263,11 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0
   },
+  notificationMainTbubbleBodyLabelStandardText: {
+      fontSize: 15,
+      lineHeight: 20,
+      color: '#0057bd',
+    },
   notificationMainTextTypography: {
     fontSize: 14,
     lineHeight: 20,

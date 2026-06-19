@@ -1,49 +1,47 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { 
-  StyleSheet, 
-  View, 
-  Text, 
-  TextInput, 
-  TouchableOpacity, 
-  ScrollView, 
-  Image, 
-  KeyboardAvoidingView, 
-  Platform, 
+import {
+  StyleSheet,
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  ScrollView,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
   Dimensions,
   Modal,
   Alert
 } from 'react-native';
-import Animated, { 
-  FadeIn, 
-  FadeOut, 
-  SlideInDown, 
-  SlideInUp, 
-  useAnimatedStyle, 
-  useSharedValue, 
-  withSequence, 
-  withTiming 
+import Animated, {
+  FadeIn,
+  FadeOut,
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withTiming
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { 
-  ArrowLeft, 
-  Video, 
-  Phone, 
-  MoreVertical, 
-  Plus, 
-  Smile, 
-  Mic, 
-  CheckCheck, 
-  Users, 
-  X, 
-  Clock, 
-  Lock, 
-  Search, 
-  Download, 
-  Trash2, 
-  Edit2, 
-  Share2, 
-  UserPlus, 
-  User 
+import {
+  ArrowLeft,
+  Video,
+  Phone,
+  MoreVertical,
+  Plus,
+  Smile,
+  Mic,
+  CheckCheck,
+  Users,
+  X,
+  Clock,
+  Lock,
+  Search,
+  Download,
+  Trash2,
+  Edit2,
+  Share2,
+  UserPlus,
+  User
 } from 'lucide-react-native';
 
 import { useAppContext } from '../context/AppContext';
@@ -61,6 +59,7 @@ import MediaGallery from '../components/chat/MediaGallery';
 import GroupInfoScreen from './GroupInfoScreen';
 import SecretChatInfoScreen from './SecretChatInfoScreen';
 import ShareContactModal from '../components/chat/ShareContactModal';
+import BubbleLoader from '../components/ui/BubbleLoader';
 
 import { uploadFile } from '../utils/uploads';
 
@@ -73,29 +72,29 @@ interface Props {
 
 export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
   const insets = useSafeAreaInsets();
-  const { 
-    messages, 
-    setMessages, 
-    sendMessage, 
-    editMessage, 
-    currentUser, 
-    chats, 
-    activeChatId, 
-    addToast, 
-    setActiveChatId, 
-    setActiveContactId, 
-    contacts, 
-    globalUsers, 
-    followUser, 
-    typingUsers, 
-    setTyping, 
-    markAsRead, 
-    handleSecretChatInvitation 
+  const {
+    messages,
+    setMessages,
+    sendMessage,
+    editMessage,
+    currentUser,
+    chats,
+    activeChatId,
+    addToast,
+    setActiveChatId,
+    setActiveContactId,
+    contacts,
+    globalUsers,
+    followUser,
+    typingUsers,
+    setTyping,
+    markAsRead,
+    handleSecretChatInvitation
   } = useAppContext();
-  
+
   const { startCall } = useCall();
   const [text, setText] = useState('');
-  
+
   const scrollRef = useRef<ScrollView>(null);
 
   // UI Control states
@@ -122,6 +121,9 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
   const chatMessages = activeChatId ? (messages[activeChatId] || []) : [];
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [screenshotAlert, setScreenshotAlert] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [isFetchingMore, setIsFetchingMore] = useState(false);
 
   const flashOpacity = useSharedValue(0);
 
@@ -139,7 +141,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
 
     setScreenshotAlert(true);
     addToast('⚠️ INCOGNITO SCREENSHOT ATTEMPT DETECTED!', 'error');
-    
+
     if (activeChatId) {
       sendMessage(activeChatId, '[System] Screenshot not allowed');
     }
@@ -182,7 +184,9 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
     // Only fetch if we have no messages yet for this chat
     if (messages[activeChatId] && messages[activeChatId].length > 0) return;
     setIsLoadingMessages(true);
-    apiFetch(ENDPOINTS.CHAT_MESSAGES(activeChatId))
+    setPage(1);
+    setHasMore(true);
+    apiFetch(`${ENDPOINTS.CHAT_MESSAGES(activeChatId)}?page=1&limit=50`)
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data)) {
@@ -201,11 +205,51 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
               replyToId: m.replyToId,
             }))
           }));
+          if (data.length < 50) setHasMore(false);
         }
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setIsLoadingMessages(false));
   }, [activeChatId]);
+
+  const handleScroll = async (e: any) => {
+    const { contentOffset } = e.nativeEvent;
+    if (contentOffset.y < 100 && hasMore && !isFetchingMore && !isLoadingMessages) {
+      setIsFetchingMore(true);
+      try {
+        const nextPage = page + 1;
+        const res = await apiFetch(`${ENDPOINTS.CHAT_MESSAGES(activeChatId as string)}?page=${nextPage}&limit=50`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.length > 0) {
+            setMessages(prev => {
+              const currentMessages = prev[activeChatId as string] || [];
+              const mapped = data.map((m: any) => ({
+                id: m.id,
+                chatId: activeChatId,
+                senderId: m.senderId,
+                text: m.content || m.text || '',
+                timestamp: m.createdAt ? new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Now',
+                isRead: m.isRead ?? true,
+                imageUrl: m.imageUrl,
+                videoUrl: m.videoUrl,
+                audioUrl: m.audioUrl,
+                replyToId: m.replyToId,
+              }));
+              const newMessages = mapped.filter((d: any) => !currentMessages.some((m: any) => m.id === d.id));
+              return { ...prev, [activeChatId as string]: [...newMessages, ...currentMessages] };
+            });
+            setPage(nextPage);
+          }
+          if (data.length < 50) setHasMore(false);
+        }
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setIsFetchingMore(false);
+      }
+    }
+  };
 
   // Handle typing presence
   useEffect(() => {
@@ -338,19 +382,11 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
 
   const isSecret = chat.isSecret;
 
-  // Render Sub-components to keep clean architecture
-  const renderSkeletonBubble = (isMe: boolean, index: number) => (
-    <View key={index} style={[styles.skeletonContainer, isMe ? styles.alignEnd : styles.alignStart]}>
-      <View style={[styles.skeletonBubble, isMe ? styles.bgMeSkeleton : styles.bgOtherSkeleton]}>
-        <View style={styles.skeletonLineLong} />
-        <View style={styles.skeletonLineShort} />
-      </View>
-    </View>
-  );
+
 
   return (
     <Animated.View entering={FadeIn.duration(400)} style={[styles.container, isSecret ? styles.bgSecret : styles.bgNormal]}>
-      
+
       {/* Screenshot Flash Layer */}
       {screenshotAlert && (
         <Animated.View style={[styles.flashAlertContainer, animatedFlashStyle]}>
@@ -370,7 +406,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
               <ArrowLeft size={24} color={isSecret ? '#94a3b8' : '#64748b'} />
             </TouchableOpacity>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => {
                 if (chat.isGroup) setIsGroupInfoOpen(true);
                 else if (chat.isSecret) setIsSecretInfoOpen(true);
@@ -379,7 +415,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
                   setActiveContactId(id);
                   onNavigate('contact-profile');
                 }
-              }} 
+              }}
               style={styles.avatarWrapper}
             >
               {chat.isGroup ? (
@@ -392,7 +428,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
               <View style={[styles.statusDot, isSecret ? styles.dotSecret : styles.dotNormal]} />
             </TouchableOpacity>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => {
                 if (chat.isGroup) setIsGroupInfoOpen(true);
                 else if (chat.isSecret) setIsSecretInfoOpen(true);
@@ -445,8 +481,10 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
       </View>
 
       {/* Main Messages Dynamic Stream */}
-      <ScrollView 
+      <ScrollView
         ref={scrollRef}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 90 }]}
         keyboardShouldPersistTaps="handled"
       >
@@ -457,71 +495,81 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
         </View>
 
         {isLoadingMessages ? (
-          [0, 1, 2, 3, 4].map((i) => renderSkeletonBubble(i % 3 === 0, i))
-        ) : (
-          filteredMessages.map((msg) => {
-            if (msg.text?.startsWith('[System] 🔒 Secret Chat Request:::')) {
-              const secretChatId = msg.text.split(':::')[1];
-              const isSender = msg.senderId === currentUser?.id;
-              
-              return (
-                <View key={msg.id} style={styles.secretRequestContainer}>
-                  <View style={styles.secretRequestCard}>
-                    <View style={styles.secretLockBadge}>
-                      <Lock size={24} color="#3b82f6" />
-                    </View>
-                    <Text style={styles.secretRequestTitle}>Secret Chat Request</Text>
-                    <Text style={styles.secretRequestDesc}>
-                      {isSender 
-                        ? 'Waiting for the other user to accept your request to start an end-to-end encrypted session.'
-                        : 'Wants to start an end-to-end encrypted secret chat with you.'}
-                    </Text>
-                    {!isSender && (
-                      <View style={styles.secretActionRow}>
-                        <TouchableOpacity 
-                          style={styles.secretAcceptBtn}
-                          onPress={async () => {
-                            await handleSecretChatInvitation(secretChatId, 'accept');
-                            setActiveChatId(secretChatId);
-                          }}
-                        >
-                          <Text style={styles.btnTextLight}>Accept</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity 
-                          style={styles.secretDeclineBtn}
-                          onPress={() => handleSecretChatInvitation(secretChatId, 'decline')}
-                        >
-                          <Text style={styles.btnTextDark}>Decline</Text>
-                        </TouchableOpacity>
-                      </View>
-                    )}
-                  </View>
-                </View>
-              );
-            }
-
-            return (
-              <MessageBubble
-                key={msg.id}
-                msg={msg}
-                isMe={msg.senderId === currentUser?.id}
-                onReply={setReplyingTo}
-                onEdit={handleEdit}
-                replyMessage={msg.replyToId ? chatMessages.find(m => m.id === msg.replyToId) : undefined}
-                onMediaClick={handleMediaClick}
-                isSecret={chat.isSecret}
-              />
-            );
-          })
-        )}
-
-        {/* Dynamic Typing Indicator */}
-        {typingInThisChat.length > 0 && (
-          <View style={styles.typingContainer}>
-            <Text style={styles.typingText}>
-              {typingInThisChat.length === 1 ? `${typingInThisChat[0]} is typing...` : 'People are typing...'}
-            </Text>
+          <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+            <BubbleLoader size={48} />
           </View>
+        ) : (
+          <React.Fragment>
+            {isFetchingMore && (
+              <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+                <BubbleLoader size={48} />
+              </View>
+            )}
+            {filteredMessages.map((msg) => {
+              if (msg.text?.startsWith('[System] 🔒 Secret Chat Request:::')) {
+                const secretChatId = msg.text.split(':::')[1];
+                const isSender = msg.senderId === currentUser?.id;
+
+                return (
+                  <View key={msg.id} style={styles.secretRequestContainer}>
+                    <View style={styles.secretRequestCard}>
+                      <View style={styles.secretLockBadge}>
+                        <Lock size={24} color="#3b82f6" />
+                      </View>
+                      <Text style={styles.secretRequestTitle}>Secret Chat Request</Text>
+                      <Text style={styles.secretRequestDesc}>
+                        {isSender
+                          ? 'Waiting for the other user to accept your request to start an end-to-end encrypted session.'
+                          : 'Wants to start an end-to-end encrypted secret chat with you.'}
+                      </Text>
+                      {!isSender && (
+                        <View style={styles.secretActionRow}>
+                          <TouchableOpacity
+                            style={styles.secretAcceptBtn}
+                            onPress={async () => {
+                              await handleSecretChatInvitation(secretChatId, 'accept');
+                              setActiveChatId(secretChatId);
+                            }}
+                          >
+                            <Text style={styles.btnTextLight}>Accept</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.secretDeclineBtn}
+                            onPress={() => handleSecretChatInvitation(secretChatId, 'decline')}
+                          >
+                            <Text style={styles.btnTextDark}>Decline</Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                );
+              }
+
+              return (
+                <MessageBubble
+                  key={msg.id}
+                  msg={msg}
+                  isMe={msg.senderId === currentUser?.id}
+                  onReply={setReplyingTo}
+                  onEdit={handleEdit}
+                  replyMessage={msg.replyToId ? chatMessages.find(m => m.id === msg.replyToId) : undefined}
+                  onMediaClick={handleMediaClick}
+                  isSecret={chat.isSecret}
+                />
+              );
+            })}
+
+            {/* Dynamic Typing Indicator */}
+            {typingInThisChat.length > 0 && (
+              <View style={styles.typingContainer}>
+                <Text style={styles.typingText}>
+                  {typingInThisChat.length === 1 ? `${typingInThisChat[0]} is typing...` : 'People are typing...'}
+                </Text>
+              </View>
+            )}
+
+          </React.Fragment>
         )}
       </ScrollView>
 
@@ -547,7 +595,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
       </Modal>
 
       {/* Footer System Dock Container */}
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={[styles.footerWrapper, { paddingBottom: insets.bottom + 10 }]}
       >
@@ -576,7 +624,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
           <View style={styles.inputContainerRow}>
             {/* Context Reply/Edit bars */}
             {editingMessage && (
-              <Animated.View entering={SlideInDown} style={styles.contextBar}>
+              <Animated.View entering={FadeIn} style={styles.contextBar}>
                 <View style={styles.contextLine} />
                 <View style={styles.contextInfo}>
                   <Text style={styles.contextTitle}>Edit Message</Text>
@@ -586,7 +634,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
               </Animated.View>
             )}
 
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => setIsAttachmentPickerOpen(!isAttachmentPickerOpen)}
               style={[styles.plusButton, isAttachmentPickerOpen ? styles.plusButtonActive : styles.plusButtonInactive]}
             >
@@ -595,19 +643,25 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
 
             <View style={[styles.inputWrapper, isSecret ? styles.inputSecret : styles.inputNormal]}>
               <TextInput
-                style={[styles.textInput, isSecret ? { color: '#f8fafc' } : { color: '#0f172a' }]}
+                style={[styles.textInput, isSecret ? { color: '#f8fafc' } : { color: '#0f172a' }, Platform.OS === 'web' && { outlineStyle: 'none' } as any]}
                 placeholder={`Message...`}
                 placeholderTextColor={isSecret ? '#64748b' : '#94a3b8'}
                 value={text}
                 onChangeText={setText}
                 multiline
+                onKeyPress={(e: any) => {
+                  if (Platform.OS === 'web' && e.nativeEvent.key === 'Enter' && !e.nativeEvent.shiftKey) {
+                    e.preventDefault();
+                    if (text.trim()) handleSend();
+                  }
+                }}
               />
               <TouchableOpacity style={styles.smileButton}>
                 <Smile size={22} color="#94a3b8" />
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={text.trim() ? handleSend : () => setIsRecordingAudio(true)}
               style={styles.sendButtonCircle}
             >
@@ -633,11 +687,11 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
         </View>
       )}
       <ShareContactModal isOpen={isShareContactOpen} onClose={() => setIsShareContactOpen(false)} appContext={{ chats, currentUser }} onShare={(contactId) => {
-         const contact = contacts.find(c => c.id === contactId);
-         if (contact && activeChatId) {
-           sendMessage(activeChatId, '', { contact: { name: contact.name || 'User', phone: contact.phone || '+1 234', avatar: contact.avatar } });
-           addToast('Contact shared', 'success');
-         }
+        const contact = contacts.find(c => c.id === contactId);
+        if (contact && activeChatId) {
+          sendMessage(activeChatId, '', { contact: { name: contact.name || 'User', phone: contact.phone || '+1 234', avatar: contact.avatar } });
+          addToast('Contact shared', 'success');
+        }
       }} />
 
     </Animated.View>
@@ -650,7 +704,7 @@ const styles = StyleSheet.create({
   bgNormal: { backgroundColor: '#e0f2fe' }, // matching aqua-depth aesthetic
   textLight: { color: '#f1f5f9' },
   textDark: { color: '#0f172a' },
-  
+
   // Flash system styles
   flashAlertContainer: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(220,38,38,0.4)', zIndex: 9999, justifyContent: 'center', alignItems: 'center' },
   flashAlertCard: { backgroundColor: '#000', padding: 24, borderRadius: 24, width: '80%', alignItems: 'center', borderWidth: 2, borderColor: '#ef4444' },

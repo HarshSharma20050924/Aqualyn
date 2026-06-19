@@ -27,6 +27,9 @@ export interface AppContextType {
   addReaction: (chatId: string, messageId: string, emoji: string) => void;
   activeChatId: string | null;
   setActiveChatId: (id: string | null) => void;
+  // ID of the chat that launched the contact profile, used for back navigation
+  originChatId: string | null;
+  setOriginChatId: (id: string | null) => void;
   activeContactId: string | null;
   setActiveContactId: (id: string | null) => void;
   typingUsers: Record<string, string[]>;

@@ -9,7 +9,9 @@ export const getChats = catchAsync(async (req: any, res: Response, next: NextFun
 });
 
 export const getMessages = catchAsync(async (req: any, res: Response, next: NextFunction) => {
-    const messages = await ChatService.getMessages(req.params.chatId, req.user.id);
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 50;
+    const messages = await ChatService.getMessages(req.params.chatId, req.user.id, page, limit);
     res.json(messages);
 });
 

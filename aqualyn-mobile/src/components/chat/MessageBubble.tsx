@@ -9,12 +9,12 @@ import {
 } from 'react-native';
 import Animated, { FadeInUp } from 'react-native-reanimated';
 import { 
-  Play, Pause, FileText, Download, MapPin, CheckCheck, 
+  Play, Pause, FileText, Download, MapPin, CheckCheck, Check,
   Reply, Copy, Trash2, Timer, Edit2, Wallet, ArrowRight, ShieldAlert 
 } from 'lucide-react-native';
 
 // --- Monospace Text Node for Secret Chats ---
-const ScrambledText = ({ text, isSecret }: { text: string; isSecret?: boolean }) => {
+const ScrambledText = ({ text, isSecret, isMe }: { text: string; isSecret?: boolean; isMe?: boolean }) => {
   const [displayText, setDisplayText] = useState(text);
 
   useEffect(() => {
@@ -45,8 +45,14 @@ const ScrambledText = ({ text, isSecret }: { text: string; isSecret?: boolean })
     return () => clearInterval(interval);
   }, [text, isSecret]);
 
+  const textStyle = isSecret
+    ? styles.secretScrambledMonospaceTypographyText
+    : isMe
+    ? styles.bubbleBodyLabelSentText
+    : styles.bubbleBodyLabelStandardText;
+
   return (
-    <Text style={isSecret ? styles.secretScrambledMonospaceTypographyText : styles.bubbleBodyLabelStandardText}>
+    <Text style={textStyle}>
       {displayText}
     </Text>
   );
@@ -176,7 +182,7 @@ function MessageBubbleComponent({
           )}
 
           {/* Primary Message Typography Segment */}
-          {msg.text && <ScrambledText text={msg.text} isSecret={isSecret} />}
+          {msg.text && <ScrambledText text={msg.text} isSecret={isSecret} isMe={isMe} />}
         </View>
       </TouchableOpacity>
 
@@ -194,9 +200,11 @@ function MessageBubbleComponent({
         {isMe && (
           <View style={styles.checkmarkStatusDynamicFlexCluster}>
             {msg.status === 'sent' ? (
-              <CheckCheck size={13} color="rgba(148, 163, 184, 0.4)" />
+              <Check size={13} color="rgba(255, 255, 255, 0.6)" />
+            ) : msg.status === 'read' || msg.status === 'seen' ? (
+              <CheckCheck size={13} color="#38bdf8" />
             ) : (
-              <CheckCheck size={13} color={msg.status === 'read' ? '#38bdf8' : '#94a3b8'} />
+              <CheckCheck size={13} color="rgba(255, 255, 255, 0.8)" />
             )}
           </View>
         )}
@@ -239,7 +247,7 @@ const styles = StyleSheet.create({
     }),
   },
   bubbleGlassThemeSentColorBlock: {
-    backgroundColor: '#0f172a',
+    backgroundColor: '#0057bd',
     borderTopRightRadius: 4,
   },
   bubbleGlassThemeReceivedColorBlock: {
@@ -365,6 +373,11 @@ const styles = StyleSheet.create({
     lineHeight: 15,
   },
   bubbleBodyLabelStandardText: {
+    fontSize: 15,
+    lineHeight: 20,
+    color: '#0057bd',
+  },
+  bubbleBodyLabelSentText: {
     fontSize: 15,
     lineHeight: 20,
     color: '#ffffff',

@@ -217,6 +217,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#1e293b',
     padding: 0,
+    ...(Platform.OS === 'web' ? { outlineStyle: 'none' } : {} as any),
   },
   scrollContent: {
     padding: 16,

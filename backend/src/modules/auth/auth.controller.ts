@@ -9,6 +9,9 @@ import { supabaseAdmin } from '../../config/supabase';
 
 const JWT_SECRET = process.env.JWT_SECRET || '07f4aa247bb2789d402af105e7fc416e57aebb266facfb2c30ad2843a86e4e61';
 
+// In-memory store for QR sessions (Short-lived)
+const qrSessions = new Map<string, { status: 'pending' | 'linked', userId?: string, token?: string, expiresAt: number }>();
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // EMAIL OTP — check existence only (Supabase OTP is sent from the frontend client)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -431,3 +434,64 @@ export const getProfile = catchAsync(async (req: Request, res: Response, next: N
 
     res.status(200).json(user);
 });
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// QR CODE LOGIN
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+export const generateQrToken = catchAsync(async (req: Request, res: Response) => {
+    const qrToken = require('crypto').randomUUID();
+    // Valid for 5 minutes
+    qrSessions.set(qrToken, { status: 'pending', expiresAt: Date.now() + 5 * 60 * 1000 });
+    res.json({ qrToken });
+});
+
+export const getQrStatus = catchAsync(async (req: Request, res: Response) => {
+    const token = req.params.token as string;
+    const session = qrSessions.get(token);
+
+    if (!session) {
+        return res.status(404).json({ error: 'QR Token expired or invalid' });
+    }
+    if (session.expiresAt < Date.now()) {
+        qrSessions.delete(token);
+        return res.status(404).json({ error: 'QR Token expired' });
+    }
+
+    if (session.status === 'linked' && session.token) {
+        // Set the cookie for the web client
+        res.cookie('token', session.token, {
+            httpOnly: true, secure: true, sameSite: 'none', maxAge: 30 * 24 * 60 * 60 * 1000
+        });
+        qrSessions.delete(token); // one-time use
+        return res.json({ status: 'linked', token: session.token });
+    }
+
+    res.json({ status: 'pending' });
+});
+
+export const linkDeviceQr = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const decodedToken = (req as any).user;
+    if (!decodedToken || !decodedToken.id) return next(new AppError('Unauthorized', 401));
+
+    const { qrToken } = req.body;
+    const session = qrSessions.get(qrToken);
+
+    if (!session) {
+        return next(new AppError('QR Token expired or invalid', 404));
+    }
+
+    // Generate a fresh JWT for the newly linked web device
+    const user = await (prisma as any).user.findUnique({ where: { id: decodedToken.id } });
+    if (!user) return next(new AppError('User not found', 404));
+
+    const newToken = jwt.sign(
+        { id: user.id, uid: user.firebaseUid, email: user.email, phone_number: user.phone },
+        JWT_SECRET,
+        { expiresIn: '30d' }
+    );
+
+    qrSessions.set(qrToken, { ...session, status: 'linked', userId: user.id, token: newToken });
+    res.json({ success: true, message: 'Device linked successfully!' });
+});
+

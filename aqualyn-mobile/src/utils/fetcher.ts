@@ -13,15 +13,34 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
  * 2. Token injection from AsyncStorage
  * 3. Conditional Content-Type payload configuration
  */
-export async function apiFetch(url: string, options: RequestInit = {}) {
+// Simple in-memory cache
+const cache = new Map<string, { data: any; timestamp: number }>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+export async function apiFetch(url: string, options: RequestInit & { cache?: boolean } = {}) {
     const headers: Record<string, string> = { ...((options.headers as any) || {}) };
     
     // React Native FormData objects require skipping the standard application/json Content-Type 
     // header so the underlying native networking layer can inject the multipart boundary string.
     const isFormData = options.body && typeof options.body === 'object' && 'append' in options.body;
+    const isGetRequest = options.method?.toUpperCase() === 'GET' || !options.method;
+    const useCache = isGetRequest && (options.cache ?? true);
 
     if (!isFormData && !headers['Content-Type']) {
         headers['Content-Type'] = 'application/json';
+    }
+
+    // Handle caching for GET requests
+    if (useCache) {
+        const cacheKey = `${url}|${JSON.stringify(options)}`;
+        const cached = cache.get(cacheKey);
+        
+        if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+            return new Response(JSON.stringify(cached.data), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' }
+            });
+        }
     }
 
     if (!headers['Authorization']) {
@@ -55,6 +74,13 @@ export async function apiFetch(url: string, options: RequestInit = {}) {
         } catch (e) {
             console.error('[apiFetch] Error clearing auth token on 401:', e);
         }
+    }
+    
+    // Cache successful GET responses
+    if (useCache && response.ok && isGetRequest) {
+        const cacheKey = `${url}|${JSON.stringify(options)}`;
+        const data = await response.clone().json();
+        cache.set(cacheKey, { data, timestamp: Date.now() });
     }
 
     return response;

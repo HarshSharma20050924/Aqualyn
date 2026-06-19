@@ -191,11 +191,13 @@ export class ChatService {
         });
     }
 
-    static async getMessages(chatId: string, userId: string) {
+    static async getMessages(chatId: string, userId: string, page: number = 1, limit: number = 50) {
+        const skip = (page - 1) * limit;
         const messages = await (prisma as any).message.findMany({
             where: { chatId },
-            orderBy: { createdAt: 'asc' },
-            take: 100,
+            orderBy: { createdAt: 'desc' },
+            take: limit,
+            skip: skip,
             select: {
                 id: true, chatId: true, senderId: true, text: true, 
                 imageUrl: true, videoUrl: true, fileUrl: true, 
@@ -212,6 +214,7 @@ export class ChatService {
                 const deletedFor = m.deletedFor as any || [];
                 return !deletedFor.includes(userId);
             })
+            .reverse()
             .map((m: any) => ({
                 ...m,
                 timestamp: new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })

@@ -61,18 +61,53 @@ export default function NewChatModal({ isOpen, onClose, onNavigate, appContext }
 
   if (!isOpen) return null;
 
-  const allAvailableUsers = [
-    ...contacts.map((c: any) => ({ id: c.id, name: c.name, avatar: c.avatar, role: c.role || 'Contact', isContact: true })),
-    ...globalUsers
-      .filter((u: any) => !contacts.some((c: any) => c.id === u.id) && u.id !== currentUser?.id)
-      .map((u: any) => ({
-        id: u.id,
-        name: u.displayName || u.username || 'Aqualyn User',
-        avatar: u.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${u.username || 'U'}`,
-        role: u.bio || 'Aqualyn User',
-        isContact: false
-      }))
-  ];
+  const allAvailableUsers = (() => {
+    const seen = new Set<string>();
+    const users: any[] = [];
+    
+    globalUsers.forEach((u: any) => {
+      if (u.id === currentUser?.id) return;
+      const isConnection = currentUser?.following?.includes(u.id) || 
+                           currentUser?.followers?.includes(u.id) ||
+                           chats.some((c: any) => c.participantIds?.includes(u.id));
+      if (isConnection) {
+        seen.add(u.id);
+        users.push({
+          id: u.id,
+          name: u.displayName || u.username || 'Aqualyn User',
+          avatar: u.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${u.username || 'U'}`,
+          role: 'Connection',
+          isContact: true
+        });
+      }
+    });
+
+    contacts.forEach((c: any) => {
+      if (!seen.has(c.id)) {
+        seen.add(c.id);
+        users.push({
+          id: c.id,
+          name: c.name,
+          avatar: c.avatar,
+          role: c.role || 'Contact',
+          isContact: true
+        });
+      }
+    });
+
+    globalUsers.forEach((u: any) => {
+      if (!seen.has(u.id) && u.id !== currentUser?.id) {
+        users.push({
+          id: u.id,
+          name: u.displayName || u.username || 'Aqualyn User',
+          avatar: u.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${u.username || 'U'}`,
+          role: u.bio || 'Aqualyn User',
+          isContact: false
+        });
+      }
+    });
+    return users;
+  })();
 
   const filteredContacts = allAvailableUsers.filter((u: any) => 
     u.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -443,6 +478,7 @@ const styles = StyleSheet.create({
     color: '#0f172a',
     borderWidth: 1,
     borderColor: 'rgba(15, 23, 42, 0.02)',
+    ...(Platform.OS === 'web' ? { outlineStyle: 'none' } : {} as any),
   },
   quickActionNavigationRowStackGroup: {
     paddingHorizontal: 16,
@@ -562,6 +598,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: '#0f172a',
+    ...(Platform.OS === 'web' ? { outlineStyle: 'none' } : {} as any),
   },
   descriptionInputFieldWrapperFullWidthContainer: {
     borderBottomWidth: 1,
@@ -572,6 +609,7 @@ const styles = StyleSheet.create({
   descriptionInputFieldFormTextTypography: {
     fontSize: 14,
     color: '#0f172a',
+    ...(Platform.OS === 'web' ? { outlineStyle: 'none' } : {} as any),
   },
   toggleSettingsOuterBlockPartitionList: {
     gap: 16,

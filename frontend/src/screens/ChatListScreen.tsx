@@ -7,6 +7,7 @@ import NewFolderModal from '../components/modals/NewFolderModal';
 import { ENDPOINTS } from '../config/api';
 import { ChatPeekPreview } from '../components/chat/ChatPeekPreview';
 import DeleteChatDialog from '../components/chat/DeleteChatDialog';
+import BubbleLoader from '../components/ui/BubbleLoader';
 
 import { apiFetch } from '../utils/fetcher';
 
@@ -203,7 +204,7 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="min-h-screen bg-surface pb-28">
-      <header className="fixed top-0 w-full z-50 bg-slate-50/70 backdrop-blur-xl border-b border-white/15 shadow-[0_8px_32px_0_rgba(0,87,189,0.06)]">
+      <header className="sticky top-0 w-full z-50 bg-slate-50/70 backdrop-blur-xl border-b border-white/15 shadow-[0_8px_32px_0_rgba(0,87,189,0.06)]">
         <div className="flex items-center justify-between px-6 h-16 w-full max-w-none">
           {isSelectionMode ? (
             <div className="flex-1 flex items-center justify-between">
@@ -370,9 +371,9 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
       </header>
 
         <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar relative z-0 p-2 sm:p-4">
-          {(isLoading || isFetchingData) ? (
-            <div className="space-y-2">
-              {[1, 2, 3, 4, 5, 6].map(i => <SkeletonChat key={`skel-${i}`} />)}
+          {(isLoading || isFetchingData) && chats.length === 0 ? (
+            <div className="space-y-3">
+              {[1, 2, 3, 4, 5].map(i => <SkeletonChat key={`main-skel-${i}`} />)}
             </div>
           ) : (
           <>

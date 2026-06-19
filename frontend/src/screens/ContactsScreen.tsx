@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, Search, UserPlus, X, Share2, Phone, User, Check, RefreshCw, Users, ShieldAlert } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import AddContactModal from '../components/modals/AddContactModal';
+import { apiFetch } from '../utils/fetcher';
+import { ENDPOINTS } from '../config/api';
 
 export default function ContactsScreen({ onNavigate }: { onNavigate: (s: string) => void }) {
   const { 
@@ -14,12 +16,47 @@ export default function ContactsScreen({ onNavigate }: { onNavigate: (s: string)
     addToast, 
     syncContacts,
     currentUser,
-    globalUsers
+    globalUsers,
+    setGlobalUsers
   } = useAppContext();
 
   const [isAddContactOpen, setIsAddContactOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'contacts' | 'followers' | 'following'>('contacts');
   const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => {
+    if (currentUser?.id) {
+      const fetchFollowData = async () => {
+        try {
+          const [followersRes, followingRes] = await Promise.all([
+            apiFetch(ENDPOINTS.GET_FOLLOWERS(currentUser.id)).catch(() => ({ ok: false })),
+            apiFetch(ENDPOINTS.GET_FOLLOWING(currentUser.id)).catch(() => ({ ok: false }))
+          ]);
+          
+          let newUsers: any[] = [];
+          if (followersRes.ok) {
+            const followers = await (followersRes as Response).json();
+            if (Array.isArray(followers)) newUsers = [...newUsers, ...followers];
+          }
+          if (followingRes.ok) {
+            const following = await (followingRes as Response).json();
+            if (Array.isArray(following)) newUsers = [...newUsers, ...following];
+          }
+          
+          if (newUsers.length > 0) {
+            setGlobalUsers((prev: any[]) => {
+              const existingIds = new Set(prev.map(u => u.id));
+              const additions = newUsers.filter(u => !existingIds.has(u.id));
+              return [...prev, ...additions];
+            });
+          }
+        } catch (e) {
+          console.error("Failed to fetch follow data:", e);
+        }
+      };
+      fetchFollowData();
+    }
+  }, [currentUser?.id, setGlobalUsers]);
 
   const handleContactClick = (id: string) => {
     setActiveContactId(id);
@@ -89,8 +126,8 @@ export default function ContactsScreen({ onNavigate }: { onNavigate: (s: string)
   );
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="min-h-screen bg-surface pb-28">
-      <header className="fixed top-0 w-full z-50 bg-slate-50/70 backdrop-blur-xl border-b border-white/15 shadow-[0_8px_32px_0_rgba(0,87,189,0.06)]">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="min-h-screen flex flex-col bg-surface pb-28">
+      <header className="sticky top-0 shrink-0 w-full z-50 bg-slate-50/70 backdrop-blur-xl border-b border-white/15 shadow-[0_8px_32px_0_rgba(0,87,189,0.06)]">
         <div className="flex items-center justify-between px-6 h-16 w-full max-w-none">
           <div className="flex items-center gap-4">
             <h1 className="text-2xl font-black text-on-surface font-headline tracking-tight">Contacts</h1>
@@ -114,7 +151,7 @@ export default function ContactsScreen({ onNavigate }: { onNavigate: (s: string)
         </div>
       </header>
 
-      <main className="pt-20 px-4 max-w-2xl mx-auto">
+      <main className="flex-1 px-4 py-4 max-w-2xl mx-auto w-full">
         {/* Invite & Sync actions */}
         <div className="grid grid-cols-2 gap-3 mb-6">
           <div 

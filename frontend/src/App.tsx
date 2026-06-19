@@ -22,7 +22,15 @@ import BubbleLoader from './components/ui/BubbleLoader';
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState('login');
+  // Always tracks the screen we were on BEFORE the current one
+  const [previousScreen, setPreviousScreen] = useState('chats');
   const { isAppLocked, appLockPin, theme, aquaIntensity } = useAppContext();
+
+  // All navigation goes through here so previousScreen is always accurate
+  const navigateTo = (screen: string) => {
+    setPreviousScreen(currentScreen);
+    setCurrentScreen(screen);
+  };
 
   useEffect(() => {
     // Apply theme settings
@@ -105,20 +113,27 @@ export default function App() {
       ) : (
         <>
           <AnimatePresence mode="wait">
-            {currentScreen === 'login' && <LoginScreen key="login" onLogin={() => setCurrentScreen('chats')} />}
-            {currentScreen === 'feed' && <FeedScreen key="feed" onNavigate={setCurrentScreen} />}
-            {currentScreen === 'chats' && <ChatListScreen key="chats" onNavigate={setCurrentScreen} />}
-            {currentScreen === 'chat-detail' && <ChatDetailScreen key="chat-detail" onBack={() => setCurrentScreen('chats')} onNavigate={setCurrentScreen} />}
-            {currentScreen === 'profile' && <ProfileScreen key="profile" onNavigate={setCurrentScreen} />}
-            {currentScreen === 'settings' && <SettingsScreen key="settings" onBack={() => setCurrentScreen('profile')} onNavigate={setCurrentScreen} />}
-            {currentScreen === 'contacts' && <ContactsScreen key="contacts" onNavigate={setCurrentScreen} />}
-            {currentScreen === 'edit-profile' && <EditProfileScreen key="edit-profile" onBack={() => setCurrentScreen('profile')} />}
-            {currentScreen === 'contact-profile' && <ContactProfileScreen key="contact-profile" onBack={() => setCurrentScreen('contacts')} onNavigate={setCurrentScreen} />}
-            {currentScreen === 'notifications' && <NotificationsScreen key="notifications" onBack={() => setCurrentScreen('feed')} />}
+            {currentScreen === 'login' && <LoginScreen key="login" onLogin={() => navigateTo('chats')} />}
+            {currentScreen === 'feed' && <FeedScreen key="feed" onNavigate={navigateTo} />}
+            {currentScreen === 'chats' && <ChatListScreen key="chats" onNavigate={navigateTo} />}
+            {currentScreen === 'chat-detail' && <ChatDetailScreen key="chat-detail" onBack={() => navigateTo('chats')} onNavigate={navigateTo} />}
+            {currentScreen === 'profile' && <ProfileScreen key="profile" onNavigate={navigateTo} />}
+            {currentScreen === 'settings' && <SettingsScreen key="settings" onBack={() => navigateTo('profile')} onNavigate={navigateTo} />}
+            {currentScreen === 'contacts' && <ContactsScreen key="contacts" onNavigate={navigateTo} />}
+            {currentScreen === 'edit-profile' && <EditProfileScreen key="edit-profile" onBack={() => navigateTo('profile')} />}
+            {currentScreen === 'contact-profile' && (
+              <ContactProfileScreen
+                key="contact-profile"
+                // Always go back to wherever we came from — chat, contacts, feed, etc.
+                onBack={() => setCurrentScreen(previousScreen)}
+                onNavigate={navigateTo}
+              />
+            )}
+            {currentScreen === 'notifications' && <NotificationsScreen key="notifications" onBack={() => navigateTo('feed')} />}
           </AnimatePresence>
           
           {currentScreen !== 'login' && currentScreen !== 'chat-detail' && currentScreen !== 'contact-profile' && currentScreen !== 'edit-profile' && currentScreen !== 'notifications' && (
-            <BottomNav currentScreen={currentScreen} onNavigate={setCurrentScreen} />
+            <BottomNav currentScreen={currentScreen} onNavigate={navigateTo} />
           )}
         </>
       )}

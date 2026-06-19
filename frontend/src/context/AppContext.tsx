@@ -34,6 +34,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [globalUsers, setGlobalUsers] = useState<User[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [activeContactId, setActiveContactId] = useState<string | null>(null);
+  // Store the ID of the chat from which we navigated to a contact profile
+  const [originChatId, setOriginChatId] = useState<string | null>(null);
 
   const activeChatIdRef = useRef<string | null>(null);
   const currentUserRef = useRef<User | null>(null);
@@ -366,7 +368,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   return (
     <AppContext.Provider value={{
       currentUser, setCurrentUser, socket, chats, setChats, messages, setMessages, contacts, ...actions,
-      activeChatId, setActiveChatId, activeContactId, setActiveContactId,
+      activeChatId, setActiveChatId, originChatId, setOriginChatId, activeContactId, setActiveContactId,
       toasts, addToast, removeToast, isLoading, setIsLoading, isFetchingData,
       folders, setFolders, theme, setTheme, aquaIntensity, setAquaIntensity,
       appLockPin, setAppLockPin, archiveLockPin, setArchiveLockPin, isAppLocked, setIsAppLocked,

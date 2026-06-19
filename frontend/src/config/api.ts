@@ -7,6 +7,7 @@ export const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:50
 // Endpoints mapping for easier maintenance
 export const ENDPOINTS = {
     AUTH_SYNC: `${API_BASE_URL}/api/auth/sync`,
+    AUTH_SYNC_TOKEN: `${API_BASE_URL}/api/auth/sync-token`,
     AUTH_SEND_OTP: `${API_BASE_URL}/api/auth/send-otp`,
     AUTH_VERIFY_OTP: `${API_BASE_URL}/api/auth/verify-otp`,
     USER_PROFILE: (id: string) => `${API_BASE_URL}/api/user/profile/${id}`,
@@ -45,4 +46,7 @@ export const ENDPOINTS = {
     GET_FOLLOWING: (userId: string) => `${API_BASE_URL}/api/user/${userId}/following`,
     USER_POSTS: (userId: string) => `${API_BASE_URL}/api/social/user/${userId}/posts`,
     USER_STORIES: (userId: string) => `${API_BASE_URL}/api/social/user/${userId}/stories`,
+    QR_GENERATE: `${API_BASE_URL}/api/auth/qr/generate`,
+    QR_STATUS: (token: string) => `${API_BASE_URL}/api/auth/qr/status/${token}`,
+    QR_LINK: `${API_BASE_URL}/api/auth/qr/link`,
 };

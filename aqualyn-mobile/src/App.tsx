@@ -31,6 +31,7 @@ import EditProfileScreen from './screens/EditProfileScreen';
 import ContactProfileScreen from './screens/ContactProfileScreen';
 import NotificationsScreen from './screens/NotificationsScreen';
 import FeedScreen from './screens/FeedScreen';
+import LinkedDevicesScreen from './screens/LinkedDevicesScreen';
 
 // Global Overlays & Modals
 import BottomNav from './components/BottomNav';
@@ -112,9 +113,11 @@ export default function App() {
        case 'edit-profile':
          return <EditProfileScreen onBack={() => setCurrentScreen('profile')} />;
        case 'contact-profile':
-         return <ContactProfileScreen onBack={() => setCurrentScreen('contacts')} onNavigate={setCurrentScreen} />;
+         return <ContactProfileScreen onBack={() => setCurrentScreen('chat-detail')} onNavigate={setCurrentScreen} />;
        case 'notifications':
          return <NotificationsScreen onBack={() => setCurrentScreen('feed')} />;
+       case 'linked-devices':
+         return <LinkedDevicesScreen onBack={() => setCurrentScreen('chats')} onNavigate={setCurrentScreen} />;
        default:
          return <ChatListScreen onNavigate={setCurrentScreen} />;
     }
