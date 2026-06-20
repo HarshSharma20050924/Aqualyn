@@ -37,13 +37,31 @@ jobs:
         run: npx expo prebuild --platform android --clean
 
       - name: 🛠️ Optimize APK Size (R8 Shrinking & ABI Splits)
-        working-directory: aqualyn-mobile/android
+        working-directory: aqualyn-mobile
         run: |
-          echo "android.enableProguardInReleaseBuilds=true" >> gradle.properties
-          echo "android.enableSeparateBuildPerCPUArchitecture=true" >> gradle.properties
+          echo "android.enableProguardInReleaseBuilds=true" >> android/gradle.properties
+          
+          python3 -c '
+          path = "android/app/build.gradle"
+          with open(path, "r") as f: content = f.read()
+          split_block = """
+          splits {
+              abi {
+                  enable true
+                  reset()
+                  include "armeabi-v7a", "arm64-v8a"
+                  universalApk false
+              }
+          }
+          """
+          content = content.replace("namespace '\''com.aqualyn.com'\''", "namespace '\''com.aqualyn.com'\''\n" + split_block)
+          with open(path, "w") as f: f.write(content)
+          '
 
       - name: 🔨 Build APK
         working-directory: aqualyn-mobile/android
+        env:
+          NODE_OPTIONS: "--max_old_space_size=4096"
         run: |
           ./gradlew clean
           ./gradlew assembleRelease --stacktrace --info
