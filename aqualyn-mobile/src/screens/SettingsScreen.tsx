@@ -121,8 +121,8 @@ export default function SettingsScreen({ onBack, onNavigate }: SettingsScreenPro
       case 'folders':
         return (
           <Animated.View 
-            entering={FadeIn.duration(250)} 
-            exiting={FadeOut.duration(200)} 
+             
+             
             style={styles.subviewAbsoluteOverlayDeckContainer}
           >
             <SubViewHeader title="Chat Folders" />
@@ -193,8 +193,8 @@ export default function SettingsScreen({ onBack, onNavigate }: SettingsScreenPro
       case 'appearance':
         return (
           <Animated.View 
-            entering={FadeIn.duration(250)} 
-            exiting={FadeOut.duration(200)} 
+             
+             
             style={styles.subviewAbsoluteOverlayDeckContainer}
           >
             <SubViewHeader title="Appearance" />
@@ -276,8 +276,8 @@ export default function SettingsScreen({ onBack, onNavigate }: SettingsScreenPro
       case 'wallet':
         return (
           <Animated.View 
-            entering={FadeIn.duration(250)} 
-            exiting={FadeOut.duration(200)} 
+             
+             
             style={styles.subviewAbsoluteOverlayDeckContainer}
           >
             <SubViewHeader title="Wallet" />
@@ -326,7 +326,7 @@ export default function SettingsScreen({ onBack, onNavigate }: SettingsScreenPro
         );
       case 'storage':
         return (
-          <Animated.View entering={FadeIn.duration(250)} exiting={FadeOut.duration(200)} style={styles.subviewAbsoluteOverlayDeckContainer}>
+          <Animated.View   style={styles.subviewAbsoluteOverlayDeckContainer}>
             <SubViewHeader title="Data and Storage" />
             <ScrollView contentContainerStyle={[styles.subviewScrollStackContent, { paddingBottom: insets.bottom + 40 }]} showsVerticalScrollIndicator={false}>
               <StorageSettings />
@@ -351,7 +351,7 @@ export default function SettingsScreen({ onBack, onNavigate }: SettingsScreenPro
         );
       case 'security':
         return (
-          <Animated.View entering={FadeIn.duration(250)} exiting={FadeOut.duration(200)} style={styles.subviewAbsoluteOverlayDeckContainer}>
+          <Animated.View   style={styles.subviewAbsoluteOverlayDeckContainer}>
             <SubViewHeader title="Security" />
             <ScrollView contentContainerStyle={[styles.subviewScrollStackContent, { paddingBottom: insets.bottom + 40 }]} showsVerticalScrollIndicator={false}>
               <SecuritySettings />
@@ -360,7 +360,7 @@ export default function SettingsScreen({ onBack, onNavigate }: SettingsScreenPro
         );
       case 'notifications':
         return (
-          <Animated.View entering={FadeIn.duration(250)} exiting={FadeOut.duration(200)} style={styles.subviewAbsoluteOverlayDeckContainer}>
+          <Animated.View   style={styles.subviewAbsoluteOverlayDeckContainer}>
             <SubViewHeader title="Notifications" />
             <ScrollView contentContainerStyle={[styles.subviewScrollStackContent, { paddingBottom: insets.bottom + 40 }]} showsVerticalScrollIndicator={false}>
               <NotificationsSettings />
@@ -375,8 +375,8 @@ export default function SettingsScreen({ onBack, onNavigate }: SettingsScreenPro
   return (
     <View style={styles.viewportBaseFrame}>
       <Animated.View 
-        entering={FadeIn} 
-        exiting={FadeOut} 
+         
+         
         style={styles.viewportBaseFrame}
       >
         {/* Sticky Base Header Layout */}

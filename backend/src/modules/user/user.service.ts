@@ -20,6 +20,19 @@ export class UserService {
         return profile;
     }
 
+    static async updateProfile(userId: string, data: any) {
+        const updateData: any = {};
+        if (data.displayName !== undefined) updateData.displayName = data.displayName;
+        if (data.bio !== undefined) updateData.bio = data.bio;
+        if (data.avatar !== undefined) updateData.avatar = data.avatar;
+        
+        const updated = await (prisma as any).user.update({
+            where: { id: userId },
+            data: updateData
+        });
+        return { success: true, profile: updated };
+    }
+
     static async blockUser(userId: string, targetUserId: string) {
         if (!targetUserId) throw new AppError('targetUserId required', 400);
         const existing = await (prisma as any).blockedUser.findUnique({
@@ -75,16 +88,28 @@ export class UserService {
 
     static async syncContacts(userId: string, phones: string[]) {
         if (!phones || !Array.isArray(phones)) throw new AppError('Phones array required', 400);
-        return await (prisma as any).user.findMany({
+        
+        // Fetch all users with phone numbers
+        const users = await (prisma as any).user.findMany({
             where: {
-                phone: { in: phones },
-                searchByPhone: true,
+                phone: { not: null },
                 ...(userId ? { NOT: { id: userId } } : {})
             },
             select: {
                 id: true, username: true, displayName: true,
                 avatar: true, phone: true
             }
+        });
+
+        // Match by last 10 digits
+        const phoneSuffixes = new Set(
+            phones.map(p => p.replace(/[^\d]/g, '').slice(-10)).filter(s => s.length >= 7)
+        );
+
+        return users.filter((u: any) => {
+            if (!u.phone) return false;
+            const uSuffix = u.phone.replace(/[^\d]/g, '').slice(-10);
+            return phoneSuffixes.has(uSuffix);
         });
     }
 

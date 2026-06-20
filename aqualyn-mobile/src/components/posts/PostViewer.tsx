@@ -120,7 +120,7 @@ export default function PostViewer({ post, isOpen, onClose }: PostViewerProps) {
         {showMenu && (
           <View style={styles.menuOverlayModalCenteringViewport}>
             <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setShowMenu(false)} />
-            <Animated.View entering={FadeIn} style={styles.menuCardStructureWrapperCanvas}>
+            <Animated.View  style={styles.menuCardStructureWrapperCanvas}>
               {post.userId === currentUser?.id && (
                 <>
                   <TouchableOpacity onPress={() => { pinPost(post.id); setShowMenu(false); }} style={styles.menuInteractiveRowItemCellButton}>
@@ -152,7 +152,7 @@ export default function PostViewer({ post, isOpen, onClose }: PostViewerProps) {
         {showChatPicker && (
           <View style={styles.menuOverlayModalCenteringViewport}>
             <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setShowChatPicker(false)} />
-            <Animated.View entering={SlideInDown} style={styles.chatPickerPanelContainerSheetCard}>
+            <Animated.View  style={styles.chatPickerPanelContainerSheetCard}>
               <View style={styles.chatPickerHeaderToolbarRow}>
                 <Text style={styles.chatPickerHeaderPrimaryHeadingText}>Share to Chat</Text>
                 <TouchableOpacity onPress={() => setShowChatPicker(false)}>
@@ -176,7 +176,7 @@ export default function PostViewer({ post, isOpen, onClose }: PostViewerProps) {
           <View style={styles.commentsAbsoluteDrawerBackdropLayerMask}>
             <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setShowComments(false)} />
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.commentsKeyboardAvoidingSheetContainer}>
-              <Animated.View entering={SlideInDown} exiting={SlideOutDown} style={styles.commentsDrawerPanelCanvasBody}>
+              <Animated.View   style={styles.commentsDrawerPanelCanvasBody}>
                 <View style={styles.commentsHeaderToolbarFixedRow}>
                   <Text style={styles.commentsHeaderPrimaryTitleLabelText}>Comments</Text>
                   <TouchableOpacity onPress={() => setShowComments(false)} style={styles.commentsHeaderDismissIconCirclePill}>

@@ -6,6 +6,9 @@ import {
   TouchableOpacity,
   Image,
   Platform,
+  Modal,
+  PanResponder,
+  Animated as RNAnimated,
 } from 'react-native';
 import Animated, { FadeInUp } from 'react-native-reanimated';
 import { 
@@ -67,6 +70,9 @@ interface MessageBubbleProps {
   replyMessage?: any;
   onMediaClick?: (msg: any) => void;
   isSecret?: boolean;
+  onForward?: (msg: any) => void;
+  onReact?: (msg: any, emoji: string) => void;
+  onDelete?: (msg: any) => void;
 }
 
 function MessageBubbleComponent({
@@ -77,10 +83,42 @@ function MessageBubbleComponent({
   replyMessage,
   onMediaClick,
   isSecret,
+  onForward,
+  onReact,
+  onDelete,
 }: MessageBubbleProps) {
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
+
+  // --- Slide to Reply Setup ---
+  const pan = useRef(new RNAnimated.ValueXY()).current;
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        return Math.abs(gestureState.dx) > 20 && Math.abs(gestureState.dy) < 20;
+      },
+      onPanResponderMove: (evt, gestureState) => {
+        if (!isMe && gestureState.dx > 0 && gestureState.dx < 80) {
+          pan.setValue({ x: gestureState.dx, y: 0 });
+        } else if (isMe && gestureState.dx < 0 && gestureState.dx > -80) {
+          pan.setValue({ x: gestureState.dx, y: 0 });
+        }
+      },
+      onPanResponderRelease: (evt, gestureState) => {
+        if (!isMe && gestureState.dx > 50) {
+          onReply(msg);
+        } else if (isMe && gestureState.dx < -50) {
+          onReply(msg);
+        }
+        RNAnimated.spring(pan, {
+          toValue: { x: 0, y: 0 },
+          useNativeDriver: true,
+          bounciness: 10,
+        }).start();
+      },
+    })
+  ).current;
 
   // Self-Destruct Counter Logic Mock
   useEffect(() => {
@@ -113,9 +151,14 @@ function MessageBubbleComponent({
   }
 
   return (
-    <Animated.View 
-      entering={FadeInUp.duration(200)}
-      style={[styles.messageRowGroupAlignmentTrack, isMe ? styles.alignToRight : styles.alignToLeft]}
+    <View style={styles.bubbleContainerBaseLayer}>
+    <RNAnimated.View
+      {...panResponder.panHandlers}
+      style={[
+        styles.messageRowGroupAlignmentTrack, 
+        isMe ? styles.alignToRight : styles.alignToLeft,
+        { transform: [{ translateX: pan.x }] }
+      ]}
     >
       <TouchableOpacity
         onLongPress={() => setShowContextMenu(true)}
@@ -200,22 +243,66 @@ function MessageBubbleComponent({
         {isMe && (
           <View style={styles.checkmarkStatusDynamicFlexCluster}>
             {msg.status === 'sent' ? (
-              <Check size={13} color="rgba(255, 255, 255, 0.6)" />
+              <Check size={13} color="#94a3b8" />
+            ) : msg.status === 'delivered' ? (
+              <CheckCheck size={13} color="#94a3b8" />
             ) : msg.status === 'read' || msg.status === 'seen' ? (
               <CheckCheck size={13} color="#38bdf8" />
             ) : (
-              <CheckCheck size={13} color="rgba(255, 255, 255, 0.8)" />
+              <Check size={13} color="#94a3b8" style={{ opacity: 0.5 }} />
             )}
           </View>
         )}
       </View>
-    </Animated.View>
+    </RNAnimated.View>
+
+    <Modal visible={showContextMenu} transparent animationType="fade" onRequestClose={() => setShowContextMenu(false)}>
+      <TouchableOpacity style={styles.contextMenuBackdrop} activeOpacity={1} onPress={() => setShowContextMenu(false)}>
+        <View style={styles.contextMenuPopupBox}>
+          
+          <View style={styles.reactionsRowDock}>
+            {['❤️', '😂', '😮', '😢', '🙏', '🔥'].map(emoji => (
+              <TouchableOpacity key={emoji} onPress={() => { onReact?.(msg, emoji); setShowContextMenu(false); }} style={styles.reactionBubbleTrigger}>
+                <Text style={styles.reactionEmojiTypography}>{emoji}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <View style={styles.contextActionsListBlock}>
+            <TouchableOpacity style={styles.contextActionItemRow} onPress={() => { onReply(msg); setShowContextMenu(false); }}>
+              <Reply size={20} color="#0f172a" />
+              <Text style={styles.contextActionItemLabel}>Reply</Text>
+            </TouchableOpacity>
+            {onForward && (
+              <TouchableOpacity style={styles.contextActionItemRow} onPress={() => { onForward(msg); setShowContextMenu(false); }}>
+                <ArrowRight size={20} color="#0f172a" />
+                <Text style={styles.contextActionItemLabel}>Forward</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={styles.contextActionItemRow} onPress={() => { setShowContextMenu(false); }}>
+              <Copy size={20} color="#0f172a" />
+              <Text style={styles.contextActionItemLabel}>Copy</Text>
+            </TouchableOpacity>
+            {isMe && onDelete && (
+              <TouchableOpacity style={[styles.contextActionItemRow, styles.contextActionItemRowDestructive]} onPress={() => { onDelete(msg); setShowContextMenu(false); }}>
+                <Trash2 size={20} color="#ef4444" />
+                <Text style={[styles.contextActionItemLabel, { color: '#ef4444' }]}>Delete</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+    </View>
   );
 }
 
 export default React.memo(MessageBubbleComponent);
 
 const styles = StyleSheet.create({
+  bubbleContainerBaseLayer: {
+    width: '100%',
+  },
   messageRowGroupAlignmentTrack: {
     marginVertical: 4,
     maxWidth: '80%',
@@ -444,5 +531,64 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: '#cbd5e1',
+  },
+  contextMenuBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  contextMenuPopupBox: {
+    width: 280,
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  reactionsRowDock: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+    backgroundColor: '#f8fafc',
+  },
+  reactionBubbleTrigger: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: '#ffffff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  reactionEmojiTypography: {
+    fontSize: 22,
+  },
+  contextActionsListBlock: {
+    paddingVertical: 8,
+  },
+  contextActionItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    gap: 16,
+  },
+  contextActionItemRowDestructive: {
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+    marginTop: 4,
+  },
+  contextActionItemLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0f172a',
   },
 });

@@ -187,7 +187,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
         <Animated.View style={s.shell}>
           {/* ── INTRO ── */}
           {step === 'intro' && (
-            <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={s.center}>
+            <Animated.View   style={s.center}>
               <View style={{ marginBottom: 40, alignItems: 'center', justifyContent: 'center' }}>
                 <Image source={require('../../assets/images/aqualyn.png')} style={{ width: 140, height: 140, resizeMode: 'contain', borderRadius: 32 }} />
               </View>
@@ -202,7 +202,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
 
           {/* ── EMAIL ── */}
           {step === 'email' && (
-            <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={s.card}>
+            <Animated.View   style={s.card}>
               <Text style={s.cardTitle}>{isExistingUser === true ? 'Welcome Back' : 'Join Aqualyn'}</Text>
               <Text style={s.cardDesc}>{isExistingUser === true ? 'Sign in to continue.' : "Create an account and start messaging."}</Text>
 
@@ -230,7 +230,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
 
           {/* ── OTP ── */}
           {step === 'otp' && (
-            <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={s.card}>
+            <Animated.View   style={s.card}>
               <Text style={s.cardTitle}>Check your email</Text>
               <Text style={s.cardDesc}>We sent a 6-digit code to <Text style={{ fontWeight: '700', color: '#0057bd' }}>{email}</Text></Text>
 
@@ -262,7 +262,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
 
           {/* ── PROFILE ── */}
           {step === 'profile' && (
-            <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={s.card}>
+            <Animated.View   style={s.card}>
               <Text style={s.cardTitle}>Complete Profile</Text>
               <Text style={s.cardDesc}>Just a few details to get you started.</Text>
               <View style={s.fields}>

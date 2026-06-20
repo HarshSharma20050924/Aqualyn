@@ -65,12 +65,39 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setIsFetchingData(true);
     try {
       console.log("[Data] Fetching initial dashboard data...");
-      const [notifRes, chatsRes, feedRes, storyRes] = await Promise.all([
+      const [notifRes, activityRes, chatsRes, feedRes, storyRes] = await Promise.all([
         apiFetch(ENDPOINTS.NOTIFICATIONS).catch(() => ({ ok: false })),
+        apiFetch(ENDPOINTS.ACTIVITY_FEED).catch(() => ({ ok: false })),
         apiFetch(ENDPOINTS.CHATS).catch(() => ({ ok: false })),
         apiFetch(ENDPOINTS.FEED).catch(() => ({ ok: false })),
         apiFetch(ENDPOINTS.STORIES).catch(() => ({ ok: false }))
       ]);
+
+      if (currentUser?.id) {
+        const [followersRes, followingRes] = await Promise.all([
+          apiFetch(ENDPOINTS.GET_FOLLOWERS(currentUser.id)).catch(() => ({ ok: false })),
+          apiFetch(ENDPOINTS.GET_FOLLOWING(currentUser.id)).catch(() => ({ ok: false }))
+        ]);
+        const followers = followersRes.ok ? await (followersRes as Response).json() : [];
+        const following = followingRes.ok ? await (followingRes as Response).json() : [];
+        const allConnections = [...followers, ...following];
+        
+        // Remove duplicates and add to globalUsers
+        const uniqueConnections = Array.from(new Map(allConnections.map((u: any) => [u.id, u])).values());
+        setGlobalUsers(prev => {
+          const map = new Map(prev.map(u => [u.id, u]));
+          uniqueConnections.forEach((u: any) => {
+            if (!map.has(u.id)) map.set(u.id, {
+              id: u.id, name: u.displayName || u.username || 'Aqualyn User',
+              displayName: u.displayName, username: u.username,
+              avatar: u.avatar || `https://ui-avatars.com/api/?background=random&name=${u.username || 'U'}`,
+              role: 'Aqualyn User', email: '', bio: u.bio || 'Hey there! I am using Aqualyn.',
+              largeAvatar: u.largeAvatar || u.avatar
+            });
+          });
+          return Array.from(map.values());
+        });
+      }
 
       const mapPost = (p: any): Post => ({
         ...p,
@@ -87,10 +114,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
         timestamp: p.createdAt ? new Date(p.createdAt).toLocaleString() : 'Just now'
       });
 
+      let mergedNotifs: any[] = [];
       if (notifRes.ok) {
         const nData = await (notifRes as Response).json();
-        if (Array.isArray(nData)) setNotifications(nData);
+        if (Array.isArray(nData)) mergedNotifs = [...nData];
       }
+      if (activityRes.ok) {
+        const aData = await (activityRes as Response).json();
+        if (Array.isArray(aData)) {
+          // Normalize activity to look like notification for the screen
+          const mappedActivities = aData.map(a => ({
+            ...a,
+            type: a.type.toLowerCase()
+          }));
+          mergedNotifs = [...mergedNotifs, ...mappedActivities];
+        }
+      }
+      // Sort combined array by createdAt descending
+      mergedNotifs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      setNotifications(mergedNotifs);
       if (chatsRes.ok) {
         const cData = await (chatsRes as Response).json();
         if (Array.isArray(cData)) setChats(cData);
@@ -202,7 +244,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             const newChat: Chat = {
               id: msg.chatId,
               name: chatData?.name || sender?.displayName || sender?.username || 'User',
-              avatar: chatData?.avatar || sender?.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${msg.senderId}`,
+              avatar: chatData?.avatar || sender?.avatar || `https://ui-avatars.com/api/?background=random&name=${msg.senderId}`,
               lastMessage: msg.text, lastMessageTime: msg.timestamp || 'Just now', unreadCount: 1,
               isGroup: chatData?.isGroup || false,
               isSecret: chatData?.isSecret || false,
@@ -241,6 +283,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
           return { ...prev, [msg.chatId]: [...list, msg] };
         });
         setChats(prev => prev.map(c => c.id === msg.chatId ? { ...c, lastMessage: msg.text, lastMessageTime: msg.timestamp } : c));
+      });
+      newSocket.on('message_delivered', ({ messageId, chatId }) => {
+        setMessages(prev => ({
+          ...prev,
+          [chatId]: (prev[chatId] || []).map(m => m.id === messageId ? { ...m, status: 'delivered' } : m)
+        }));
       });
       newSocket.on('user_typing', (data: { chatId: string, userId: string, userName: string, isTyping: boolean }) => {
         setTypingUsers(prev => {
@@ -290,7 +338,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         addToast(`${data.inviterName} invited you to join a chat!`, 'info');
         setNotifications(prev => [{
           id: `inv-${Date.now()}`, userId: currentUser.id, actorId: data.inviterId, sourceUserId: data.inviterId,
-          sourceUserName: data.inviterName, sourceUserAvatar: `https://api.dicebear.com/7.x/initials/svg?seed=${data.inviterName}`,
+          sourceUserName: data.inviterName, sourceUserAvatar: `https://ui-avatars.com/api/?background=random&name=${data.inviterName}`,
           type: 'chat_invitation', targetId: data.chatId, text: `${data.inviterName} invited you to a chat. Join to create a temporary group.`,
           isRead: false, read: false, createdAt: new Date().toISOString()
         }, ...prev]);

@@ -46,8 +46,8 @@ export default function ConfirmDialog({
       <View style={styles.modalViewportContainer}>
         {/* Animated Backdrop Dismiss Layer */}
         <Animated.View 
-          entering={FadeIn.duration(200)} 
-          exiting={FadeOut.duration(150)} 
+           
+           
           style={StyleSheet.absoluteFill}
         >
           <TouchableWithoutFeedback onPress={onCancel}>
@@ -57,8 +57,8 @@ export default function ConfirmDialog({
 
         {/* Dialog Frame Container */}
         <Animated.View
-          entering={ZoomInEasyUp.springify().damping(25).stiffness(180)}
-          exiting={ZoomOutEasyDown.duration(150)}
+          
+          
           style={styles.dialogGlassCardBody}
         >
           <Text style={styles.dialogTitleTypographyText}>{title}</Text>

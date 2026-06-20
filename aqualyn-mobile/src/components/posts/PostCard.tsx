@@ -81,7 +81,7 @@ export default function PostCard({ post, onViewPost }: PostCardProps) {
 
   return (
     <Animated.View 
-      entering={FadeIn.duration(400)}
+      
       style={styles.cardContainerWrapper}
     >
       {/* Post Header */}
@@ -141,8 +141,8 @@ export default function PostCard({ post, onViewPost }: PostCardProps) {
         
         {showHeartOverlay && (
           <Animated.View 
-            entering={ZoomIn.duration(200)} 
-            exiting={ZoomOut.duration(200)} 
+             
+             
             style={styles.doubleTapHeartOverlayCenterAnchor}
           >
             <Heart size={80} color="#ffffff" fill="#ffffff" style={styles.heartGraphicFilterShadowDrop} />

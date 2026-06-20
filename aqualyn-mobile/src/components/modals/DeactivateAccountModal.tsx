@@ -70,7 +70,7 @@ export default function DeactivateAccountModal({ isOpen, onClose }: DeactivateAc
       <View style={styles.modalViewportCenteredAnchor}>
         
         {/* Backdrop Mask Blur Mask Overlay */}
-        <Animated.View entering={FadeIn} exiting={FadeOut} style={StyleSheet.absoluteFill}>
+        <Animated.View   style={StyleSheet.absoluteFill}>
           <TouchableOpacity style={styles.fullScreenBackdropDismissClick} activeOpacity={1} onPress={resetAndClose} />
         </Animated.View>
 

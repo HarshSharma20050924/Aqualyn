@@ -7,9 +7,12 @@ on:
       - 'v*'
   workflow_dispatch:
 
+# GRANT WRITE PERMISSIONS FOR THE RUNNER TO CREATE RELEASES 👇
+permissions:
+  contents: write
+
 jobs:
   build:
-    # Pinning a fixed OS version blocks GitHub from changing the background environment
     runs-on: ubuntu-22.04
     timeout-minutes: 60
 
@@ -40,7 +43,6 @@ jobs:
 
       - name: 📥 Install dependencies
         working-directory: aqualyn-mobile
-        # 'npm ci' locks your builds to your exact package-lock.json
         run: |
           rm -rf node_modules
           npm ci
@@ -51,7 +53,6 @@ jobs:
 
       - name: 🔨 Build APK
         working-directory: aqualyn-mobile/android
-        # We pass reactive project properties (-P) directly to Gradle to force splitting and prevent OOMs
         run: |
           ./gradlew assembleRelease --no-daemon \
             -PreactNativeArchitectures=arm64-v8a,armeabi-v7a,x86_64 \
@@ -62,7 +63,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: aqualyn-android-apks
-          # Captures all specialized, split APK outputs together
           path: aqualyn-mobile/android/app/build/outputs/apk/release/*.apk
 
       - name: 🚀 Create GitHub Release

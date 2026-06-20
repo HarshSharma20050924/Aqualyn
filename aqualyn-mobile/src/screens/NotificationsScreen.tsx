@@ -64,7 +64,7 @@ export default function NotificationsScreen({ onBack }: NotificationsScreenProps
 
   const renderNotificationItem = ({ item: notification }: { item: any }) => {
     const isRead = notification.isRead;
-    const avatarUrl = notification.actor?.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${notification.actor?.displayName}`;
+    const avatarUrl = notification.actor?.avatar || `https://ui-avatars.com/api/?background=random&name=${notification.actor?.displayName}`;
 
     return (
       <View style={[styles.notificationCard, isRead ? styles.bgTransparent : styles.bgUnreadTint]}>
@@ -125,8 +125,8 @@ export default function NotificationsScreen({ onBack }: NotificationsScreenProps
 
   return (
     <Animated.View 
-      entering={SlideInRight.springify().damping(22)} 
-      exiting={FadeOut}
+       
+      
       style={styles.viewportBaseContainerFrame}
     >
       {/* Fixed Sticky Header Simulation layout space */}

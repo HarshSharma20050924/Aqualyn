@@ -8,6 +8,7 @@ import {
     getStorageUsage,
     exportData,
     getProfile,
+    updateProfile,
     blockUser,
     reportUser,
     getBlockedUsers,
@@ -63,6 +64,7 @@ router.get('/:userId/following', getFollowingList);
 
 // 5. PROFILE API
 router.get('/profile/:userId', getProfile);
+router.patch('/profile', updateProfile);
 
 // 6. BLOCK / UNBLOCK
 router.post('/block', blockUser);

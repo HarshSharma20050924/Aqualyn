@@ -41,8 +41,8 @@ export default function MediaAttachmentPicker({ isOpen, onClose, onSelect }: Med
 
         {/* Attachment Card Panel Popover */}
         <Animated.View
-          entering={FadeIn.duration(200)}
-          exiting={FadeOut.duration(150)}
+          
+          
           style={styles.popoverMenuSheetBodyFrame}
         >
           <View style={styles.threeColumnGridMatrixTrack}>

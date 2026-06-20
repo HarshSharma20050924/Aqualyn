@@ -130,7 +130,7 @@ const PostCard = ({ post }: { post: Post }) => {
         )}
 
         {showHeartAnimation && (
-          <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={styles.absoluteDoubleTapHeartBadgeCenter}>
+          <Animated.View   style={styles.absoluteDoubleTapHeartBadgeCenter}>
             <Heart size={80} color="#fff" fill="#fff" style={styles.doubleTapHeartDropShadow} />
           </Animated.View>
         )}
@@ -259,7 +259,7 @@ export default function FeedScreen({ onNavigate }: Props) {
         id: first.userId,
         name: first.userName || 'User',
         username: first.userName || 'user',
-        avatar: first.userAvatar || `https://api.dicebear.com/7.x/initials/svg?seed=${first.userId}`
+        avatar: first.userAvatar || `https://ui-avatars.com/api/?background=random&name=${first.userId}`
       } as any as User;
     });
   }, [storiesByUser]);
@@ -287,7 +287,7 @@ export default function FeedScreen({ onNavigate }: Props) {
   );
 
   return (
-    <Animated.View entering={FadeIn} style={styles.screenViewContainer}>
+    <Animated.View  style={styles.screenViewContainer}>
       {/* Absolute Sticky Floating Navigation Deck Layer Top */}
       <View style={[styles.headerFloatingStickyNavbarBox, { paddingTop: insets.top }]}>
         <View style={styles.headerToolbarInteriorFlexRow}>

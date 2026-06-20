@@ -42,14 +42,14 @@ export default function ShareContactModal({ isOpen, onClose, onShare, appContext
       <View style={styles.modalCenteredViewportAnchor}>
         
         {/* Backdrop Mask Tint Layer */}
-        <Animated.View entering={FadeIn} exiting={FadeOut} style={StyleSheet.absoluteFill}>
+        <Animated.View   style={StyleSheet.absoluteFill}>
           <TouchableOpacity style={styles.backdropClickDismissMask} activeOpacity={1} onPress={onClose} />
         </Animated.View>
 
         {/* Modal Dialog Body Card */}
         <Animated.View 
-          entering={ZoomIn.duration(200)}
-          exiting={ZoomOut.duration(150)}
+          
+          
           style={styles.dialogGlassCardFrame}
         >
           {/* Header Action Row */}

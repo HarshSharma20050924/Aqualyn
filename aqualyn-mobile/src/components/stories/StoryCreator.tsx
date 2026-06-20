@@ -58,11 +58,29 @@ export default function StoryCreator({ onClose }: { onClose: () => void }) {
     { name: 'Cool', value: 'cool' },
   ];
 
-  const handleCapture = () => {
-    addToast('Camera hardware capture hook triggered.', 'info');
-    setMediaUrl('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe');
-    setMediaType('image');
-    setStep('edit');
+  const handleCapture = async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        addToast('Camera permission is required', 'error');
+        return;
+      }
+      
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.All,
+        allowsEditing: true,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setMediaUrl(result.assets[0].uri);
+        setMediaType(result.assets[0].type === 'video' ? 'video' : 'image');
+        setStep('edit');
+      }
+    } catch (error) {
+      console.error('Camera Error:', error);
+      addToast('Failed to launch camera', 'error');
+    }
   };
 
   const handleFileSelect = async () => {

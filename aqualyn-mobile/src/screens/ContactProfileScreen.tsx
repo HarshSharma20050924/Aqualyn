@@ -223,7 +223,7 @@ export default function ContactProfileScreen({ onBack, onNavigate }: Props) {
   };
 
   return (
-    <Animated.View entering={FadeIn} style={styles.container}>
+    <Animated.View  style={styles.container}>
       {/* Header Deck Layer */}
       <View style={[styles.headerDock, { paddingTop: insets.top }]}>
         <TouchableOpacity onPress={onBack} style={styles.backButtonFrame}>

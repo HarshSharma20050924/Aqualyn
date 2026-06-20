@@ -100,8 +100,8 @@ export default function PostCreator({ isOpen, onClose }: PostCreatorProps) {
         style={styles.modalViewportContainerCanvas}
       >
         <Animated.View 
-          entering={ZoomIn.duration(240)} 
-          exiting={FadeOut.duration(150)} 
+           
+           
           style={styles.creatorScreenWrapperFrame}
         >
           {/* Top Form Navigation Action Bar */}

@@ -72,8 +72,16 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
         if (data.status === 'linked') {
           clearInterval(qrPollRef.current!);
           setQrScanned(true);
+          // Store token in localStorage as fallback
+          if (data.token) {
+            localStorage.setItem('auth_token', data.token);
+          }
           // Fetch user profile now that cookie is set
-          const profileRes = await fetch(ENDPOINTS.AUTH_SYNC_TOKEN, { method: 'POST', credentials: 'include' });
+          const profileRes = await fetch(ENDPOINTS.AUTH_SYNC_TOKEN, { 
+            method: 'POST', 
+            headers: data.token ? { 'Authorization': `Bearer ${data.token}` } : {},
+            credentials: 'include' 
+          });
           const profileData = await profileRes.json();
           if (profileData?.user) {
             const mapped = { ...profileData.user, following: profileData.user.following?.map((f: any) => f.followingId || f.userId).filter(Boolean) || [], followers: profileData.user.followers?.map((f: any) => f.followerId || f.userId).filter(Boolean) || [] };

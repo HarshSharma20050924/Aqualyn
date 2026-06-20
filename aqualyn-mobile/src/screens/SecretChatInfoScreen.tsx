@@ -143,8 +143,8 @@ export default function SecretChatInfoScreen({ chat, onBack }: SecretChatInfoScr
 
   return (
     <Animated.View 
-      entering={SlideInRight.springify().damping(25).stiffness(200)} 
-      exiting={FadeOut}
+       
+      
       style={styles.viewportBaseFrame}
     >
       {/* Sticky Native Navigation Header Layout */}

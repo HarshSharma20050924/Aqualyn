@@ -74,8 +74,8 @@ export default function AudioRecorderUI({ isRecording, onStop, onCancel }: Audio
 
   return (
     <Animated.View
-      entering={FadeInDown.duration(200)}
-      exiting={FadeOutDown.duration(150)}
+      
+      
       style={styles.recorderDockFloatingBar}
     >
       {/* Pulse Anchor & Counter */}

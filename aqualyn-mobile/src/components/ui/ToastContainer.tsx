@@ -50,8 +50,8 @@ export default function ToastContainer() {
         return (
           <Animated.View
             key={toast.id}
-            entering={SlideInUp.springify().damping(18).stiffness(150)}
-            exiting={FadeOut.duration(150)}
+            
+            
             layout={LinearTransition.springify().damping(20)}
             style={[
               styles.toastNotificationCardTrack,

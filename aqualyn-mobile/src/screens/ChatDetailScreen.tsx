@@ -13,6 +13,8 @@ import {
   Modal,
   Alert
 } from 'react-native';
+import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
 import Animated, {
   FadeIn,
   FadeOut,
@@ -89,11 +91,15 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
     typingUsers,
     setTyping,
     markAsRead,
-    handleSecretChatInvitation
+    handleSecretChatInvitation,
+    deleteMessage,
+    addReaction
   } = useAppContext();
 
   const { startCall } = useCall();
   const [text, setText] = useState('');
+  const [forwardMessage, setForwardMessage] = useState<Message | null>(null);
+  const [showForwardModal, setShowForwardModal] = useState(false);
 
   const scrollRef = useRef<ScrollView>(null);
 
@@ -297,9 +303,48 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
         setIsCameraOpen(true);
         break;
       case 'document':
+        DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true }).then(async (result) => {
+          if (!result.canceled && result.assets && result.assets.length > 0) {
+            const asset = result.assets[0];
+            try {
+              if (activeChatId) {
+                const url = await uploadFile({ uri: asset.uri, name: asset.name, type: asset.mimeType || 'application/octet-stream' });
+                // We send it as a message text or file? In the backend do we have documentUrl?
+                // For now just sending it as a message or if chat.message model supports it.
+                // Assuming imageUrl or text with URL link.
+                sendMessage(activeChatId, `Document: ${url}`, { replyToId: replyingTo?.id });
+                addToast('Document sent', 'success');
+              }
+            } catch (err) {
+              addToast('Upload failed', 'error');
+            }
+          }
+        }).catch(err => addToast('Failed to pick document', 'error'));
+        break;
       case 'photo':
-        // Connect this to your React Native DocumentPicker or ImagePicker package
-        Alert.alert("Attachment Triggered", `Launch native native pickers for ${type}`);
+        ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.All,
+          allowsEditing: true,
+          quality: 0.8,
+        }).then(async (result) => {
+          if (!result.canceled && result.assets && result.assets.length > 0) {
+            const asset = result.assets[0];
+            try {
+              if (activeChatId) {
+                const type = asset.type === 'video' ? 'video/mp4' : 'image/jpeg';
+                const url = await uploadFile({ uri: asset.uri, name: asset.fileName || `media-${Date.now()}.${asset.type === 'video' ? 'mp4' : 'jpg'}`, type });
+                if (asset.type === 'video') {
+                  sendMessage(activeChatId, '', { videoUrl: url, replyToId: replyingTo?.id });
+                } else {
+                  sendMessage(activeChatId, '', { imageUrl: url, replyToId: replyingTo?.id });
+                }
+                addToast('Media sent', 'success');
+              }
+            } catch (err) {
+              addToast('Upload failed', 'error');
+            }
+          }
+        }).catch(err => addToast('Failed to pick media', 'error'));
         break;
       case 'location':
         if (activeChatId) {
@@ -385,7 +430,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
 
 
   return (
-    <Animated.View entering={FadeIn.duration(400)} style={[styles.container, isSecret ? styles.bgSecret : styles.bgNormal]}>
+    <Animated.View  style={[styles.container, isSecret ? styles.bgSecret : styles.bgNormal]}>
 
       {/* Screenshot Flash Layer */}
       {screenshotAlert && (
@@ -464,7 +509,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
 
         {/* Search Field Dropdown */}
         {isSearchOpen && (
-          <Animated.View entering={SlideInUp} exiting={FadeOut} style={styles.searchBarContainer}>
+          <Animated.View   style={styles.searchBarContainer}>
             <Search size={16} color="#64748b" style={styles.searchIcon} />
             <TextInput
               style={styles.searchInput}
@@ -556,6 +601,13 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
                   replyMessage={msg.replyToId ? chatMessages.find(m => m.id === msg.replyToId) : undefined}
                   onMediaClick={handleMediaClick}
                   isSecret={chat.isSecret}
+                  onDelete={(m) => {
+                    deleteMessage(activeChatId as string, m.id);
+                  }}
+                  onForward={(m) => {
+                    setForwardMessage(m);
+                    setShowForwardModal(true);
+                  }}
                 />
               );
             })}
@@ -624,7 +676,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
           <View style={styles.inputContainerRow}>
             {/* Context Reply/Edit bars */}
             {editingMessage && (
-              <Animated.View entering={FadeIn} style={styles.contextBar}>
+              <Animated.View  style={styles.contextBar}>
                 <View style={styles.contextLine} />
                 <View style={styles.contextInfo}>
                   <Text style={styles.contextTitle}>Edit Message</Text>
@@ -691,6 +743,23 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
         if (contact && activeChatId) {
           sendMessage(activeChatId, '', { contact: { name: contact.name || 'User', phone: contact.phone || '+1 234', avatar: contact.avatar } });
           addToast('Contact shared', 'success');
+        }
+      }} />
+
+      <ShareContactModal isOpen={showForwardModal} onClose={() => { setShowForwardModal(false); setForwardMessage(null); }} appContext={{ chats, currentUser }} onShare={(targetChatId) => {
+        if (forwardMessage) {
+          sendMessage(targetChatId, forwardMessage.text || '', {
+             imageUrl: forwardMessage.imageUrl,
+             videoUrl: forwardMessage.videoUrl,
+             fileUrl: forwardMessage.fileUrl,
+             audioUrl: forwardMessage.audioUrl,
+             document: forwardMessage.document,
+             location: forwardMessage.location,
+             contact: forwardMessage.contact,
+             payment: forwardMessage.payment,
+             isForwarded: true
+          });
+          addToast('Message forwarded', 'success');
         }
       }} />
 

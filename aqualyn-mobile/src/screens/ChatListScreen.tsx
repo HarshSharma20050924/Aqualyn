@@ -109,6 +109,7 @@ export default function ChatListScreen({ onNavigate }: Props) {
   const peekTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [contextMenuChatId, setContextMenuChatId] = useState<string | null>(null);
   const [contextMenuPos, setContextMenuPos] = useState({ x: 0, y: 0 });
+  const lastTouchPos = useRef({ x: 0, y: 0 });
   const [showFolderSubmenu, setShowFolderSubmenu] = useState(false);
   const [isArchivePinModalOpen, setIsArchivePinModalOpen] = useState(false);
   const [archivePinValue, setArchivePinValue] = useState('');
@@ -175,22 +176,20 @@ export default function ChatListScreen({ onNavigate }: Props) {
   };
 
   // Custom Touch Handlers for Long-Press Context Menus
-  const handleTouchStart = (e: any, id: string) => {
+  const handleTouchStart = (e: any) => {
     const nativeEvent = e?.nativeEvent || {};
-    const clientX = nativeEvent.pageX || nativeEvent.clientX || 0;
-    const clientY = nativeEvent.pageY || nativeEvent.clientY || 0;
-
-    pressTimer.current = setTimeout(() => {
-      if (Platform.OS === 'android' || Platform.OS === 'ios') {
-        Vibration.vibrate(50);
-      }
-      setContextMenuChatId(id);
-      setContextMenuPos({ x: clientX, y: clientY });
-    }, 500);
+    lastTouchPos.current = {
+      x: nativeEvent.pageX || nativeEvent.clientX || 0,
+      y: nativeEvent.pageY || nativeEvent.clientY || 0
+    };
   };
 
-  const handleTouchEnd = () => {
-    if (pressTimer.current) clearTimeout(pressTimer.current);
+  const handleLongPress = (id: string) => {
+    if (Platform.OS === 'android' || Platform.OS === 'ios') {
+      Vibration.vibrate(50);
+    }
+    setContextMenuChatId(id);
+    setContextMenuPos(lastTouchPos.current);
   };
 
   const toggleSelection = (id: string) => {
@@ -275,7 +274,7 @@ export default function ChatListScreen({ onNavigate }: Props) {
   );
 
   return (
-    <Animated.View entering={FadeIn} style={styles.screenContainer}>
+    <Animated.View  style={styles.screenContainer}>
       
       {/* Absolute Header Dock System */}
       <View 
@@ -487,8 +486,8 @@ export default function ChatListScreen({ onNavigate }: Props) {
                         key={chat.id}
                         onPress={() => handleChatClick(chat.id)}
                         delayLongPress={500}
-                        onPressIn={(e) => handleTouchStart(e, chat.id)}
-                        onPressOut={handleTouchEnd}
+                        onPressIn={handleTouchStart}
+                        onLongPress={() => handleLongPress(chat.id)}
                         style={[styles.chatCardItem, styles.chatCardPinned, isSelected && styles.chatCardSelected]}
                       >
                         <View style={styles.avatarContainer}>
@@ -546,8 +545,8 @@ export default function ChatListScreen({ onNavigate }: Props) {
                       <TouchableOpacity
                         key={chat.id}
                         onPress={() => handleChatClick(chat.id)}
-                        onPressIn={(e) => handleTouchStart(e, chat.id)}
-                        onPressOut={handleTouchEnd}
+                        onPressIn={handleTouchStart}
+                        onLongPress={() => handleLongPress(chat.id)}
                         style={[styles.chatCardItem, isSelected && styles.chatCardSelected]}
                       >
                         <View style={styles.avatarContainer}>
@@ -630,7 +629,7 @@ export default function ChatListScreen({ onNavigate }: Props) {
       {/* Security Vault Pin Layer Modal */}
       <Modal visible={isArchivePinModalOpen} transparent animationType="fade">
         <View style={styles.vaultPinOverlay}>
-          <Animated.View entering={FadeIn} style={styles.vaultCardBox}>
+          <Animated.View  style={styles.vaultCardBox}>
             <Text style={styles.vaultTitle}>Archive Locked</Text>
             <Text style={{ color: '#64748b', fontSize: 13, marginBottom: 16, textAlign: 'center' }}>Enter your PIN to access archived chats.</Text>
             <TextInput
@@ -856,7 +855,7 @@ const styles = StyleSheet.create({
   // Item Long Press Operations Context Elements
   longPressContextMenuCard: { position: 'absolute', backgroundColor: '#fff', borderRadius: 18, padding: 6, width: 200, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.12, shadowRadius: 24, elevation: 6, borderWidth: 1, borderColor: '#e2e8f0' },
   submenuAnchorContainer: { position: 'relative' },
-  submenuFloatingBlock: { position: 'absolute', left: '102%', top: 0, backgroundColor: '#fff', borderRadius: 14, padding: 4, width: 140, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 12, elevation: 4, borderWidth: 1, borderColor: '#e2e8f0' },
+  submenuFloatingBlock: { backgroundColor: '#f8fafc', borderRadius: 8, padding: 4, marginTop: 4, marginLeft: 10 },
   submenuItemBtn: { padding: 8, borderRadius: 8 },
   submenuItemText: { fontSize: 13, color: '#475569', fontWeight: '500' },
 

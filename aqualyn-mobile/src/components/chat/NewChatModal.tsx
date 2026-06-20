@@ -48,7 +48,7 @@ interface NewChatModalProps {
 }
 
 export default function NewChatModal({ isOpen, onClose, onNavigate, appContext }: NewChatModalProps) {
-  const { contacts, currentUser, startChatWithContact, createGroupChat, globalUsers } = appContext;
+  const { chats, contacts, currentUser, startChatWithContact, createGroupChat, globalUsers } = appContext;
   
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
@@ -75,7 +75,7 @@ export default function NewChatModal({ isOpen, onClose, onNavigate, appContext }
         users.push({
           id: u.id,
           name: u.displayName || u.username || 'Aqualyn User',
-          avatar: u.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${u.username || 'U'}`,
+          avatar: u.avatar || `https://ui-avatars.com/api/?background=random&name=${u.username || 'U'}`,
           role: 'Connection',
           isContact: true
         });
@@ -100,7 +100,7 @@ export default function NewChatModal({ isOpen, onClose, onNavigate, appContext }
         users.push({
           id: u.id,
           name: u.displayName || u.username || 'Aqualyn User',
-          avatar: u.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${u.username || 'U'}`,
+          avatar: u.avatar || `https://ui-avatars.com/api/?background=random&name=${u.username || 'U'}`,
           role: u.bio || 'Aqualyn User',
           isContact: false
         });
@@ -156,14 +156,14 @@ export default function NewChatModal({ isOpen, onClose, onNavigate, appContext }
       <View style={styles.modalViewportContainerAnchor}>
         
         {/* Backdrop Dismiss Layer */}
-        <Animated.View entering={FadeIn} exiting={FadeOut} style={StyleSheet.absoluteFill}>
+        <Animated.View   style={StyleSheet.absoluteFill}>
           <TouchableOpacity style={styles.fullScreenMaskBackdropClick} activeOpacity={1} onPress={handleClose} />
         </Animated.View>
 
         {/* Dynamic Slidable Bottom Sheet Canvas Frame */}
         <Animated.View 
-          entering={SlideInDown.springify().damping(25).stiffness(200)}
-          exiting={SlideOutDown}
+          
+          
           style={styles.bottomSheetWrapperBodyCard}
         >
           {/* Header Action Bar */}

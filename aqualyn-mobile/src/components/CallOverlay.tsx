@@ -21,7 +21,7 @@ export const CallOverlay: React.FC = () => {
 
   // Incoming Popup Banner layout context
   if (incomingCall && !isCalling) {
-    const fallbackAvatar = `https://api.dicebear.com/7.x/initials/svg?seed=${incomingCall.callerName}`;
+    const fallbackAvatar = `https://ui-avatars.com/api/?background=random&name=${incomingCall.callerName}`;
     return (
       <View style={styles.incomingBanner}>
         <View style={styles.avatarWrapper}>
@@ -53,7 +53,7 @@ export const CallOverlay: React.FC = () => {
   // Active Full-Screen Overlay Modal Interface
   if (isCalling && currentCall) {
     const isVideo = currentCall.type === 'VIDEO';
-    const fallbackCurrentAvatar = `https://api.dicebear.com/7.x/initials/svg?seed=${currentCall.userName}`;
+    const fallbackCurrentAvatar = `https://ui-avatars.com/api/?background=random&name=${currentCall.userName}`;
 
     return (
       <Modal visible transparent={false} animationType="fade">

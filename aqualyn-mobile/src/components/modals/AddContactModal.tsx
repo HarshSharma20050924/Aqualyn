@@ -28,7 +28,7 @@ export default function AddContactModal({ isOpen, onClose, addContact }: AddCont
         newContactName, 
         newContactPhone, 
         `local_${Date.now()}`, 
-        `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(newContactName)}`
+        `https://ui-avatars.com/api/?background=random&name=${encodeURIComponent(newContactName)}`
       );
       setNewContactName('');
       setNewContactPhone('');
@@ -45,14 +45,14 @@ export default function AddContactModal({ isOpen, onClose, addContact }: AddCont
         style={styles.modalViewportContainer}
       >
         {/* Backdrop Tint */}
-        <Animated.View entering={FadeIn} exiting={FadeOut} style={StyleSheet.absoluteFill}>
+        <Animated.View   style={StyleSheet.absoluteFill}>
           <TouchableOpacity style={styles.backdropLayerDismiss} activeOpacity={1} onPress={onClose} />
         </Animated.View>
 
         {/* Slidable Container Sheet */}
         <Animated.View 
-          entering={SlideInDown.springify().damping(25).stiffness(200)}
-          exiting={SlideOutDown}
+          
+          
           style={styles.bottomSheetWrapperBody}
         >
           {/* Header Action Bar */}
@@ -109,7 +109,7 @@ export default function AddContactModal({ isOpen, onClose, addContact }: AddCont
           {/* Floating Save Action Button Layer */}
           <View style={styles.bottomFabAnchorFrameBoundaryBox}>
             {isFormValid && (
-              <Animated.View entering={ZoomIn} exiting={ZoomOut}>
+              <Animated.View  >
                 <TouchableOpacity 
                   onPress={handleAddContact} 
                   style={styles.floatingActionStickyCircularButtonCircle}

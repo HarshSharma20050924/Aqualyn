@@ -46,8 +46,8 @@ export const ChatPeekPreview: React.FC<ChatPeekPreviewProps> = ({
         
         {/* Semi-transparent Backdrop Dismiss Layer */}
         <Animated.View 
-          entering={FadeIn.duration(200)} 
-          exiting={FadeOut.duration(150)} 
+           
+           
           style={StyleSheet.absoluteFill}
         >
           <TouchableWithoutFeedback onPress={onClose}>
@@ -57,7 +57,7 @@ export const ChatPeekPreview: React.FC<ChatPeekPreviewProps> = ({
 
         {/* Dialog Card Frame */}
         <Animated.View
-          entering={ZoomIn.duration(250)}
+          
           style={styles.cardPreviewBodyShell}
         >
           {/* Header Row */}

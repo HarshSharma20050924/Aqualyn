@@ -13,6 +13,8 @@ import { ArrowLeft, Monitor, Smartphone, Plus, Trash2, ShieldCheck, Camera as Ca
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useAppContext } from '../context/AppContext';
 import BubbleLoader from '../components/ui/BubbleLoader';
+import { apiFetch } from '../utils/fetcher';
+import { ENDPOINTS } from '../config/api';
 
 interface LinkedDevicesScreenProps {
   onBack: () => void;
@@ -41,14 +43,40 @@ export default function LinkedDevicesScreen({ onBack }: LinkedDevicesScreenProps
     setIsScanning(true);
   };
 
-  const handleBarCodeScanned = ({ type, data }: any) => {
+  const handleBarCodeScanned = async ({ type, data }: any) => {
     setIsScanning(false);
-    // Dummy link logic
-    addToast('Device linked successfully!', 'success');
-    setSessions(prev => [
-      { id: Date.now().toString(), os: 'Unknown OS', browser: 'Aqualyn Web', active: true, time: 'Active now', location: 'Current Location' },
-      ...prev.map(s => ({ ...s, active: false }))
-    ]);
+    
+    try {
+      let qrToken = data;
+      // If the QR code contains a full URL, extract the token
+      if (data.includes('token=')) {
+        qrToken = new URL(data).searchParams.get('token') || data;
+      } else if (data.includes('/qr/')) {
+        const parts = data.split('/');
+        qrToken = parts[parts.length - 1];
+      } else if (data.includes('qr-login/')) {
+        const parts = data.split('qr-login/');
+        qrToken = parts[parts.length - 1];
+      }
+
+      const res = await apiFetch(ENDPOINTS.AUTH_QR_LINK, {
+        method: 'POST',
+        body: JSON.stringify({ qrToken })
+      });
+      
+      if (res.ok) {
+        addToast('Device linked successfully!', 'success');
+        setSessions(prev => [
+          { id: Date.now().toString(), os: 'Unknown OS', browser: 'Aqualyn Web', active: true, time: 'Active now', location: 'Current Location' },
+          ...prev.map(s => ({ ...s, active: false }))
+        ]);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        addToast(err.message || err.error || 'Failed to link device. Invalid or expired QR code.', 'error');
+      }
+    } catch (e: any) {
+      addToast(e.message || 'Error linking device', 'error');
+    }
   };
 
   const removeSession = (id: string) => {
@@ -58,7 +86,7 @@ export default function LinkedDevicesScreen({ onBack }: LinkedDevicesScreenProps
 
   return (
     <View style={styles.container}>
-      <Animated.View entering={FadeIn} exiting={FadeOut} style={[styles.header, { paddingTop: insets.top, height: 64 + insets.top }]}>
+      <Animated.View   style={[styles.header, { paddingTop: insets.top, height: 64 + insets.top }]}>
         <TouchableOpacity onPress={onBack} style={styles.backBtn}>
           <ArrowLeft size={22} color="#0f172a" />
         </TouchableOpacity>
@@ -126,7 +154,7 @@ export default function LinkedDevicesScreen({ onBack }: LinkedDevicesScreenProps
 
       {/* QR Scanner Modal Overlay */}
       {isScanning && (
-        <Animated.View entering={FadeIn} exiting={FadeOut} style={StyleSheet.absoluteFill}>
+        <Animated.View   style={StyleSheet.absoluteFill}>
           <View style={styles.scannerOverlay}>
             <View style={[styles.scannerHeader, { paddingTop: insets.top }]}>
               <TouchableOpacity onPress={() => setIsScanning(false)} style={styles.scannerCloseBtn}>

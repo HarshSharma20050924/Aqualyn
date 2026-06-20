@@ -37,6 +37,11 @@ export const getProfile = catchAsync(async (req: any, res: Response, next: NextF
     res.json(profile);
 });
 
+export const updateProfile = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const result = await UserService.updateProfile(req.user.id, req.body);
+    res.json(result);
+});
+
 export const blockUser = catchAsync(async (req: any, res: Response, next: NextFunction) => {
     const result = await UserService.blockUser(req.user.id, req.body.targetUserId);
     res.json(result);

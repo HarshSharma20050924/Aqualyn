@@ -127,8 +127,8 @@ export default function GroupInfoScreen({ chat, onBack, onNavigate }: GroupInfoS
 
   return (
     <Animated.View 
-      entering={SlideInRight.springify().damping(25).stiffness(200)}
-      exiting={SlideOutRight.springify().damping(25).stiffness(200)}
+      
+      
       style={styles.screenContainer}
     >
       {/* Header Dock Assembly */}

@@ -235,6 +235,7 @@ export const useAppActions = (
       text,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       isRead: false,
+      status: 'sending',
       ...options
     };
     
@@ -740,7 +741,7 @@ export const useAppActions = (
         const newChat: Chat = {
           id: group.id,
           name: group.name,
-          avatar: group.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${group.name}`,
+          avatar: group.avatar || `https://ui-avatars.com/api/?background=random&name=${group.name}`,
           lastMessage: 'Group created',
           lastMessageTime: 'Just now',
           unreadCount: 0,
@@ -915,8 +916,14 @@ export const useAppActions = (
           data.forEach(c => {
             c.phoneNumbers?.forEach(p => {
               if (p.number) {
-                const clean = p.number.replace(/\D/g, '');
-                if (clean.length >= 10) phones.add(clean);
+                // Keep digits and + sign for international formats matching the database
+                let clean = p.number.replace(/[^\d+]/g, '');
+                if (clean.length >= 10) {
+                  phones.add(clean);
+                  // Also add a version with + if it doesn't have it, or without if it does, to maximize matching
+                  if (clean.startsWith('+')) phones.add(clean.substring(1));
+                  else phones.add('+' + clean);
+                }
               }
             });
           });

@@ -148,8 +148,33 @@ export class SocketService {
             await PresenceService.setUserOnline(userId);
             try {
                 await (prisma as any).user.update({ where: { id: userId }, data: { lastLogin: new Date() } });
+                // Mark undelivered messages as delivered since user is now online
+                const undeliveredMessages = await (prisma as any).message.findMany({
+                    where: { 
+                        chat: {
+                            participants: {
+                                some: { userId: userId }
+                            }
+                        },
+                        senderId: { not: userId },
+                        status: 'sent' 
+                    },
+                    select: { id: true, senderId: true, chatId: true }
+                });
+                
+                if (undeliveredMessages.length > 0) {
+                    await (prisma as any).message.updateMany({
+                        where: { id: { in: undeliveredMessages.map((m: any) => m.id) } },
+                        data: { status: 'delivered' }
+                    });
+                    
+                    // Notify senders
+                    for (const msg of undeliveredMessages) {
+                        SocketService.emitToUser(msg.senderId, 'message_delivered', { messageId: msg.id, chatId: msg.chatId });
+                    }
+                }
             } catch (e) {
-                console.error(`[Socket] Failed to update lastLogin for ${userId}:`, e);
+                console.error(`[Socket] Failed to update presence/delivery for ${userId}:`, e);
             }
         });
 

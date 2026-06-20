@@ -106,7 +106,7 @@ export default function ContactsScreen({ onNavigate }: Props) {
          .map(dc => ({
             id: `device-${dc.id}`,
             name: dc.name,
-            avatar: dc.imageAvailable && dc.image ? dc.image.uri : `https://api.dicebear.com/7.x/initials/svg?seed=${dc.name}`,
+            avatar: dc.imageAvailable && dc.image ? dc.image.uri : `https://ui-avatars.com/api/?background=random&name=${dc.name}`,
             role: 'From Device Contacts',
             isDeviceOnly: true,
             phoneNumber: dc.phoneNumbers?.[0]?.number
@@ -122,7 +122,7 @@ export default function ContactsScreen({ onNavigate }: Props) {
         .map(u => ({
           id: u.id,
           name: u.displayName || u.username || 'Follower',
-          avatar: u.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${u.username || 'F'}`,
+          avatar: u.avatar || `https://ui-avatars.com/api/?background=random&name=${u.username || 'F'}`,
           role: u.bio || 'Follower'
         }))
         .filter(c => c.name.toLowerCase().includes(query));
@@ -135,7 +135,7 @@ export default function ContactsScreen({ onNavigate }: Props) {
         .map(u => ({
           id: u.id,
           name: u.displayName || u.username || 'Following',
-          avatar: u.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${u.username || 'F'}`,
+          avatar: u.avatar || `https://ui-avatars.com/api/?background=random&name=${u.username || 'F'}`,
           role: u.bio || 'Following'
         }))
         .filter(c => c.name.toLowerCase().includes(query));
@@ -157,7 +157,7 @@ export default function ContactsScreen({ onNavigate }: Props) {
   );
 
   return (
-    <Animated.View entering={FadeIn} style={styles.screenContainer}>
+    <Animated.View  style={styles.screenContainer}>
       
       {/* Absolute Sticky Header Block */}
       <View style={[styles.headerContainer, { paddingTop: insets.top }]}>

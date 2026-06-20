@@ -12,6 +12,7 @@ import {
   Platform,
   Switch
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, Save, Camera, ChevronDown } from 'lucide-react-native';
@@ -48,9 +49,30 @@ export default function EditProfileScreen({ onBack }: Props) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   const handleAvatarPick = async () => {
-    // Pipeline connection placeholder: connect to your preferred image picker library
-    // e.g., expo-image-picker or react-native-image-crop-picker
-    addToast('Triggering native media system picker...', 'info');
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setIsUploadingAvatar(true);
+        const asset = result.assets[0];
+        try {
+          const url = await uploadFile({ uri: asset.uri, name: asset.fileName || `avatar-${Date.now()}.jpg`, type: 'image/jpeg' });
+          setAvatar(url);
+          addToast('Avatar uploaded successfully', 'success');
+        } catch (err) {
+          addToast('Failed to upload avatar', 'error');
+        } finally {
+          setIsUploadingAvatar(false);
+        }
+      }
+    } catch (error) {
+      addToast('Error picking image', 'error');
+    }
   };
 
   const handleSave = async () => {
@@ -62,7 +84,7 @@ export default function EditProfileScreen({ onBack }: Props) {
     setIsSaving(true);
     try {
       const response = await apiFetch(ENDPOINTS.UPDATE_PROFILE, {
-        method: 'PUT',
+        method: 'PATCH',
         body: JSON.stringify({
           displayName: name,
           username,
@@ -95,7 +117,7 @@ export default function EditProfileScreen({ onBack }: Props) {
   const currentVisibilityLabel = VISIBILITY_OPTIONS.find(opt => opt.id === showPhoneTo)?.label || 'Everyone';
 
   return (
-    <Animated.View entering={FadeIn} style={styles.screenContainer}>
+    <Animated.View  style={styles.screenContainer}>
       
       {/* Header Dock Assembly */}
       <View style={[styles.headerContainer, { paddingTop: insets.top }]}>
@@ -243,7 +265,7 @@ export default function EditProfileScreen({ onBack }: Props) {
 
           {/* Animate Dropdown Option Menu Items list */}
           {isDropdownOpen && (
-            <Animated.View entering={FadeIn} exiting={FadeOut} style={styles.dropdownMenuOptionsListTrack}>
+            <Animated.View   style={styles.dropdownMenuOptionsListTrack}>
               {VISIBILITY_OPTIONS.map((opt) => (
                 <TouchableOpacity
                   key={opt.id}

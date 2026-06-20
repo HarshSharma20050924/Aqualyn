@@ -68,14 +68,14 @@ export default function NewFolderModal({ isOpen, onClose, appContext }: NewFolde
       <View style={styles.modalViewportContainerAnchor}>
         
         {/* Backdrop Dismiss Layer Mask Overlay */}
-        <Animated.View entering={FadeIn} exiting={FadeOut} style={StyleSheet.absoluteFill}>
+        <Animated.View   style={StyleSheet.absoluteFill}>
           <TouchableOpacity style={styles.fullScreenBackdropDismissClickMask} activeOpacity={1} onPress={handleClose} />
         </Animated.View>
 
         {/* Dynamic Slidable Bottom Sheet Content Wrapper */}
         <Animated.View 
-          entering={SlideInDown.springify().damping(25).stiffness(200)}
-          exiting={SlideOutDown}
+          
+          
           style={styles.bottomSheetWrapperBodyCard}
         >
           {/* Header Action Toolbar Row */}
@@ -176,7 +176,7 @@ export default function NewFolderModal({ isOpen, onClose, appContext }: NewFolde
           {/* Core Floating Action Execution Button Anchor Frame Layer */}
           <View style={styles.bottomStickyFabAnchorFrameBoundaryBox}>
             {folderName.trim().length > 0 && (
-              <Animated.View entering={ZoomIn} exiting={ZoomOut}>
+              <Animated.View  >
                 <TouchableOpacity 
                   onPress={handleCreate} 
                   style={styles.floatingActionCircleStickyActionButtonCircleElement}

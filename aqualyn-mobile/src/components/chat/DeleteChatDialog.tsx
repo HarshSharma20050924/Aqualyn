@@ -33,8 +33,8 @@ export default function DeleteChatDialog({
         
         {/* Backdrop Tint */}
         <Animated.View 
-          entering={FadeIn.duration(200)}
-          exiting={FadeOut.duration(150)}
+          
+          
           style={StyleSheet.absoluteFill}
         >
           <TouchableOpacity 
@@ -46,8 +46,8 @@ export default function DeleteChatDialog({
 
         {/* Modal Dialog Card Container */}
         <Animated.View
-          entering={ZoomIn.duration(220).delay(50)}
-          exiting={ZoomOut.duration(150)}
+          
+          
           style={styles.dialogGlassCardFrame}
         >
           <h2 style={styles.modalPrimaryHeadingText}>Delete Chat</h2>

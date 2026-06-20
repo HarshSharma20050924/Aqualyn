@@ -84,7 +84,7 @@ export default function ProfileScreen({ onNavigate }: ProfileScreenProps) {
   };
 
   return (
-    <Animated.View entering={FadeIn} exiting={FadeOut} style={styles.viewportBaseFrame}>
+    <Animated.View   style={styles.viewportBaseFrame}>
       {/* Fixed Sticky Header Panel */}
       <View style={[styles.stickyHeaderPanel, { paddingTop: insets.top, height: 64 + insets.top }]}>
         <View style={styles.headerContentWrapper}>
@@ -335,7 +335,7 @@ export default function ProfileScreen({ onNavigate }: ProfileScreenProps) {
             onPress={() => setIsNewCollectionModalOpen(false)} 
             style={styles.modalViewportAbsoluteBackgroundDimDismissal} 
           />
-          <Animated.View entering={FadeIn} style={styles.modalFormAlertDeckShellCard}>
+          <Animated.View  style={styles.modalFormAlertDeckShellCard}>
             <Text style={styles.modalAlertHeaderTitleTypographyLabel}>New Collection</Text>
             <TextInput
               autoFocus

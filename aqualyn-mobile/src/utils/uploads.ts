@@ -32,10 +32,6 @@ export const uploadFile = async (file: RativeNativeFileParam): Promise<string> =
   const res = await apiFetch('/api/upload', {
     method: 'POST',
     body: formData,
-    headers: {
-      // Allow the engine to inject bound multi-part borders automatically
-      'Content-Type': 'multipart/form-data',
-    },
   });
 
   if (!res.ok) {
