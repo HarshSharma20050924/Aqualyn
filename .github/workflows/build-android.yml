@@ -11,6 +11,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     
+    # Environment flags to handle GitHub runner environment updates smoothly
+    env:
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: "true"
+
     steps:
       - name: 📦 Checkout repository
         uses: actions/checkout@v4
@@ -18,7 +22,7 @@ jobs:
       - name: 🟢 Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: ☕ Setup Java
         uses: actions/setup-java@v4
@@ -46,7 +50,7 @@ jobs:
         env:
           NODE_OPTIONS: "--max_old_space_size=4096"
         run: |
-          ./gradlew clean
+          ./gradlew clean --stacktrace --info
           ./gradlew assembleRelease --stacktrace --info
 
       - name: 📤 Upload APK Artifacts
