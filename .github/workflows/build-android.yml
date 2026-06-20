@@ -26,9 +26,11 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
-      - name: 📥 Install dependencies
+      - name: 📥 Install dependencies (Clean)
         working-directory: aqualyn-mobile
-        run: npm install
+        run: |
+          rm -rf node_modules
+          npm install
 
       - name: ⚙️ Generate Android Project (Expo Prebuild)
         working-directory: aqualyn-mobile
@@ -42,7 +44,9 @@ jobs:
 
       - name: 🔨 Build APK
         working-directory: aqualyn-mobile/android
-        run: ./gradlew assembleRelease
+        run: |
+          ./gradlew clean
+          ./gradlew assembleRelease --stacktrace --info
 
       - name: 📤 Upload APK Artifacts
         uses: actions/upload-artifact@v4
