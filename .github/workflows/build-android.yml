@@ -40,7 +40,7 @@ jobs:
 
       - name: 📥 Install dependencies
         working-directory: aqualyn-mobile
-        # 'npm ci' completely locks dependencies to your package-lock.json (no overnight updates)
+        # 'npm ci' locks your builds to your exact package-lock.json
         run: |
           rm -rf node_modules
           npm ci
@@ -49,21 +49,20 @@ jobs:
         working-directory: aqualyn-mobile
         run: npx expo prebuild --platform android --clean
 
-      - name: ✂️ Configure Separate APK Builds (ABI Splits)
-        working-directory: aqualyn-mobile/android/app
-        # Dynamically changes the generated build.gradle to compile separate split APKs
-        run: |
-          sed -i 's/def enableSeparateBuildPerCPUArchitecture = false/def enableSeparateBuildPerCPUArchitecture = true/g' build.gradle
-
       - name: 🔨 Build APK
         working-directory: aqualyn-mobile/android
-        # Explicit memory caps and sequential compiling stops silent memory crashes completely
-        run: ./gradlew assembleRelease --no-daemon -Dorg.gradle.parallel=false -Dorg.gradle.jvmargs="-Xmx3072m -XX:MaxMetaspaceSize=512m"
+        # We pass reactive project properties (-P) directly to Gradle to force splitting and prevent OOMs
+        run: |
+          ./gradlew assembleRelease --no-daemon \
+            -PreactNativeArchitectures=arm64-v8a,armeabi-v7a,x86_64 \
+            -Dorg.gradle.parallel=false \
+            -Dorg.gradle.jvmargs="-Xmx3072m -XX:MaxMetaspaceSize=512m"
 
-      - name: 📤 Upload APK Artifact
+      - name: 📤 Upload APK Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: aqualyn-android-apks
+          # Captures all specialized, split APK outputs together
           path: aqualyn-mobile/android/app/build/outputs/apk/release/*.apk
 
       - name: 🚀 Create GitHub Release
