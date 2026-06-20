@@ -34,15 +34,21 @@ jobs:
         working-directory: aqualyn-mobile
         run: npx expo prebuild --platform android --clean
 
+      - name: 🛠️ Optimize APK Size (R8 Shrinking & ABI Splits)
+        working-directory: aqualyn-mobile/android
+        run: |
+          echo "android.enableProguardInReleaseBuilds=true" >> gradle.properties
+          echo "android.enableSeparateBuildPerCPUArchitecture=true" >> gradle.properties
+
       - name: 🔨 Build APK
         working-directory: aqualyn-mobile/android
         run: ./gradlew assembleRelease
 
-      - name: 📤 Upload APK Artifact
+      - name: 📤 Upload APK Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: aqualyn-android-apk
-          path: aqualyn-mobile/android/app/build/outputs/apk/release/app-release.apk
+          name: aqualyn-android-apks
+          path: aqualyn-mobile/android/app/build/outputs/apk/release/*.apk
 
       - name: 🚀 Create GitHub Release
         id: create_release
@@ -51,6 +57,6 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           name: Release ${{ github.ref_name }}
-          files: aqualyn-mobile/android/app/build/outputs/apk/release/app-release.apk
+          files: aqualyn-mobile/android/app/build/outputs/apk/release/*.apk
           token: ${{ secrets.GITHUB_TOKEN }}
           generate_release_notes: true

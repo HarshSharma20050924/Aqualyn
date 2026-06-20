@@ -6,7 +6,7 @@
 
 // In React Native, do not use 'localhost' when testing on a physical device;
 // instead use your local development machine's private LAN IP address (e.g., http://192.168.1.X:5000)
-export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || process.env.REACT_APP_API_URL || "http://10.0.2.2:5000"; // 10.0.2.2 is default loopback alias for the Android Emulator
+export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || process.env.REACT_APP_API_URL || "https://aqualyn.onrender.com"; // Defaulting to production backend
 
 // Endpoints mapping for easier maintenance
   export const ENDPOINTS = {

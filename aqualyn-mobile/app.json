@@ -19,7 +19,8 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.aqualyn.com",
-      "googleServicesFile": "./google-services.json"
+      "googleServicesFile": "./google-services.json",
+      "usesCleartextTraffic": true
     },
     "web": {
       "bundler": "metro",
@@ -36,7 +37,6 @@
           "backgroundColor": "#ffffff"
         }
       ],
-      "expo-sharing",
       "@react-native-firebase/app",
       "@react-native-firebase/auth"
     ],
