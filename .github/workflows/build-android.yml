@@ -9,11 +9,9 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    
-    # Environment flags to handle GitHub runner environment updates smoothly
-    env:
-      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: "true"
+    # Pinning a fixed OS version blocks GitHub from changing the background environment
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
 
     steps:
       - name: 📦 Checkout repository
@@ -22,7 +20,7 @@ jobs:
       - name: 🟢 Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '20'
 
       - name: ☕ Setup Java
         uses: actions/setup-java@v4
@@ -30,30 +28,39 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
-      - name: 📥 Install dependencies (Clean)
+      - name: 💾 Cache Gradle Packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: 📥 Install dependencies
         working-directory: aqualyn-mobile
+        # 'npm ci' completely locks dependencies to your package-lock.json (no overnight updates)
         run: |
           rm -rf node_modules
-          npm install
+          npm ci
 
       - name: ⚙️ Generate Android Project (Expo Prebuild)
         working-directory: aqualyn-mobile
         run: npx expo prebuild --platform android --clean
 
-      - name: 🛠️ Optimize APK Size (R8 Shrinking)
-        working-directory: aqualyn-mobile
+      - name: ✂️ Configure Separate APK Builds (ABI Splits)
+        working-directory: aqualyn-mobile/android/app
+        # Dynamically changes the generated build.gradle to compile separate split APKs
         run: |
-          echo "android.enableProguardInReleaseBuilds=true" >> android/gradle.properties
+          sed -i 's/def enableSeparateBuildPerCPUArchitecture = false/def enableSeparateBuildPerCPUArchitecture = true/g' build.gradle
 
       - name: 🔨 Build APK
         working-directory: aqualyn-mobile/android
-        env:
-          NODE_OPTIONS: "--max_old_space_size=4096"
-        run: |
-          ./gradlew clean --stacktrace --info
-          ./gradlew assembleRelease --stacktrace --info
+        # Explicit memory caps and sequential compiling stops silent memory crashes completely
+        run: ./gradlew assembleRelease --no-daemon -Dorg.gradle.parallel=false -Dorg.gradle.jvmargs="-Xmx3072m -XX:MaxMetaspaceSize=512m"
 
-      - name: 📤 Upload APK Artifacts
+      - name: 📤 Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: aqualyn-android-apks
