@@ -115,6 +115,7 @@ export interface Message {
   timestamp: string;
   isRead: boolean;
   isEdited?: boolean;
+  isForwarded?: boolean;
   status?: 'sent' | 'delivered' | 'seen';
   deletedFor?: string[];
   sharedPostId?: string;

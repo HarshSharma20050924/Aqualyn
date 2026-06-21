@@ -648,7 +648,8 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
 
       {/* Footer System Dock Container */}
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
         style={[styles.footerWrapper, { paddingBottom: insets.bottom + 10 }]}
       >
         {isPrivateRestricted ? (

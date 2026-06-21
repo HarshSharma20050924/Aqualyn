@@ -6,11 +6,11 @@ import { API_BASE_URL } from '../config/api';
  * 2. HttpOnly cookies via 'credentials: include'
  * 3. Default JSON headers
  */
-// Simple in-memory cache
-const cache = new Map<string, { data: any; timestamp: number }>();
+// Persistent caching using localStorage
+const CACHE_PREFIX = '@api_cache:';
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
-export async function apiFetch(url: string, options: RequestInit & { cache?: boolean } = {}) {
+export async function apiFetch(url: string, options: RequestInit & { cache?: boolean; skipCacheRead?: boolean } = {}) {
     const headers: Record<string, string> = { ...((options.headers as any) || {}) };
     
     // Auto-detect Content-Type: if body is NOT FormData, default to JSON
@@ -18,23 +18,31 @@ export async function apiFetch(url: string, options: RequestInit & { cache?: boo
         headers['Content-Type'] = 'application/json';
     }
     
+    const targetUrl = url.startsWith('http') ? url : `${API_BASE_URL}${url}`;
+    const cacheKey = `${CACHE_PREFIX}${targetUrl}|${JSON.stringify(options)}`;
+
     // Handle caching for GET requests
     const isGetRequest = options.method?.toUpperCase() === 'GET' || !options.method;
     const useCache = isGetRequest && (options.cache ?? false);
     
-    if (useCache) {
-        const cacheKey = `${url}|${JSON.stringify(options)}`;
-        const cached = cache.get(cacheKey);
-        
-        if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-            return new Response(JSON.stringify(cached.data), {
-                status: 200,
-                headers: { 'Content-Type': 'application/json' }
-            });
+    if (useCache && !options.skipCacheRead) {
+        try {
+            const cachedStr = localStorage.getItem(cacheKey);
+            if (cachedStr) {
+                const cached = JSON.parse(cachedStr);
+                if (Date.now() - cached.timestamp < CACHE_TTL) {
+                    return new Response(JSON.stringify(cached.data), {
+                        status: 200,
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                }
+            }
+        } catch (e) {
+            console.error('[apiFetch] Error reading from localStorage cache:', e);
         }
     }
 
-    const response = await fetch(url.startsWith('http') ? url : `${API_BASE_URL}${url}`, {
+    const response = await fetch(targetUrl, {
         ...options,
         headers,
         credentials: 'include',
@@ -46,11 +54,15 @@ export async function apiFetch(url: string, options: RequestInit & { cache?: boo
         // but the next bootstrap/sync will catch it.
     }
     
-    // Cache successful GET responses
+    // Cache successful GET responses persistently
     if (useCache && response.ok && isGetRequest) {
-        const cacheKey = `${url}|${JSON.stringify(options)}`;
-        const data = await response.clone().json();
-        cache.set(cacheKey, { data, timestamp: Date.now() });
+        try {
+            const clone = response.clone();
+            const data = await clone.json();
+            localStorage.setItem(cacheKey, JSON.stringify({ data, timestamp: Date.now() }));
+        } catch (e) {
+            console.error('[apiFetch] Error saving to localStorage cache:', e);
+        }
     }
 
     return response;

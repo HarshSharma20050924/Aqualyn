@@ -13,11 +13,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
  * 2. Token injection from AsyncStorage
  * 3. Conditional Content-Type payload configuration
  */
-// Simple in-memory cache
-const cache = new Map<string, { data: any; timestamp: number }>();
+// Persistent caching using AsyncStorage
+const CACHE_PREFIX = '@api_cache:';
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
-export async function apiFetch(url: string, options: RequestInit & { cache?: boolean } = {}) {
+export async function apiFetch(url: string, options: RequestInit & { cache?: boolean; skipCacheRead?: boolean } = {}) {
     const headers: Record<string, string> = { ...((options.headers as any) || {}) };
     
     // React Native FormData objects require skipping the standard application/json Content-Type 
@@ -30,16 +30,24 @@ export async function apiFetch(url: string, options: RequestInit & { cache?: boo
         headers['Content-Type'] = 'application/json';
     }
 
-    // Handle caching for GET requests
-    if (useCache) {
-        const cacheKey = `${url}|${JSON.stringify(options)}`;
-        const cached = cache.get(cacheKey);
-        
-        if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-            return new Response(JSON.stringify(cached.data), {
-                status: 200,
-                headers: { 'Content-Type': 'application/json' }
-            });
+    const targetUrl = url.startsWith('http') ? url : `${API_BASE_URL}${url}`;
+    const cacheKey = `${CACHE_PREFIX}${targetUrl}|${JSON.stringify(options)}`;
+
+    // Handle persistent caching for GET requests
+    if (useCache && !options.skipCacheRead) {
+        try {
+            const cachedStr = await AsyncStorage.getItem(cacheKey);
+            if (cachedStr) {
+                const cached = JSON.parse(cachedStr);
+                if (Date.now() - cached.timestamp < CACHE_TTL) {
+                    return new Response(JSON.stringify(cached.data), {
+                        status: 200,
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                }
+            }
+        } catch (e) {
+            console.error('[apiFetch] Error reading from cache:', e);
         }
     }
 
@@ -54,20 +62,13 @@ export async function apiFetch(url: string, options: RequestInit & { cache?: boo
         }
     }
 
-    const targetUrl = url.startsWith('http') ? url : `${API_BASE_URL}${url}`;
-
     const response = await fetch(targetUrl, {
         ...options,
         headers,
-        // 'credentials' is a web standard configuration. In React Native, authentication cookies
-        // are stored and managed natively by the system's cookie manager automatically.
-        // We preserve it for hybrid web environments if applicable.
         credentials: 'include',
     });
 
     if (response.status === 401) {
-        // Global Session Expiry Hook
-        // Tip: You can dispatch a global event or trigger your authentication store logout sequence here.
         console.warn('[apiFetch] Unauthorised 401 response detected.');
         try {
             await AsyncStorage.removeItem('auth_token');
@@ -76,11 +77,15 @@ export async function apiFetch(url: string, options: RequestInit & { cache?: boo
         }
     }
     
-    // Cache successful GET responses
+    // Cache successful GET responses persistently
     if (useCache && response.ok && isGetRequest) {
-        const cacheKey = `${url}|${JSON.stringify(options)}`;
-        const data = await response.clone().json();
-        cache.set(cacheKey, { data, timestamp: Date.now() });
+        try {
+            const clone = response.clone();
+            const data = await clone.json();
+            await AsyncStorage.setItem(cacheKey, JSON.stringify({ data, timestamp: Date.now() }));
+        } catch (e) {
+            console.error('[apiFetch] Error saving to cache:', e);
+        }
     }
 
     return response;

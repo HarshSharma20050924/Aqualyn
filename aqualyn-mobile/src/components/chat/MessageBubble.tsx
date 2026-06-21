@@ -99,16 +99,12 @@ function MessageBubbleComponent({
         return Math.abs(gestureState.dx) > 20 && Math.abs(gestureState.dy) < 20;
       },
       onPanResponderMove: (evt, gestureState) => {
-        if (!isMe && gestureState.dx > 0 && gestureState.dx < 80) {
-          pan.setValue({ x: gestureState.dx, y: 0 });
-        } else if (isMe && gestureState.dx < 0 && gestureState.dx > -80) {
+        if (gestureState.dx < 0 && gestureState.dx > -80) {
           pan.setValue({ x: gestureState.dx, y: 0 });
         }
       },
       onPanResponderRelease: (evt, gestureState) => {
-        if (!isMe && gestureState.dx > 50) {
-          onReply(msg);
-        } else if (isMe && gestureState.dx < -50) {
+        if (gestureState.dx < -50) {
           onReply(msg);
         }
         RNAnimated.spring(pan, {

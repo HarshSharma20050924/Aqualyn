@@ -434,7 +434,7 @@ export default function ChatListScreen({ onNavigate }: Props) {
                             onPress={() => { setActiveContactId(user.id); onNavigate('contact-profile'); }}
                             style={styles.globalUserAvatarWrapper}
                           >
-                            <Image source={{ uri: user.avatar }} style={styles.globalUserAvatar} />
+                            <Image source={{ uri: user.avatar || `https://ui-avatars.com/api/?background=random&name=${encodeURIComponent(user.displayName || user.name || 'User')}` }} style={styles.globalUserAvatar} />
                           </TouchableOpacity>
                           <View style={styles.globalUserMeta}>
                             <View style={styles.globalUserNameRow}>
@@ -497,7 +497,7 @@ export default function ChatListScreen({ onNavigate }: Props) {
                             </View>
                           ) : (
                             <View style={styles.avatarTouchArea}>
-                              <Image source={{ uri: chat.avatar }} style={styles.chatListItemAvatar} />
+                              <Image source={{ uri: chat.avatar || `https://ui-avatars.com/api/?background=random&name=${encodeURIComponent(chat.name || 'Chat')}` }} style={styles.chatListItemAvatar} />
                               <View style={styles.aquaGlowDot} />
                             </View>
                           )}
@@ -555,7 +555,7 @@ export default function ChatListScreen({ onNavigate }: Props) {
                               <UserPlus size={22} color="#0057bd" />
                             </View>
                           ) : (
-                            <Image source={{ uri: chat.avatar }} style={styles.chatListItemAvatarRound} />
+                            <Image source={{ uri: chat.avatar || `https://ui-avatars.com/api/?background=random&name=${encodeURIComponent(chat.name || 'Chat')}` }} style={styles.chatListItemAvatarRound} />
                           )}
                           {isSelectionMode && (
                             <View style={[styles.selectionCheckCircle, isSelected ? styles.checkSelectedBg : styles.checkUnselectedBg]}>

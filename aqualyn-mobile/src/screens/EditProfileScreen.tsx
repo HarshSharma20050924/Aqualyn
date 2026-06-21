@@ -98,8 +98,8 @@ export default function EditProfileScreen({ onBack }: Props) {
       });
 
       if (response.ok) {
-        const updatedUser = await response.json();
-        setCurrentUser(updatedUser);
+        const data = await response.json();
+        setCurrentUser(data.profile || data);
         addToast('Profile updated successfully!', 'success');
         onBack();
       } else {
