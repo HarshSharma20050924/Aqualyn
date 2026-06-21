@@ -418,7 +418,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   return (
     <AppContext.Provider value={{
-      currentUser, setCurrentUser, socket, chats, setChats, messages, setMessages, contacts, ...actions,
+      currentUser, setCurrentUser, socket, chats, setChats, messages, setMessages, contacts, fetchInitialData, ...actions,
       activeChatId, setActiveChatId, activeContactId, setActiveContactId,
       toasts, addToast, removeToast, isLoading, setIsLoading, isFetchingData,
       folders, setFolders, theme, setTheme, aquaIntensity, setAquaIntensity,

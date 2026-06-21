@@ -24,6 +24,7 @@
     "expo-splash-screen": "~56.0.10",
     "expo-status-bar": "~56.0.4",
     "expo-symbols": "~56.0.6",
+    "expo-updates": "~56.0.19",
     "expo-web-browser": "~56.0.5",
     "firebase": "^12.15.0",
     "lottie-react-native": "^7.3.8",

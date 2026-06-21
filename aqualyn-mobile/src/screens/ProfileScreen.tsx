@@ -10,7 +10,8 @@ import {
   TextInput,
   Modal,
   Dimensions,
-  Platform
+  Platform,
+  RefreshControl
 } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -24,6 +25,7 @@ import StoryCreator from '../components/stories/StoryCreator';
 import PostCreator from '../components/posts/PostCreator';
 import PostViewer from '../components/posts/PostViewer';
 import UserListModal from '../components/social/UserListModal';
+import BubbleLoader from '../components/ui/BubbleLoader';
 
 import { apiFetch } from '../utils/fetcher';
 import { ENDPOINTS } from '../config/api';
@@ -37,7 +39,7 @@ interface ProfileScreenProps {
 
 export default function ProfileScreen({ onNavigate }: ProfileScreenProps) {
   const insets = useSafeAreaInsets();
-  const { currentUser, posts = [], stories = [], createCollection, setActiveContactId, addToast } = useAppContext() || {};
+  const { currentUser, posts = [], stories = [], createCollection, setActiveContactId, addToast, fetchInitialData } = useAppContext() || {};
 
   const [isCreatorOpen, setIsCreatorOpen] = useState(false);
   const [isPostCreatorOpen, setIsPostCreatorOpen] = useState(false);
@@ -51,6 +53,13 @@ export default function ProfileScreen({ onNavigate }: ProfileScreenProps) {
   const [showList, setShowList] = useState<'followers' | 'following' | null>(null);
   const [listData, setListData] = useState<User[]>([]);
   const [isListLoading, setIsListLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = React.useCallback(async () => {
+    setRefreshing(true);
+    await fetchInitialData?.();
+    setRefreshing(false);
+  }, [fetchInitialData]);
 
   if (!currentUser) return null;
 
@@ -94,12 +103,26 @@ export default function ProfileScreen({ onNavigate }: ProfileScreenProps) {
           </View>
         </View>
       </View>
-
-      <ScrollView 
-        contentContainerStyle={[styles.mainScrollStackContainer, { paddingBottom: insets.bottom + 120 }]}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* User Identity Info Profile Overview Card */}
+      <View style={{ flex: 1, position: 'relative' }}>
+        {refreshing && (
+          <View style={{ position: 'absolute', top: 10, left: 0, right: 0, zIndex: 100, alignItems: 'center' }}>
+            <BubbleLoader size={30} />
+          </View>
+        )}
+        <ScrollView 
+          contentContainerStyle={[styles.mainScrollStackContainer, { paddingBottom: insets.bottom + 120 }]}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor="transparent"
+              colors={['transparent']}
+              progressBackgroundColor="transparent"
+            />
+          }
+        >
+          {/* User Identity Info Profile Overview Card */}
         <View style={styles.profileMetaHeroSection}>
           <View style={styles.largeAvatarCompositeLayoutFrame}>
             <View style={styles.largeAvatarCircularBorderCard}>
@@ -301,6 +324,7 @@ export default function ProfileScreen({ onNavigate }: ProfileScreenProps) {
           )}
         </View>
       </ScrollView>
+      </View>
 
       {/* Floating Add Post Button */}
       <View style={styles.floatingAddPostButtonContainer}>

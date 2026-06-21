@@ -37,6 +37,7 @@ export interface AppContextType {
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
   isFetchingData: boolean;
+  fetchInitialData: () => Promise<void>;
   folders: Folder[];
   setFolders: React.Dispatch<React.SetStateAction<Folder[]>>;
   createFolder: (name: string, chatIds?: string[]) => string;

@@ -10,7 +10,8 @@ import {
   TextInput,
   ActivityIndicator,
   FlatList,
-  Platform
+  Platform,
+  RefreshControl
 } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -25,6 +26,7 @@ import {
 } from 'lucide-react-native';
 
 import { useAppContext } from '../context/AppContext';
+import BubbleLoader from '../components/ui/BubbleLoader';
 import { Post, User, Story } from '../types';
 import StoryViewer from '../components/StoryViewer';
 import StoryCreator from '../components/stories/StoryCreator';
@@ -224,12 +226,20 @@ export default function FeedScreen({ onNavigate }: Props) {
     likePost,
     savePost,
     addToast,
-    isFetchingData
+    isFetchingData,
+    fetchInitialData
   } = useAppContext();
 
   const [viewerStories, setViewerStories] = useState<Story[]>([]);
   const [activeStoryIndex, setActiveStoryIndex] = useState<number | null>(null);
   const [isCreatorOpen, setIsCreatorOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = React.useCallback(async () => {
+    setRefreshing(true);
+    await fetchInitialData();
+    setRefreshing(false);
+  }, [fetchInitialData]);
 
   // Active non-expired story filtration sequence
   const activeStories = useMemo(() => {
@@ -304,9 +314,24 @@ export default function FeedScreen({ onNavigate }: Props) {
       </View>
 
       {/* Main Core Viewport Content Deck Pipeline Rendering List */}
-      <FlatList
-        data={isFetchingData ? [] : feedPosts}
-        keyExtractor={(item) => item.id}
+      <View style={{ flex: 1, position: 'relative' }}>
+        {refreshing && (
+          <View style={{ position: 'absolute', top: 10, left: 0, right: 0, zIndex: 100, alignItems: 'center' }}>
+            <BubbleLoader size={30} />
+          </View>
+        )}
+        <FlatList
+          data={isFetchingData ? [] : feedPosts}
+          keyExtractor={(item) => item.id}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor="transparent"
+              colors={['transparent']}
+              progressBackgroundColor="transparent"
+            />
+          }
         renderItem={({ item }) => <PostCard post={item} />}
         contentContainerStyle={[styles.mainScrollableContentTrack, { paddingBottom: insets.bottom + 120 }]}
         showsVerticalScrollIndicator={false}
@@ -379,6 +404,7 @@ export default function FeedScreen({ onNavigate }: Props) {
           )
         }
       />
+      </View>
 
       {/* Full Account Story Segment Context Overlays Viewers Engine Module */}
       {activeStoryIndex !== null && (

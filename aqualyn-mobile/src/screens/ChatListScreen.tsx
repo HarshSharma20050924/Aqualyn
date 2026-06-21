@@ -11,7 +11,8 @@ import {
   Dimensions,
   Platform,
   Vibration,
-  Alert
+  Alert,
+  RefreshControl
 } from 'react-native';
 import Animated, {
   FadeIn,
@@ -57,6 +58,7 @@ import { ChatPeekPreview } from '../components/chat/ChatPeekPreview';
 import DeleteChatDialog from '../components/chat/DeleteChatDialog';
 import { ENDPOINTS } from '../config/api';
 import { apiFetch } from '../utils/fetcher';
+import BubbleLoader from '../components/ui/BubbleLoader';
 
 const { width: WINDOW_WIDTH, height: WINDOW_HEIGHT } = Dimensions.get('window');
 
@@ -92,11 +94,13 @@ export default function ChatListScreen({ onNavigate }: Props) {
     startChatWithContact,
     setActiveContactId,
     globalUsers,
-    createGroupChat
+    createGroupChat,
+    fetchInitialData
   } = useAppContext();
 
   const [activeTab, setActiveTab] = useState<string>('all');
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [globalSearchResults, setGlobalSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -118,6 +122,12 @@ export default function ChatListScreen({ onNavigate }: Props) {
   const [chatToDelete, setChatToDelete] = useState<string | null>(null);
 
   const [isSearchLoading, setIsSearchLoading] = useState(false);
+
+  const onRefresh = React.useCallback(async () => {
+    setRefreshing(true);
+    await fetchInitialData();
+    setRefreshing(false);
+  }, [fetchInitialData]);
 
   // Global Context Search Debouncer
   useEffect(() => {
@@ -393,7 +403,24 @@ export default function ChatListScreen({ onNavigate }: Props) {
       </View>
 
 {/* Main Messaging / Streams Center */}
-       <ScrollView contentContainerStyle={[styles.mainScroll, { paddingTop: headerHeight + 12, paddingBottom: insets.bottom + 100 }]}>
+       <View style={{ flex: 1, position: 'relative' }}>
+         {refreshing && (
+           <View style={{ position: 'absolute', top: headerHeight + 10, left: 0, right: 0, zIndex: 100, alignItems: 'center' }}>
+             <BubbleLoader size={30} />
+           </View>
+         )}
+         <ScrollView 
+           contentContainerStyle={[styles.mainScroll, { paddingTop: headerHeight + 12, paddingBottom: insets.bottom + 100 }]}
+           refreshControl={
+             <RefreshControl
+               refreshing={refreshing}
+               onRefresh={onRefresh}
+               tintColor="transparent"
+               colors={['transparent']}
+               progressBackgroundColor="transparent"
+             />
+           }
+         >
         {((isLoading || isFetchingData) && chats.length === 0) ? (
           <View style={styles.skeletonContainer}>
             {[1, 2, 3, 4, 5].map((i) => renderSkeletonChat(i))}
@@ -600,6 +627,7 @@ export default function ChatListScreen({ onNavigate }: Props) {
           </Text>
         </View>
       </ScrollView>
+      </View>
 
       {/* Floating Action Pen System Dock */}
       <TouchableOpacity onPress={() => setIsNewChatModalOpen(true)} style={styles.floatingActionPen}>
