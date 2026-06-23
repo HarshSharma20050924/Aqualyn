@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Lottie from 'lottie-react';
-import bubbleAnimation from '../../../public/bubbles.json';
+import bubbleAnimation from '../../bubbles.json';
 
 export default function BubbleLoader({ width = 100, height = 100 }: { width?: number; height?: number }) {
   const [percentage, setPercentage] = useState(0);
@@ -32,7 +32,7 @@ export default function BubbleLoader({ width = 100, height = 100 }: { width?: nu
       <div style={{ width, height, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
         <Lottie animationData={bubbleAnimation} loop={true} />
       </div>
-      {showText && (
+      {showText && width > 50 && (
         <div style={{ marginTop: 10, color: '#06b6d4', fontWeight: 'bold', fontFamily: 'monospace', fontSize: 14 }} className="animate-pulse">
           Waking up server... {percentage}%
         </div>

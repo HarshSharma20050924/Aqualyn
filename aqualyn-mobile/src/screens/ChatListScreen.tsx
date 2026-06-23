@@ -418,6 +418,7 @@ export default function ChatListScreen({ onNavigate }: Props) {
                tintColor="transparent"
                colors={['transparent']}
                progressBackgroundColor="transparent"
+               progressViewOffset={-1000}
              />
            }
          >

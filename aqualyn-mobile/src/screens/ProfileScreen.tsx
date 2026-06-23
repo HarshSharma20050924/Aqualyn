@@ -119,6 +119,7 @@ export default function ProfileScreen({ onNavigate }: ProfileScreenProps) {
               tintColor="transparent"
               colors={['transparent']}
               progressBackgroundColor="transparent"
+              progressViewOffset={-1000}
             />
           }
         >

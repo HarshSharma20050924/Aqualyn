@@ -330,6 +330,7 @@ export default function FeedScreen({ onNavigate }: Props) {
               tintColor="transparent"
               colors={['transparent']}
               progressBackgroundColor="transparent"
+              progressViewOffset={-1000}
             />
           }
         renderItem={({ item }) => <PostCard post={item} />}
