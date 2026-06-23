@@ -1,7 +1,10 @@
 <div align="center">
   <img src="./Aqualyn.png" alt="Aqualyn Banner" />
   <h1>Aqualyn</h1>
-  <p><a href="https://aqualyn.vercel.app">Live Demo</a></p>
+  <p>
+    <a href="https://aqualyn.vercel.app">Live Demo</a> |
+    <a href="https://aqualyn-web-page.vercel.app/">Landing Page</a>
+  </p>
 </div>
 
 Aqualyn is a high-performance, fluid social messaging application built for global scalability and secure cross-platform communication. It features a modern, responsive user interface (Liquid UI) and robust backend services to support real-time chat, story sharing, and social networking.
