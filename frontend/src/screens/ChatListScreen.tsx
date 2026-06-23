@@ -327,10 +327,16 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
         {/* Tabs */}
         {!isSearching && !isSelectionMode && (
           <div className="flex gap-2 px-4 py-3 overflow-x-auto scrollbar-hide items-center">
-            {['all', ...folders.map(f => f.name.toLowerCase()), 'personal', 'groups', 'unread', 'bots'].map((tab) => (
+            {['all', ...folders.map(f => f.name.toLowerCase()), 'personal', 'groups', 'unread', 'bots', 'archived'].map((tab) => (
               <button 
                 key={tab}
-                onClick={() => setActiveTab(tab)}
+                onClick={() => {
+                  if (tab === 'archived') {
+                    handleOpenArchive();
+                  } else {
+                    setActiveTab(tab);
+                  }
+                }}
                 className={`flex items-center px-5 py-1.5 rounded-full font-semibold text-sm whitespace-nowrap transition-all capitalize ${
                   activeTab === tab 
                     ? 'bg-secondary text-white shadow-md' 

@@ -365,7 +365,7 @@ export default function ChatListScreen({ onNavigate }: Props) {
         {!isSearching && !isSelectionMode && (
           <View style={styles.tabsWrapper}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsScrollContent}>
-              {['all', ...folders.map((f) => f.name.toLowerCase()), 'personal', 'groups', 'unread', 'bots'].map((tab) => {
+              {['all', ...folders.map((f) => f.name.toLowerCase()), 'personal', 'groups', 'unread', 'bots', 'archived'].map((tab) => {
                 const isTabActive = activeTab === tab;
                 const unreadBadgeCount = chats.filter((c) => {
                   if (tab === 'all') return (c.unreadCount || 0) > 0;

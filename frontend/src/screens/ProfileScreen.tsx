@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Pen, Plus, Heart, MessageCircle, Camera, Grid, Bookmark, Folder, MoreVertical } from 'lucide-react';
+import { Pen, Plus, Heart, MessageCircle, Camera, Grid, Bookmark, Folder, MoreVertical, Archive } from 'lucide-react';
 import { Post, Collection, User } from '../types';
 import { useAppContext } from '../context/AppContext';
 import StoryViewer from '../components/StoryViewer';
@@ -16,7 +16,7 @@ export default function ProfileScreen({ onNavigate }: { onNavigate: (s: string) 
   const [isCreatorOpen, setIsCreatorOpen] = useState(false);
   const [isPostCreatorOpen, setIsPostCreatorOpen] = useState(false);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
-  const [activeTab, setActiveTab] = useState<'posts' | 'saved' | 'collections'>('posts');
+  const [activeTab, setActiveTab] = useState<'posts' | 'saved' | 'collections' | 'archived'>('posts');
   const [isNewCollectionModalOpen, setIsNewCollectionModalOpen] = useState(false);
   const [newCollectionName, setNewCollectionName] = useState('');
   const { addToast } = useAppContext();
@@ -49,6 +49,7 @@ export default function ProfileScreen({ onNavigate }: { onNavigate: (s: string) 
   if (!currentUser) return null;
 
   const myPosts = posts.filter(p => p.userId === currentUser.id && !p.isArchived);
+  const archivedPosts = posts.filter(p => p.userId === currentUser.id && p.isArchived);
   const savedPosts = posts.filter(p => currentUser.savedPostIds?.includes(p.id));
   const myStories = stories.filter(s => s.userId === currentUser.id);
 
@@ -168,6 +169,12 @@ export default function ProfileScreen({ onNavigate }: { onNavigate: (s: string) 
             >
               <Folder className="w-5 h-5" /> Collections
             </button>
+            <button 
+              onClick={() => setActiveTab('archived')}
+              className={`flex-1 py-4 flex items-center justify-center gap-2 font-bold transition-all ${activeTab === 'archived' ? 'text-primary border-b-2 border-primary' : 'text-on-surface-variant opacity-60'}`}
+            >
+              <Archive className="w-5 h-5" /> Archived
+            </button>
           </div>
 
           <div className="min-h-[400px]">
@@ -240,6 +247,36 @@ export default function ProfileScreen({ onNavigate }: { onNavigate: (s: string) 
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {activeTab === 'archived' && (
+              <div className="grid grid-cols-3 gap-2">
+                {archivedPosts.map((post) => (
+                  <div 
+                    key={post.id} 
+                    onClick={() => setSelectedPost(post)}
+                    className="aspect-square rounded-xl overflow-hidden relative group cursor-pointer"
+                  >
+                    <img src={post.imageUrl || post.mediaUrl || `https://images.unsplash.com/photo-1558655146-d09347e92766?auto=format&fit=crop&q=80&w=300&h=300&sig=${post.id}`} alt="Post" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
+                      <div className="flex items-center gap-1 text-white font-semibold">
+                        <Heart className="w-5 h-5 fill-white" /> {post.likes.length}
+                      </div>
+                      <div className="flex items-center gap-1 text-white font-semibold">
+                        <MessageCircle className="w-5 h-5 fill-white" /> {post.comments.length}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {archivedPosts.length === 0 && (
+                  <div className="col-span-3 py-20 text-center space-y-4">
+                    <div className="w-16 h-16 mx-auto rounded-full bg-surface-container flex items-center justify-center">
+                      <Archive className="w-8 h-8 text-on-surface-variant" />
+                    </div>
+                    <p className="text-on-surface-variant font-medium">No archived posts yet</p>
+                  </div>
+                )}
               </div>
             )}
           </div>

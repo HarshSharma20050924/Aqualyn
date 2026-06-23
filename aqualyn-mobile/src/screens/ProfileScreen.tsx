@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Pen, Plus, Heart, MessageCircle, Grid, Bookmark, Folder } from 'lucide-react-native';
+import { Pen, Plus, Heart, MessageCircle, Grid, Bookmark, Folder, Archive } from 'lucide-react-native';
 import { Post, Collection, User } from '../types';
 import { useAppContext } from '../context/AppContext';
 
@@ -44,7 +44,7 @@ export default function ProfileScreen({ onNavigate }: ProfileScreenProps) {
   const [isCreatorOpen, setIsCreatorOpen] = useState(false);
   const [isPostCreatorOpen, setIsPostCreatorOpen] = useState(false);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
-  const [activeTab, setActiveTab] = useState<'posts' | 'saved' | 'collections'>('posts');
+  const [activeTab, setActiveTab] = useState<'posts' | 'saved' | 'collections' | 'archived'>('posts');
   const [isNewCollectionModalOpen, setIsNewCollectionModalOpen] = useState(false);
   const [newCollectionName, setNewCollectionName] = useState('');
   const [activeStoryIndex, setActiveStoryIndex] = useState<number | null>(null);
@@ -64,6 +64,7 @@ export default function ProfileScreen({ onNavigate }: ProfileScreenProps) {
   if (!currentUser) return null;
 
   const myPosts = posts.filter((p: Post) => p.userId === currentUser.id && !p.isArchived);
+  const archivedPosts = posts.filter((p: Post) => p.userId === currentUser.id && p.isArchived);
   const savedPosts = posts.filter((p: Post) => currentUser.savedPostIds?.includes(p.id));
   const myStories = stories.filter((s: any) => s.userId === currentUser.id);
 
@@ -249,6 +250,14 @@ export default function ProfileScreen({ onNavigate }: ProfileScreenProps) {
             <Folder size={18} color={activeTab === 'collections' ? '#0057bd' : '#64748b'} />
             <Text style={[styles.tabBarInteractiveSegmentLabel, activeTab === 'collections' && styles.activeTabBarInteractiveSegmentLabelText]}>Collections</Text>
           </TouchableOpacity>
+
+          <TouchableOpacity 
+            onPress={() => setActiveTab('archived')} 
+            style={[styles.tabBarInteractiveSegmentLink, activeTab === 'archived' && styles.activeTabBarInteractiveSegmentLinkBorder]}
+          >
+            <Archive size={18} color={activeTab === 'archived' ? '#0057bd' : '#64748b'} />
+            <Text style={[styles.tabBarInteractiveSegmentLabel, activeTab === 'archived' && styles.activeTabBarInteractiveSegmentLabelText]}>Archived</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Tab Context Viewport Render Switchboard Grid */}
@@ -321,6 +330,32 @@ export default function ProfileScreen({ onNavigate }: ProfileScreenProps) {
                   </View>
                 </TouchableOpacity>
               ))}
+            </View>
+          )}
+
+          {activeTab === 'archived' && (
+            <View style={styles.masonryThreeColumnWrapGrid}>
+              {archivedPosts.map((post: Post) => (
+                <TouchableOpacity 
+                  key={post.id} 
+                  onPress={() => setSelectedPost(post)}
+                  style={styles.gridSquarePostThumbnailContainerFrame}
+                >
+                  <Image 
+                    source={{ uri: post.imageUrl || post.mediaUrl || `https://images.unsplash.com/photo-1558655146-d09347e92766?w=300&h=300&sig=${post.id}` }} 
+                    style={styles.gridSquarePostThumbnailNativeImg} 
+                  />
+                </TouchableOpacity>
+              ))}
+
+              {archivedPosts.length === 0 && (
+                <View style={styles.emptyStateContainerCenteredBlock}>
+                  <View style={styles.emptyStateCircularIconPlaceholderGlowBox}>
+                    <Archive size={28} color="#64748b" />
+                  </View>
+                  <Text style={styles.emptyStateInfoHeadlineTypographyLabel}>No archived posts</Text>
+                </View>
+              )}
             </View>
           )}
         </View>
