@@ -1,64 +1,116 @@
 # Aqualyn
 
-Aqualyn is a high-performance, fluid social messaging application built for global scalability and secure cross-platform communication. It features a modern, responsive user interface and robust backend services to support real-time chat, story sharing, and social networking.
+Aqualyn is a high-performance, fluid social messaging application built for global scalability and secure cross-platform communication. It features a modern, responsive user interface (Liquid UI) and robust backend services to support real-time chat, story sharing, and social networking.
 
-## Project Structure
+## Architecture Overview
 
-This repository is organized as a monorepo containing all core components of the Aqualyn ecosystem. To maintain a clean architecture, the project is divided into distinct, self-contained directories:
+Aqualyn is structured as a monorepo containing multiple distinct environments:
 
-*   **`aqualyn-mobile/`**: The React Native (Expo) mobile application for Android and iOS. This handles the primary native mobile experience, real-time messaging, and push notifications.
-*   **`frontend/`**: The React-based progressive web application (PWA). This serves the browser-based client experience.
-*   **`backend/`**: The Node.js / Express server environment integrated with Supabase and Socket.IO for real-time state management, authentication, and database interactions.
-*   **`admin/`**: The administrative control panel for managing user data, application metrics, and moderation.
+*   **backend/**: Node.js / Express server environment integrated with Prisma (PostgreSQL), Redis, and Socket.IO for real-time state management and authentication.
+*   **frontend/**: React-based progressive web application (PWA) using Vite, Tailwind CSS, and Framer Motion.
+*   **aqualyn-mobile/**: React Native (Expo) mobile application for Android and iOS.
+*   **admin/**: Administrative control panel for managing user data and application metrics.
 
-## Contribution Guidelines
+## Prerequisites
 
-We welcome contributions to Aqualyn. To ensure code quality and consistency, please adhere to the following guidelines:
+Before setting up the project locally, ensure you have the following installed on your system:
 
-### General Workflow
+*   Node.js (v20 or higher recommended)
+*   npm or yarn
+*   PostgreSQL (v15 or higher)
+*   Redis (v7 or higher)
+*   Docker and Docker Compose (optional, for containerized database setup)
+*   Expo CLI (for mobile development)
 
-1.  **Fork the repository**: Create a personal fork of the project to begin development.
-2.  **Create a feature branch**: Work on a distinct, descriptively named branch (e.g., `feature/message-reactions` or `bugfix/avatar-fallback`).
-3.  **Select the correct environment**:
-    *   If you are fixing a mobile UI issue, navigate to `aqualyn-mobile/` and run `npm install`.
-    *   If you are modifying the web client, navigate to `frontend/` and run `npm install`.
-    *   If you are updating API endpoints or WebSocket events, navigate to `backend/` and run `npm install`.
-4.  **Test your changes**: Ensure your updates do not break existing functionality. Run the respective development servers (`npm run dev` or `npx expo start`) to verify.
-5.  **Submit a Pull Request**: Provide a clear description of your changes, the rationale behind them, and any related issue numbers.
+## Local Setup Guide
 
-### Setup Instructions
+Follow these steps to configure and run the Aqualyn ecosystem on your local machine.
 
-To run the application locally, you will need to set up the respective environments.
+### 1. Database and Redis Setup
 
-#### Mobile App
+Aqualyn requires both PostgreSQL and Redis to function. You can either install them natively on your system or use the provided Docker Compose configuration.
+
+**Using Docker Compose (Recommended):**
+Navigate to the root directory and run:
 ```bash
-cd aqualyn-mobile
-npm install
-npx expo start
+docker-compose up -d
 ```
+This will start a PostgreSQL instance on port 5433 and a Redis instance on port 6379.
 
-#### Web App
-```bash
-cd frontend
-npm install
-npm run dev
-```
+### 2. Backend Configuration
 
-#### Backend Server
+Navigate to the backend directory:
 ```bash
 cd backend
 npm install
+```
+
+Configure your environment variables:
+Create a `.env` file in the `backend/` directory based on the provided `.env.example`. Ensure the following core variables are set:
+```env
+DATABASE_URL="postgresql://aqualyn_user:aqualyn_password@localhost:5433/aqualyn_db?schema=public"
+REDIS_URL="redis://localhost:6379"
+JWT_SECRET="your_secure_jwt_secret"
+PORT=5000
+```
+*(Refer to the codebase for additional required keys such as Firebase and Supabase credentials if testing full functionality).*
+
+Initialize the database:
+```bash
+npx prisma generate
+npx prisma db push
+```
+
+Start the backend development server:
+```bash
 npm run dev
 ```
 
-Note: Ensure you have the necessary `.env` variables configured for your local backend environment before starting the server.
+### 3. Frontend Configuration (Web Client)
 
-## Continuous Integration
+Open a new terminal and navigate to the frontend directory:
+```bash
+cd frontend
+npm install
+```
 
-The project utilizes GitHub Actions for continuous integration and delivery. 
-- Pull requests are automatically validated.
-- Pushes to the `main` branch trigger Over-The-Air (OTA) EAS updates for the mobile client.
-- Creating a new Git tag (e.g., `v1.2.0`) will automatically build a production Android APK and attach it to a GitHub Release.
+Start the Vite development server:
+```bash
+npm run dev
+```
+The web application will be accessible at `http://localhost:3000`.
+
+### 4. Mobile Application Configuration (Expo)
+
+Open a new terminal and navigate to the mobile directory:
+```bash
+cd aqualyn-mobile
+npm install
+```
+
+Configure the environment:
+Create a `.env` file in `aqualyn-mobile/` and set the backend URL (use your local machine's IP address if testing on a physical device):
+```env
+EXPO_PUBLIC_API_URL=http://192.168.1.10:5000
+```
+
+Start the Expo development server:
+```bash
+npx expo start
+```
+
+## Contribution Guidelines
+
+We welcome contributions from the community. To maintain code quality and architectural consistency, please adhere to the following workflow:
+
+1.  **Fork and Clone**: Fork the repository to your personal account and clone it locally.
+2.  **Branching**: Create a feature or bugfix branch from `main`. Use descriptive names (e.g., `feature/liquid-animations` or `bugfix/socket-reconnection`).
+3.  **Code Style**: 
+    *   Maintain the "Liquid UI" design principles (glassmorphism, organic motion).
+    *   Ensure all new components are responsive and properly typed using TypeScript.
+    *   Avoid using emojis in commit messages or code comments to maintain a professional standard.
+4.  **Testing**: Verify your changes across all relevant environments (Web, Mobile, Backend) before submitting.
+5.  **Pull Requests**: Submit a Pull Request outlining the changes, the rationale, and any specific areas requiring review.
 
 ## License
 
