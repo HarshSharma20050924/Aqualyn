@@ -250,9 +250,9 @@ const MessageBubbleComponent = ({ msg, isMe, onReply, onEdit, replyMessage, onMe
                     className="flex flex-col gap-0.5 px-3 py-2 hover:bg-red-500/10 text-red-500 rounded-xl transition-colors text-left"
                 >
                     <div className="flex items-center gap-3 text-sm font-bold">
-                        <Trash2 className="w-4 h-4" /> Delete for everyone
-                    </div>
-                    <span className="text-[10px] opacity-70 ml-7">and {otherParticipantName}</span>
+                        <Trash2 className="w-4 h-4" /> Delete Message for 
+                    </div>    
+                    <span className="text-[10px] opacity-70 ml-7">{otherParticipantName} also</span>
                 </button>
               )}
             </motion.div>

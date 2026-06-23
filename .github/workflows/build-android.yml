@@ -51,11 +51,25 @@ jobs:
         working-directory: aqualyn-mobile
         run: npx expo prebuild --platform android --clean
 
-      # FORCE ABI SPLITS DIRECTLY INSIDE THE GRADLE CONFIGURATION 👇
+      # FORCE ABI SPLITS BY INJECTING THE SPLITS BLOCK DIRECTLY 👇
+      # sed cannot find the old string because Expo SDK 56 / RN 0.85 no longer generates it.
+      # Instead, we append a proper android.splits.abi block that Gradle always respects.
       - name: ✂️ Configure Separate APK Builds (ABI Splits)
         working-directory: aqualyn-mobile/android/app
         run: |
-          sed -i 's/enableSeparateBuildPerCPUArchitecture = false/enableSeparateBuildPerCPUArchitecture = true/g' build.gradle
+          cat >> build.gradle << 'EOF'
+
+          android.splits {
+              abi {
+                  enable true
+                  reset()
+                  include "armeabi-v7a", "arm64-v8a", "x86_64"
+                  universalApk false
+              }
+          }
+          EOF
+          echo "--- Injected ABI splits config. Tail of build.gradle: ---"
+          tail -15 build.gradle
 
       - name: 🔨 Build APK
         working-directory: aqualyn-mobile/android
