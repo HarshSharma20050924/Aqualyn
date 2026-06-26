@@ -13,7 +13,7 @@ import BubbleLoader from '../components/ui/BubbleLoader';
 import { apiFetch } from '../utils/fetcher';
 
 export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string) => void }) {
-  const { currentUser, chats, setActiveChatId, messages, isLoading, isFetchingData, folders, archiveChat, pinChat, muteChat, deleteChat, clearHistory, markAsRead, addChatToFolder, addToast, archiveLockPin, theme, setTheme, globalUsers, setGlobalUsers, followUser, startChatWithContact, setActiveContactId } = useAppContext();
+  const { currentUser, chats, setChats, setActiveChatId, messages, isLoading, isFetchingData, folders, archiveChat, pinChat, muteChat, deleteChat, clearHistory, markAsRead, addChatToFolder, addToast, archiveLockPin, theme, setTheme, globalUsers, setGlobalUsers, followUser, startChatWithContact, setActiveContactId } = useAppContext();
   const [activeTab, setActiveTab] = useState<string>('all');
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
   const [isLynLoading, setIsLynLoading] = useState(false);
