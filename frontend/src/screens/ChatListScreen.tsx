@@ -539,6 +539,12 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
           try {
             const chat = await AIService.initiateLynChat();
             if (chat?.id) {
+              setChats((prev: any[]) => {
+                // If it already exists, just return prev
+                if (prev.some(c => c.id === chat.id)) return prev;
+                // Otherwise prepend the new chat
+                return [chat, ...prev];
+              });
               setActiveChatId(chat.id);
               onNavigate('chat-detail');
             }
