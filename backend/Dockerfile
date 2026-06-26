@@ -32,4 +32,4 @@ COPY --from=builder /app/prisma ./prisma
 
 # Production Start Script
 EXPOSE 5000
-CMD ["sh", "-c", "npx prisma generate && npx prisma migrate deploy && node dist/server.js"]
+CMD ["sh", "-c", "npx prisma generate && npx prisma migrate resolve --rolled-back 20260624174211_ai_agents 2>/dev/null || true && npx prisma migrate deploy && node dist/server.js"]

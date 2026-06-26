@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'motion/react';
 import { Search, ArrowLeft, TrendingUp, Radio, Users, Play, Droplet, Check, Compass, Lock, Hash, X } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
@@ -60,6 +60,36 @@ export default function ExploreScreen({ onBack, onNavigate }: { onBack: () => vo
   const [isSearchingPeople, setIsSearchingPeople] = useState(false);
   const [hasSearchedPeople, setHasSearchedPeople] = useState(false);
 
+  // Search history
+  const HISTORY_KEY = 'exploreSearchHistory';
+  const [searchHistory, setSearchHistory] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { return []; }
+  });
+  const [isInputFocused, setIsInputFocused] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const saveToHistory = (q: string) => {
+    if (!q.trim() || q === 'AI_RECOMMENDED_PEOPLE') return;
+    setSearchHistory(prev => {
+      const updated = [q, ...prev.filter(h => h !== q)].slice(0, 10);
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const removeFromHistory = (q: string) => {
+    setSearchHistory(prev => {
+      const updated = prev.filter(h => h !== q);
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const clearHistory = () => {
+    setSearchHistory([]);
+    localStorage.removeItem(HISTORY_KEY);
+  };
+
   // On mount: check for AI redirect query
   useEffect(() => {
     const initialQuery = window.localStorage.getItem('exploreQuery');
@@ -120,10 +150,13 @@ export default function ExploreScreen({ onBack, onNavigate }: { onBack: () => vo
       .finally(() => setIsSearchingPeople(false));
   }, [currentUser?.id, setGlobalUsers]);
 
-  // Debounced search trigger for People tab
+  // Debounced search trigger for People tab + save history on commit
   useEffect(() => {
     if (activeTab !== 'people') return;
-    const timer = setTimeout(() => searchPeople(query), 300);
+    const timer = setTimeout(() => {
+      searchPeople(query);
+      if (query.trim()) saveToHistory(query.trim());
+    }, 300);
     return () => clearTimeout(timer);
   }, [query, activeTab, searchPeople]);
 
@@ -183,9 +216,13 @@ export default function ExploreScreen({ onBack, onNavigate }: { onBack: () => vo
           <div className="flex-1 relative">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
             <input
+              ref={inputRef}
               type="text"
               value={query}
               onChange={e => setQuery(e.target.value)}
+              onFocus={() => setIsInputFocused(true)}
+              onBlur={() => setTimeout(() => setIsInputFocused(false), 150)}
+              onKeyDown={e => { if (e.key === 'Enter' && query.trim()) saveToHistory(query.trim()); }}
               placeholder={activeTab === 'people' ? 'Search by name, username, or ID...' : 'Search posts, channels...'}
               className="w-full h-10 pl-9 pr-9 rounded-full bg-surface-container border border-outline-variant/20 text-sm text-on-surface placeholder:text-on-surface-variant/60 focus:outline-none focus:ring-2 focus:ring-secondary/20 focus:border-secondary transition-all"
             />
@@ -193,6 +230,41 @@ export default function ExploreScreen({ onBack, onNavigate }: { onBack: () => vo
               <button onClick={() => setQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface">
                 <X className="w-4 h-4" />
               </button>
+            )}
+
+            {/* Search history dropdown */}
+            {isInputFocused && !query.trim() && searchHistory.length > 0 && (
+              <div className="absolute top-12 left-0 right-0 z-50 glass-card rounded-2xl border border-white/20 shadow-xl overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-2 border-b border-surface-container">
+                  <span className="text-[10px] font-black text-on-surface-variant uppercase tracking-wider">Recent Searches</span>
+                  <button
+                    onClick={clearHistory}
+                    className="text-[10px] font-bold text-secondary hover:text-secondary/70 transition-colors"
+                  >
+                    Clear All
+                  </button>
+                </div>
+                {searchHistory.map(h => (
+                  <div
+                    key={h}
+                    className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-container/50 transition-colors cursor-pointer group"
+                  >
+                    <Search className="w-3.5 h-3.5 text-on-surface-variant/50 shrink-0" />
+                    <span
+                      className="flex-1 text-sm text-on-surface truncate"
+                      onClick={() => { setQuery(h); inputRef.current?.blur(); }}
+                    >
+                      {h}
+                    </span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); removeFromHistory(h); }}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity text-on-surface-variant hover:text-on-surface"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
           <div className="relative w-7 h-7 shrink-0">
