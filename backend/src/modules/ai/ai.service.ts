@@ -12,6 +12,33 @@ const openai = new OpenAI({
 
 const DEFAULT_MODEL = 'qwen-plus';
 
+// --- Vector Math Helpers ---
+function cosineSimilarity(A: number[], B: number[]): number {
+    let dotproduct = 0, mA = 0, mB = 0;
+    for(let i = 0; i < Math.min(A.length, B.length); i++) {
+        dotproduct += (A[i] * B[i]);
+        mA += (A[i]*A[i]);
+        mB += (B[i]*B[i]);
+    }
+    mA = Math.sqrt(mA);
+    mB = Math.sqrt(mB);
+    if (mA === 0 || mB === 0) return 0;
+    return (dotproduct)/((mA)*(mB));
+}
+
+async function getEmbedding(text: string): Promise<number[]> {
+    try {
+        const res = await openai.embeddings.create({
+            input: text,
+            model: 'text-embedding-v3' // Dashscope compatible embedding model
+        });
+        return res.data[0]?.embedding || [];
+    } catch (e) {
+        console.error('[AI] Embedding generation failed:', e);
+        return [];
+    }
+}
+
 export class AIService {
     /**
      * Helper to ensure the Lyn AI user exists in the database
@@ -438,7 +465,7 @@ Provide your response strictly in the following JSON format:
     }
 
     /**
-     * Draft a context-aware reply based on conversation history + selected personality
+     * Draft a context-aware reply based on conversation history + selected personality + vector memory
      */
     static async draftResponse(chatId: string, userId: string, personality: string = 'friendly') {
         const recentMessages = await (prisma as any).message.findMany({
@@ -458,6 +485,29 @@ Provide your response strictly in the following JSON format:
             return `${senderName}: ${msg.text || '[Attachment]'}`;
         }).join('\n');
 
+        // Extract context for vector search
+        const recentContext = recentMessages.slice(0, 4).map((m: any) => m.text).join(' ');
+        
+        let memoryContext = '';
+        const embedding = await getEmbedding(recentContext);
+        
+        if (embedding.length > 0) {
+            // Fetch all memories for the user (in-memory cosine similarity is fast enough for personal scale)
+            const allMemories = await (prisma as any).aIMemory.findMany({
+                where: { userId }
+            });
+
+            // Score and sort
+            const scoredMemories = allMemories.map((mem: any) => ({
+                content: mem.content,
+                score: mem.embedding ? cosineSimilarity(embedding, mem.embedding) : 0
+            })).sort((a: any, b: any) => b.score - a.score).slice(0, 5); // top 5 facts
+
+            if (scoredMemories.length > 0) {
+                memoryContext = scoredMemories.map((m: any) => `- ${m.content}`).join('\n');
+            }
+        }
+
         const personalityGuide: Record<string, string> = {
             friendly:     'Warm, conversational, and personable. Use casual language.',
             professional: 'Formal, concise, and business-appropriate. Avoid slang.',
@@ -467,28 +517,60 @@ Provide your response strictly in the following JSON format:
             creative:     'Expressive, imaginative, and unique. Think outside the box.'
         };
 
-        // Support preset names OR raw custom strings (e.g. "like a mentor")
         const guide = personalityGuide[personality] || personality || personalityGuide['friendly'];
 
         try {
-            const prompt = `You are drafting a reply for the user labeled "Me" in the following conversation.
-Personality style: ${guide}
+            const prompt = `You are drafting a reply on my behalf (labeled "Me") in the following conversation.
 
-Conversation (most recent last):
+CRITICAL INSTRUCTIONS:
+1. MIMIC MY EXACT TONE: Look at how "Me" speaks in the conversation history. If I use lowercase, you use lowercase. If I use slang (tbh, rn), you use it. If I use emojis, match my frequency. If I am brief, be brief. DO NOT sound like an AI assistant.
+2. ANSWER THE QUESTION: If "Them" asked a question, draft an answer to it.
+3. CONTEXT/FACTS: You have access to my long-term memory facts below. Use them ONLY if relevant to the current topic.
+
+My Memory Facts (use if relevant):
+${memoryContext || "No relevant memories found."}
+
+Conversation History:
 ${formattedHistory}
 
-Write ONLY the draft reply text — no labels, no explanation, just the message itself.`;
+Draft my next reply. Write ONLY the exact text I should send. No quotation marks, no explanations.`;
 
             const response = await openai.chat.completions.create({
                 model: DEFAULT_MODEL,
-                messages: [{ role: 'user', content: prompt }]
+                messages: [{ role: 'user', content: prompt }],
+                max_tokens: 256,
+                temperature: 0.8, // Slightly higher for more natural, varied phrasing
             });
 
             const draft = response.choices[0]?.message?.content?.trim() || "Let me get back to you on that.";
-            return { draft };
+            return { draft: draft.replace(/^"|"$/g, '') }; // clean up quotes if the AI adds them
         } catch (error) {
             console.error('Error drafting response:', error);
-            return { draft: "Sure, let's talk about this more!" };
+            throw new Error('Failed to generate draft');
+        }
+    }
+
+    /**
+     * Save a new fact to the user's vector memory.
+     * Call this when you want the AI to remember something long-term.
+     */
+    static async saveMemory(userId: string, fact: string) {
+        try {
+            const embedding = await getEmbedding(fact);
+            if (embedding.length === 0) return false;
+
+            await (prisma as any).aIMemory.create({
+                data: {
+                    userId,
+                    memoryType: 'fact',
+                    content: fact,
+                    embedding
+                }
+            });
+            return true;
+        } catch (e) {
+            console.error('[AI] Failed to save memory:', e);
+            return false;
         }
     }
 
