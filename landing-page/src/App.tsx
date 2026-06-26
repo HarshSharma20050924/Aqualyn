@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Link, Outlet } from 'react-router-dom';
 import LandingScreen from './pages/LandingScreen';
 import PrivacyScreen from './pages/PrivacyScreen';
 import SecurityScreen from './pages/SecurityScreen';
+import HelpScreen from './pages/HelpScreen';
 import ContributionScreen from './pages/ContributionScreen';
 import Header from './components/Header';
 import Footer from './components/Footer';
@@ -29,6 +30,7 @@ export default function App() {
             <Route index element={<LandingScreen onBack={() => { window.location.href = "https://aqualyn.vercel.app"; }} />} />
             <Route path="privacy" element={<PrivacyScreen />} />
             <Route path="security" element={<SecurityScreen />} />
+            <Route path="help" element={<HelpScreen />} />
             <Route path="contribution" element={<ContributionScreen />} />
           </Route>
         </Routes>

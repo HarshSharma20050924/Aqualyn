@@ -586,26 +586,39 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
               </div>
             </motion.div>
           )}
+</AnimatePresence>
 
-        </AnimatePresence>
+{step !== 'intro' && (
+        <footer className="mt-auto pt-8 pb-6 text-center w-full relative block z-10 clear-both">
+          <div className="flex items-center justify-center gap-6">
+            {[
+              { Icon: Globe, url: 'https://amoghchakra.com', label: 'Website' },
+              { Icon: Shield, url: 'https://amoghchakra.com/privacy', label: 'Privacy' },
+              { Icon: Headset, url: 'https://amoghchakra.com/help', label: 'Help & Support' }
+            ].map(({ Icon, url, label }, i) => (
+              <a 
+                key={i} 
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={label}
+                className="w-10 h-10 glass-card rounded-xl flex items-center justify-center text-on-surface-variant hover:text-primary transition-colors cursor-pointer border border-white/20 hover:border-primary/40"
+              >
+                <Icon className="w-5 h-5" />
+              </a>
+            ))}
+          </div>
+        </footer>
+      )}
 
-        {step !== 'intro' && (
-          <footer className="mt-12 text-center w-full">
-            <div className="flex items-center justify-center gap-6">
-              {[Globe, Shield, Headset].map((Icon, i) => (
-                <div key={i} className="w-10 h-10 glass-card rounded-xl flex items-center justify-center text-on-surface-variant hover:text-primary transition-colors cursor-pointer border border-white/20">
-                  <Icon className="w-5 h-5" />
-                </div>
-              ))}
-            </div>
-          </footer>
-        )}
+        <div className="fixed bottom-0 left-0 p-6 sm:p-8 flex items-center gap-3 pointer-events-none z-0">
+          <div className="w-3 h-3 rounded-full bg-secondary-fixed shadow-[0_0_10px_#0bfbff] animate-pulse" />
+          <span className="text-[10px] font-bold tracking-[0.2em] text-on-surface-variant uppercase">
+            System Online
+          </span>
+        </div>
+
       </div>
-
-      <div className="fixed bottom-0 left-0 p-6 sm:p-8 flex items-center gap-3">
-        <div className="w-3 h-3 rounded-full bg-secondary-fixed shadow-[0_0_10px_#0bfbff] animate-pulse" />
-        <span className="text-[10px] font-bold tracking-[0.2em] text-on-surface-variant uppercase">Network Secure</span>
-      </div>
-    </motion.div>
-  );
+      </motion.div>
+    );
 }

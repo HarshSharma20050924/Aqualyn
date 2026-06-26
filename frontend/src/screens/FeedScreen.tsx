@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Heart, MessageCircle, Send, Bookmark, MoreVertical, Plus } from 'lucide-react';
+import { Heart, MessageCircle, Send, Bookmark, MoreVertical, Plus, X, ArrowUp, Compass } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { Post, User, Story } from '../types';
 import StoryViewer from '../components/StoryViewer';
@@ -12,6 +12,7 @@ export default function FeedScreen({ onNavigate }: { onNavigate: (s: string) => 
   const [viewerStories, setViewerStories] = useState<Story[]>([]);
   const [activeStoryIndex, setActiveStoryIndex] = useState<number | null>(null);
   const [isCreatorOpen, setIsCreatorOpen] = useState(false);
+  const [commentSheetPostId, setCommentSheetPostId] = useState<string | null>(null);
 
   const activeStories = stories.filter(s => {
     const createdAt = new Date(s.createdAt);
@@ -19,16 +20,12 @@ export default function FeedScreen({ onNavigate }: { onNavigate: (s: string) => 
     return expiresAt > new Date();
   });
 
-  // Group stories by user
   const storiesByUser = activeStories.reduce((acc, story) => {
-    if (!acc[story.userId]) {
-      acc[story.userId] = [];
-    }
+    if (!acc[story.userId]) acc[story.userId] = [];
     acc[story.userId].push(story);
     return acc;
   }, {} as Record<string, typeof stories>);
 
-  // Get unique users who have stories
   const storyUsers = Object.values(storiesByUser).map(msgs => {
     const first = msgs[0];
     return {
@@ -39,32 +36,135 @@ export default function FeedScreen({ onNavigate }: { onNavigate: (s: string) => 
     } as any as User;
   });
 
-  // If current user isn't in storyUsers, we could add them with a "add story" capability
   const hasMyStory = storiesByUser[currentUser?.id || '']?.length > 0;
 
-  // Render Post Card
+  // ── Comment Sheet ───────────────────────────────────────────────────────────
+  const CommentSheet = ({ post }: { post: Post }) => {
+    const { commentPost, addToast, globalUsers, currentUser } = useAppContext();
+    const [commentText, setCommentText] = useState('');
+
+    const handleSubmit = (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!commentText.trim()) return;
+      commentPost(post.id, commentText);
+      setCommentText('');
+      addToast('Comment posted', 'success');
+    };
+
+    return (
+      <>
+        {/* Backdrop */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-scrim/40 backdrop-blur-sm z-40"
+          onClick={() => setCommentSheetPostId(null)}
+        />
+        {/* Sheet */}
+        <motion.div
+          initial={{ y: '100%' }}
+          animate={{ y: 0 }}
+          exit={{ y: '100%' }}
+          transition={{ type: 'spring', damping: 30, stiffness: 320 }}
+          className="fixed bottom-0 left-0 right-0 z-50 bg-surface rounded-t-[2rem] shadow-2xl flex flex-col"
+          style={{ maxHeight: '80vh' }}
+        >
+          {/* Handle */}
+          <div className="flex justify-center pt-3 pb-1">
+            <div className="w-10 h-1 bg-surface-container-highest rounded-full" />
+          </div>
+
+          {/* Header */}
+          <div className="flex items-center justify-between px-5 py-3 border-b border-surface-container">
+            <h3 className="font-headline font-bold text-base text-on-surface">
+              Comments <span className="text-on-surface-variant text-sm font-normal">({post.comments?.length ?? 0})</span>
+            </h3>
+            <button
+              onClick={() => setCommentSheetPostId(null)}
+              className="p-2 rounded-full hover:bg-surface-container text-on-surface-variant transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Comments list */}
+          <div className="flex-1 overflow-y-auto px-5 py-3 space-y-4">
+            {(!post.comments || post.comments.length === 0) ? (
+              <p className="text-center text-on-surface-variant text-sm mt-8">No comments yet. Start the conversation.</p>
+            ) : (
+              post.comments.map((c: any, i: number) => {
+                const author = globalUsers.find(u => u.id === c.userId) || currentUser;
+                return (
+                  <div key={i} className="flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-full overflow-hidden border border-surface-container shrink-0">
+                      {author?.avatar
+                        ? <img src={author.avatar} alt="" className="w-full h-full object-cover" />
+                        : <div className="w-full h-full bg-secondary/10 flex items-center justify-center text-secondary text-xs font-bold">{(author?.name || 'U')[0]}</div>}
+                    </div>
+                    <div className="flex-1">
+                      <div className="bg-surface-container rounded-2xl px-3 py-2">
+                        <span className="font-headline font-semibold text-xs text-on-surface mr-2">
+                          {author?.username || author?.name || 'User'}
+                        </span>
+                        <span className="text-sm text-on-surface">{c.content || c.text}</span>
+                      </div>
+                      <div className="flex items-center gap-3 mt-1 ml-1">
+                        <span className="text-[10px] text-on-surface-variant">
+                          {c.createdAt ? new Date(c.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'Just now'}
+                        </span>
+                        <button className="text-[10px] text-on-surface-variant font-semibold hover:text-secondary transition-colors">
+                          Reply
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Comment Input */}
+          <form onSubmit={handleSubmit} className="px-4 py-3 border-t border-surface-container flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full overflow-hidden shrink-0 border border-surface-container">
+              {currentUser?.avatar
+                ? <img src={currentUser.avatar} alt="" className="w-full h-full object-cover" />
+                : <div className="w-full h-full bg-secondary/10 flex items-center justify-center text-secondary text-xs font-bold">{(currentUser?.name || 'U')[0]}</div>}
+            </div>
+            <div className="flex-1 relative">
+              <input
+                type="text"
+                placeholder="Add a comment..."
+                value={commentText}
+                onChange={e => setCommentText(e.target.value)}
+                className="w-full h-10 pl-4 pr-12 rounded-full bg-surface-container border border-outline-variant/20 text-sm text-on-surface placeholder:text-on-surface-variant/60 focus:outline-none focus:ring-2 focus:ring-secondary/20 focus:border-secondary transition-all"
+                autoFocus
+              />
+              <button
+                type="submit"
+                disabled={!commentText.trim()}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 w-7 h-7 flex items-center justify-center rounded-full liquid-gradient text-white disabled:opacity-40 transition-opacity active:scale-90"
+              >
+                <ArrowUp className="w-4 h-4" />
+              </button>
+            </div>
+          </form>
+        </motion.div>
+      </>
+    );
+  };
+
+  // ── Post Card ───────────────────────────────────────────────────────────────
   const PostCard = ({ post }: { post: Post }) => {
-    const { likePost, savePost, commentPost, deletePost, addToast, currentUser, globalUsers } = useAppContext();
-    const user = globalUsers.find(u => u.id === post.userId) || currentUser;
+    const { likePost, savePost, deletePost, addToast, currentUser } = useAppContext();
     const isLiked = currentUser && post.likes.includes(currentUser.id);
     const isSaved = currentUser?.savedPostIds?.includes(post.id);
-    const [commentText, setCommentText] = useState('');
     const [isMenuOpen, setIsMenuOpen] = useState(false);
 
     const handleDoubleTap = () => {
       setDoubleClickTarget(post.id);
-      if (!isLiked) {
-        likePost(post.id);
-      }
-      setTimeout(() => setDoubleClickTarget(null), 1000); // Remove animation after 1s
-    };
-
-    const handleAddComment = (e: React.FormEvent) => {
-      e.preventDefault();
-      if (commentText.trim()) {
-        commentPost(post.id, commentText);
-        setCommentText('');
-      }
+      if (!isLiked) likePost(post.id);
+      setTimeout(() => setDoubleClickTarget(null), 1000);
     };
 
     const handleDelete = async () => {
@@ -72,68 +172,67 @@ export default function FeedScreen({ onNavigate }: { onNavigate: (s: string) => 
         try {
           await (deletePost as any)(post.id);
           addToast('Post deleted', 'success');
-        } catch (e) {
-          addToast('Failed to delete', 'error');
-        }
+        } catch { addToast('Failed to delete', 'error'); }
       }
       setIsMenuOpen(false);
     };
 
+    // Use pre-normalized userName/userAvatar from mapPost
+    const authorName = post.userName || 'User';
+    const authorAvatar = post.userAvatar;
+
     return (
       <div className="bg-surface mb-6 border-b border-surface-container pb-6 w-full max-w-lg mx-auto sm:border sm:rounded-3xl sm:mb-8 sm:pb-0 sm:overflow-hidden sm:shadow-sm">
-        {/* Post Header */}
+        {/* Header */}
         <div className="flex items-center justify-between p-3 sm:px-4">
           <div className="flex items-center gap-3 cursor-pointer">
             <div className="w-10 h-10 rounded-full overflow-hidden border border-surface-container">
-              <img src={user?.avatar} alt={user?.name} className="w-full h-full object-cover" />
+              {authorAvatar
+                ? <img src={authorAvatar} alt={authorName} className="w-full h-full object-cover" />
+                : <div className="w-full h-full bg-secondary/10 flex items-center justify-center text-secondary font-bold">{authorName[0]?.toUpperCase()}</div>}
             </div>
             <div>
-              <div className="font-headline font-bold text-sm tracking-tight">{user?.username || user?.name}</div>
+              <div className="font-headline font-bold text-sm tracking-tight">{authorName}</div>
             </div>
           </div>
           <div className="relative">
-            <button
-              onClick={() => setIsMenuOpen(!isMenuOpen)}
-              className="p-2 text-on-surface-variant hover:text-on-surface transition-colors"
-            >
+            <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-2 text-on-surface-variant hover:text-on-surface transition-colors">
               <MoreVertical className="w-5 h-5" />
             </button>
-
-            {isMenuOpen && (
-              <div className="absolute right-0 mt-2 w-48 bg-surface-container-high rounded-2xl shadow-xl z-20 overflow-hidden border border-surface-container">
-                {post.userId === currentUser?.id ? (
-                  <button
-                    onClick={handleDelete}
-                    className="w-full px-4 py-3 text-left text-error hover:bg-surface-container transition-colors flex items-center gap-2"
-                  >
-                    Delete Post
-                  </button>
-                ) : (
-                  <button className="w-full px-4 py-3 text-left hover:bg-surface-container transition-colors">
-                    Report Post
-                  </button>
-                )}
-                <button
-                  onClick={() => setIsMenuOpen(false)}
-                  className="w-full px-4 py-3 text-left hover:bg-surface-container transition-colors"
+            <AnimatePresence>
+              {isMenuOpen && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95, y: -8 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: -8 }}
+                  className="absolute right-0 mt-2 w-48 bg-surface-container-high rounded-2xl shadow-xl z-20 overflow-hidden border border-surface-container"
                 >
-                  Cancel
-                </button>
-              </div>
-            )}
+                  {post.userId === currentUser?.id ? (
+                    <button onClick={handleDelete} className="w-full px-4 py-3 text-left text-error hover:bg-surface-container transition-colors flex items-center gap-2 text-sm font-medium">
+                      Delete Post
+                    </button>
+                  ) : (
+                    <button className="w-full px-4 py-3 text-left hover:bg-surface-container transition-colors text-sm font-medium">
+                      Report Post
+                    </button>
+                  )}
+                  <button onClick={() => setIsMenuOpen(false)} className="w-full px-4 py-3 text-left hover:bg-surface-container transition-colors text-sm font-medium text-on-surface-variant">
+                    Cancel
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
 
-        {/* Post Media */}
+        {/* Media */}
         <div
           className="relative w-full aspect-square bg-black overflow-hidden flex items-center justify-center cursor-pointer"
           onDoubleClick={handleDoubleTap}
         >
-          {post.mediaType === 'video' ? (
-            <video src={post.mediaUrl} className="w-full h-full object-cover" controls playsInline />
-          ) : (
-            <img src={post.mediaUrl} alt="Post" className="w-full h-full object-cover" />
-          )}
+          {post.mediaType === 'video'
+            ? <video src={post.mediaUrl} className="w-full h-full object-cover" controls playsInline />
+            : <img src={post.mediaUrl} alt="Post" className="w-full h-full object-cover" />}
 
           <AnimatePresence>
             {doubleClickTarget === post.id && (
@@ -149,26 +248,25 @@ export default function FeedScreen({ onNavigate }: { onNavigate: (s: string) => 
           </AnimatePresence>
         </div>
 
-        {/* Post Actions */}
+        {/* Actions */}
         <div className="p-3 sm:px-4">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-4">
               <button onClick={() => likePost(post.id)} className="transition-transform active:scale-90">
                 <Heart className={`w-7 h-7 ${isLiked ? 'fill-red-500 text-red-500' : 'text-on-surface'}`} />
               </button>
-              <button className="transition-transform active:scale-90 text-on-surface">
+              {/* Comment button opens sheet */}
+              <button
+                onClick={() => setCommentSheetPostId(post.id)}
+                className="transition-transform active:scale-90 text-on-surface"
+              >
                 <MessageCircle className="w-7 h-7" />
               </button>
               <button className="transition-transform active:scale-90 text-on-surface">
                 <Send className="w-7 h-7" />
               </button>
             </div>
-            <button
-              onClick={() => {
-                savePost(post.id);
-                addToast(isSaved ? 'Removed from saved' : 'Saved to collection', 'success');
-              }}
-            >
+            <button onClick={() => { savePost(post.id); addToast(isSaved ? 'Removed from saved' : 'Saved to collection', 'success'); }}>
               <Bookmark className={`w-7 h-7 ${isSaved ? 'fill-on-surface' : 'text-on-surface'}`} />
             </button>
           </div>
@@ -177,37 +275,20 @@ export default function FeedScreen({ onNavigate }: { onNavigate: (s: string) => 
 
           {post.caption && (
             <div className="text-sm mb-2">
-              <span className="font-headline font-semibold mr-1">{user?.username || user?.name}</span>
+              <span className="font-headline font-semibold mr-1">{authorName}</span>
               <span className="text-on-surface">{post.caption}</span>
             </div>
           )}
 
-          {post.comments.length > 0 && (
-            <div className="space-y-1 mb-2">
-              {post.comments.map((c: any, i: number) => (
-                <div key={i} className="text-xs">
-                  <span className="font-semibold mr-1">{c.user?.username || 'User'}</span>
-                  <span className="text-on-surface-variant">{c.content}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <form onSubmit={handleAddComment} className="mt-3 flex items-center gap-2 border-t border-surface-container pt-3">
-            <input
-              type="text"
-              placeholder="Add a comment..."
-              className="flex-1 bg-transparent text-sm border-none focus:ring-0 outline-none text-on-surface"
-              value={commentText}
-              onChange={(e) => setCommentText(e.target.value)}
-            />
+          {/* Comment preview — click to open sheet */}
+          {post.comments?.length > 0 && (
             <button
-              disabled={!commentText.trim()}
-              className="text-cyan-600 font-semibold text-sm disabled:opacity-50"
+              onClick={() => setCommentSheetPostId(post.id)}
+              className="text-sm text-on-surface-variant hover:text-on-surface transition-colors text-left"
             >
-              Post
+              View all {post.comments.length} comment{post.comments.length !== 1 ? 's' : ''}
             </button>
-          </form>
+          )}
 
           <div className="text-[10px] text-on-surface-variant font-medium mt-2 uppercase tracking-wide">
             {new Date(post.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
@@ -218,28 +299,29 @@ export default function FeedScreen({ onNavigate }: { onNavigate: (s: string) => 
   };
 
   const feedPosts = [...posts].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  const commentSheetPost = feedPosts.find(p => p.id === commentSheetPostId);
 
   const PostSkeleton = () => (
     <div className="bg-surface mb-6 border-b border-surface-container pb-6 w-full max-w-lg mx-auto sm:border sm:rounded-3xl sm:mb-8 sm:pb-0 sm:overflow-hidden sm:shadow-sm animate-pulse">
       <div className="flex items-center justify-between p-3 sm:px-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-surface-container"></div>
-          <div className="w-24 h-4 rounded bg-surface-container"></div>
+          <div className="w-10 h-10 rounded-full bg-surface-container" />
+          <div className="w-24 h-4 rounded bg-surface-container" />
         </div>
-        <div className="w-5 h-5 rounded bg-surface-container"></div>
+        <div className="w-5 h-5 rounded bg-surface-container" />
       </div>
-      <div className="w-full aspect-square bg-surface-container"></div>
+      <div className="w-full aspect-square bg-surface-container" />
       <div className="p-3 sm:px-4 space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex gap-4">
-            <div className="w-7 h-7 rounded bg-surface-container"></div>
-            <div className="w-7 h-7 rounded bg-surface-container"></div>
-            <div className="w-7 h-7 rounded bg-surface-container"></div>
+            <div className="w-7 h-7 rounded bg-surface-container" />
+            <div className="w-7 h-7 rounded bg-surface-container" />
+            <div className="w-7 h-7 rounded bg-surface-container" />
           </div>
-          <div className="w-7 h-7 rounded bg-surface-container"></div>
+          <div className="w-7 h-7 rounded bg-surface-container" />
         </div>
-        <div className="w-16 h-3 rounded bg-surface-container"></div>
-        <div className="w-3/4 h-3 rounded bg-surface-container"></div>
+        <div className="w-16 h-3 rounded bg-surface-container" />
+        <div className="w-3/4 h-3 rounded bg-surface-container" />
       </div>
     </div>
   );
@@ -249,8 +331,10 @@ export default function FeedScreen({ onNavigate }: { onNavigate: (s: string) => 
       {/* Header */}
       <header className="fixed top-0 w-full z-50 bg-surface/80 backdrop-blur-xl border-b border-surface-container">
         <div className="flex items-center justify-between px-4 h-16 w-full max-w-lg mx-auto">
-          <h1 className="text-2xl font-black bg-gradient-to-br from-cyan-600 to-blue-500 bg-clip-text text-transparent font-headline tracking-tighter" style={{ fontFamily: 'var(--font-headline, "Outfit", sans-serif)' }}>Aqualyn</h1>
-          <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-black bg-gradient-to-br from-cyan-600 to-blue-500 bg-clip-text text-transparent font-headline tracking-tighter" style={{ fontFamily: 'var(--font-headline, "Outfit", sans-serif)' }}>
+            Aqualyn
+          </h1>
+          <div className="flex items-center gap-2">
             <button onClick={() => onNavigate('notifications')} className="p-2 hover:bg-surface-container rounded-full transition-colors active:scale-95 duration-200">
               <Heart className="w-6 h-6 text-on-surface" />
             </button>
@@ -261,13 +345,10 @@ export default function FeedScreen({ onNavigate }: { onNavigate: (s: string) => 
         </div>
       </header>
 
-      {/* Main Feed Content */}
+      {/* Main Feed */}
       <main className="pt-16 max-w-lg mx-auto">
-
-        {/* Stories Horizontal Tray */}
+        {/* Stories Tray */}
         <div className="py-4 border-b border-surface-container overflow-x-auto scrollbar-hide flex items-center px-4 gap-4">
-
-          {/* My Story/Add Story */}
           <div className="flex flex-col items-center gap-1 shrink-0 cursor-pointer" onClick={() => {
             if (hasMyStory) {
               setViewerStories(storiesByUser[currentUser?.id as string]);
@@ -289,9 +370,8 @@ export default function FeedScreen({ onNavigate }: { onNavigate: (s: string) => 
             <span className="text-[11px] text-on-surface-variant font-medium">Your story</span>
           </div>
 
-          {/* Friends Stories */}
           {storyUsers.map(user => {
-            if (user.id === currentUser?.id) return null; // Already rendered in My Story
+            if (user.id === currentUser?.id) return null;
             return (
               <div key={user.id} className="flex flex-col items-center gap-1 shrink-0 cursor-pointer group" onClick={() => {
                 setViewerStories(storiesByUser[user.id]);
@@ -306,16 +386,12 @@ export default function FeedScreen({ onNavigate }: { onNavigate: (s: string) => 
               </div>
             );
           })}
-
         </div>
 
-        {/* Posts Feed */}
+        {/* Posts */}
         <div className="mt-2 sm:mt-6 sm:px-4">
           {isFetchingData ? (
-            <>
-              <PostSkeleton />
-              <PostSkeleton />
-            </>
+            <><PostSkeleton /><PostSkeleton /></>
           ) : feedPosts.length === 0 ? (
             <div className="text-center mt-20 opacity-60">
               <p className="text-on-surface-variant font-medium">No posts yet.</p>
@@ -325,22 +401,24 @@ export default function FeedScreen({ onNavigate }: { onNavigate: (s: string) => 
             feedPosts.map(post => <PostCard key={post.id} post={post} />)
           )}
         </div>
-
       </main>
 
+      {/* Story Viewer */}
       <AnimatePresence>
         {activeStoryIndex !== null && (
-          <StoryViewer
-            stories={viewerStories}
-            initialIndex={activeStoryIndex}
-            onClose={() => setActiveStoryIndex(null)}
-          />
+          <StoryViewer stories={viewerStories} initialIndex={activeStoryIndex} onClose={() => setActiveStoryIndex(null)} />
         )}
       </AnimatePresence>
 
+      {/* Story Creator */}
       <AnimatePresence>
-        {isCreatorOpen && (
-          <StoryCreator onClose={() => setIsCreatorOpen(false)} />
+        {isCreatorOpen && <StoryCreator onClose={() => setIsCreatorOpen(false)} />}
+      </AnimatePresence>
+
+      {/* Comment Sheet */}
+      <AnimatePresence>
+        {commentSheetPostId && commentSheetPost && (
+          <CommentSheet post={commentSheetPost} />
         )}
       </AnimatePresence>
     </motion.div>

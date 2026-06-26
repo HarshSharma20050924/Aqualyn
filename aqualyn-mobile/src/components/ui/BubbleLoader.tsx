@@ -2,11 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Text } from 'react-native';
 import LottieView from 'lottie-react-native';
 
-export default function BubbleLoader({ size = 100 }: { size?: number }) {
+export default function BubbleLoader({ size = 100, showWakeText = false }: { size?: number; showWakeText?: boolean }) {
   const [percentage, setPercentage] = useState(0);
   const [showText, setShowText] = useState(false);
 
   useEffect(() => {
+    if (!showWakeText) return;
+    
     // Only show text after 1.5 seconds to avoid flashing on fast connections
     const timeout = setTimeout(() => setShowText(true), 1500);
     
@@ -25,7 +27,7 @@ export default function BubbleLoader({ size = 100 }: { size?: number }) {
       clearTimeout(timeout);
       clearInterval(interval);
     };
-  }, []);
+  }, [showWakeText]);
 
   return (
     <View style={styles.container}>
@@ -37,7 +39,7 @@ export default function BubbleLoader({ size = 100 }: { size?: number }) {
           style={{ width: '100%', height: '100%' }}
         />
       </View>
-      {showText && (
+      {showText && showWakeText && (
         <Text style={styles.loadingText}>
           Waking up server... {percentage}%
         </Text>

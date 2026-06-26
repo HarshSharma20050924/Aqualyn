@@ -11,6 +11,9 @@ import socialRoutes from './modules/social/social.route';
 import groupRoutes from './modules/group/group.route';
 import uploadRoutes from './modules/upload/upload.route';
 import adminRoutes from './modules/admin/admin.route';
+import aiRoutes from './modules/ai/ai.route';
+import channelRoutes from './modules/channel/channel.route';
+
 import path from 'path';
 import { Server } from 'socket.io';
 import { createServer } from 'http';
@@ -19,7 +22,24 @@ import { createAdapter } from '@socket.io/redis-adapter';
 import { pubClient, subClient } from './config/redis';
 import { SocketService } from './services/SocketService';
 
+import pinoHttp from 'pino-http';
+import { logger } from './core/utils/logger';
+
+// Catch unhandled process exceptions
+process.on('uncaughtException', (err) => {
+    logger.fatal({ err }, 'UNCAUGHT EXCEPTION! Shutting down...');
+    process.exit(1);
+});
+
+process.on('unhandledRejection', (err) => {
+    logger.fatal({ err }, 'UNHANDLED REJECTION! Shutting down...');
+    process.exit(1);
+});
+
 const app = express();
+// Add pino HTTP logger
+app.use(pinoHttp({ logger, autoLogging: process.env.NODE_ENV !== 'test' }));
+
 const port = process.env.PORT || 5000;
 const server = createServer(app);
 const allowedOrigins = [
@@ -131,6 +151,9 @@ app.use('/api/social', socialRoutes);
 app.use('/api/groups', groupRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/ai', aiRoutes);
+app.use('/api/channels', channelRoutes);
+
 
 app.get('/api/health', (req, res) => {
     res.json({ status: 'Aqualyn server is running' });
@@ -143,6 +166,10 @@ app.use(errorHandler);
 // All Socket.io logic has been moved to SocketService.ts
 // to support a high-concurrency distributed architecture.
 
-server.listen(port, () => {
-    console.log(`Server is running on port ${port}`);
-});
+if (process.env.NODE_ENV !== 'test') {
+    server.listen(port, () => {
+        console.log(`Server is running on port ${port}`);
+    });
+}
+
+export { app, server };

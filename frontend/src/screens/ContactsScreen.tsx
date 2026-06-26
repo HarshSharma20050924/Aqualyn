@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Search, UserPlus, X, Share2, Phone, User, Check, RefreshCw, Users, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, Search, UserPlus, X, Share2, Phone, User, Check, RefreshCw, Users, ShieldAlert, Lock } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import AddContactModal from '../components/modals/AddContactModal';
 import { apiFetch } from '../utils/fetcher';
 import { ENDPOINTS } from '../config/api';
+import BubbleLoader from '../components/ui/BubbleLoader';
 
 export default function ContactsScreen({ onNavigate }: { onNavigate: (s: string) => void }) {
   const { 
@@ -17,12 +18,41 @@ export default function ContactsScreen({ onNavigate }: { onNavigate: (s: string)
     syncContacts,
     currentUser,
     globalUsers,
-    setGlobalUsers
+    setGlobalUsers,
+    followUser
   } = useAppContext();
 
   const [isAddContactOpen, setIsAddContactOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'contacts' | 'followers' | 'following'>('contacts');
   const [searchQuery, setSearchQuery] = useState('');
+  const [globalSearchResults, setGlobalSearchResults] = useState<any[]>([]);
+  const [isGlobalSearching, setIsGlobalSearching] = useState(false);
+
+  // Live global user search
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setGlobalSearchResults([]);
+      return;
+    }
+    setIsGlobalSearching(true);
+    const timer = setTimeout(() => {
+      apiFetch(ENDPOINTS.USER_SEARCH(searchQuery))
+        .then(res => res.ok ? res.json() : [])
+        .then(data => {
+          if (Array.isArray(data)) {
+            setGlobalSearchResults(data.filter((u: any) => u.id !== currentUser?.id));
+            setGlobalUsers((prev: any[]) => {
+              const ids = new Set(prev.map((u: any) => u.id));
+              const additions = data.filter((u: any) => !ids.has(u.id));
+              return additions.length > 0 ? [...prev, ...additions] : prev;
+            });
+          }
+        })
+        .catch(console.error)
+        .finally(() => setIsGlobalSearching(false));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery, currentUser?.id, setGlobalUsers]);
 
   useEffect(() => {
     if (currentUser?.id) {
@@ -225,6 +255,67 @@ export default function ContactsScreen({ onNavigate }: { onNavigate: (s: string)
         {isLoading ? (
           <div className="space-y-2">
             {[1, 2, 3, 4, 5].map(i => <SkeletonContact key={i} />)}
+          </div>
+        ) : searchQuery.trim() ? (
+          // Global search results
+          <div className="space-y-3">
+            {isGlobalSearching ? (
+              <div className="flex flex-col items-center justify-center py-12 gap-3">
+                <BubbleLoader width={60} height={60} />
+                <p className="text-xs text-on-surface-variant">Searching...</p>
+              </div>
+            ) : globalSearchResults.length === 0 ? (
+              <div className="text-center mt-8 py-10 opacity-60 flex flex-col items-center gap-3">
+                <Users className="w-10 h-10 text-on-surface-variant/40" />
+                <p className="text-on-surface-variant font-medium">No users found for "{searchQuery}"</p>
+              </div>
+            ) : (
+              globalSearchResults.map(user => {
+                const isFollowing = currentUser?.following?.includes(user.id);
+                const hasSentReq = user.followRequests?.includes(currentUser?.id || '');
+                return (
+                  <div
+                    key={user.id}
+                    className="p-4 rounded-2xl flex items-center gap-4 border border-secondary-fixed/20 bg-white/20 hover:bg-white/40 transition-all shadow-sm"
+                  >
+                    <div
+                      className="w-14 h-14 rounded-full overflow-hidden shadow-sm cursor-pointer"
+                      onClick={() => { setActiveContactId(user.id); onNavigate('contact-profile'); }}
+                    >
+                      <img src={user.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${user.username}`} alt={user.name} className="w-full h-full object-cover" />
+                    </div>
+                    <div className="flex-1 min-w-0 border-b border-surface-container pb-2" onClick={() => { setActiveContactId(user.id); onNavigate('contact-profile'); }}>
+                      <div className="flex items-center gap-1">
+                        <h3 className="font-headline font-bold text-on-surface truncate">{user.displayName || user.name || 'User'}</h3>
+                        {user.isPrivate && <Lock className="w-3 h-3 text-on-surface-variant shrink-0" />}
+                      </div>
+                      <p className="text-sm text-on-surface-variant truncate">@{user.username}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {isFollowing ? (
+                        <button
+                          onClick={() => { startChatWithContact(user.id); onNavigate('chat-detail'); }}
+                          className="px-4 py-1.5 rounded-full bg-secondary/10 text-secondary text-xs font-bold hover:bg-secondary/20 transition-colors"
+                        >
+                          Message
+                        </button>
+                      ) : hasSentReq ? (
+                        <button className="px-4 py-1.5 rounded-full bg-surface-container text-on-surface-variant text-xs font-bold cursor-default">
+                          Requested
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => followUser(user.id)}
+                          className="px-4 py-1.5 rounded-full liquid-gradient text-white text-xs font-bold shadow-sm active:scale-95 transition-all"
+                        >
+                          Follow
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         ) : currentList.length === 0 ? (
           <div className="text-center mt-12 py-10 opacity-60 flex flex-col items-center justify-center gap-3">

@@ -5,6 +5,7 @@ import { notificationQueue } from '../config/queues';
 import { subClient, pubClient } from '../config/redis';
 import { ActivityService } from './ActivityService';
 import { ContentService } from './ContentService';
+import { AIService } from '../modules/ai/ai.service';
 
 /**
  * SocketService handles the distributed real-time communication for Aqualyn.
@@ -344,6 +345,14 @@ export class SocketService {
             if (text) {
                 ContentService.handleChatMentions(senderId, chatId, text).catch((e: any) => 
                     console.error('[SocketService] Mention Error:', e)
+                );
+            }
+
+            // 🤖 LYN AI INTERCEPT — pass aiSettings (personality, enabled flag) from client
+            if (text) {
+                const aiSettings = data.aiSettings as { enabled?: boolean; personality?: string } | undefined;
+                AIService.handleMessageAdded(chatId, senderId, text, aiSettings).catch((e: any) =>
+                    console.error('[SocketService] Lyn AI Error:', e)
                 );
             }
 

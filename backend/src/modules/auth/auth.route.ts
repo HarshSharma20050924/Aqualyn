@@ -1,12 +1,13 @@
 import { Router } from 'express';
 import { verifyToken } from '../../middleware/auth';
-import { login, register, getProfile, sendOtp, verifyOtp, syncToken, googleSignin, generateQrToken, getQrStatus, linkDeviceQr } from './auth.controller';
+import { AuthService } from './auth.service';
+import { login, register, getProfile, sendOtp, verifyOtp, syncToken, googleSignin, generateQrToken, getQrStatus, linkDeviceQr, sync } from './auth.controller';
 
 const router = Router();
 
 router.post('/login', verifyToken, login);
 router.post('/register', verifyToken, register);
-router.post('/sync', verifyToken, require('./auth.controller').sync);
+router.post('/sync', verifyToken, sync);
 router.post('/sync-token', verifyToken, syncToken);
 router.get('/profile', verifyToken, getProfile);
 router.post('/send-otp', sendOtp);
@@ -25,7 +26,6 @@ router.post('/logout', verifyToken, async (req: any, res: any) => {
         const token = req.cookies.token || (req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.split(' ')[1] : null);
         
         if (token) {
-            const { AuthService } = require('./auth.service');
             await AuthService.logout(userId, token);
         }
 

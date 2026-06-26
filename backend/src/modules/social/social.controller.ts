@@ -22,7 +22,8 @@ export const getActiveStories = catchAsync(async (req: any, res: Response, next:
 });
 
 export const getUserPosts = catchAsync(async (req: any, res: Response, next: NextFunction) => {
-    const posts = await SocialService.getUserPosts(req.params.userId);
+    const cursor = req.query.cursor as string | undefined;
+    const posts = await SocialService.getUserPosts(req.params.userId, cursor);
     res.json(posts);
 });
 
@@ -68,13 +69,19 @@ export const addComment = catchAsync(async (req: any, res: Response, next: NextF
     res.json({ success: true, comment });
 });
 
+export const deleteComment = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    await SocialService.deleteComment(req.user.id, req.params.commentId);
+    res.json({ success: true, message: 'Comment deleted successfully' });
+});
+
 export const toggleSavePost = catchAsync(async (req: any, res: Response, next: NextFunction) => {
     const result = await SocialService.toggleSavePost(req.user.id, req.params.postId);
     res.json(result);
 });
 
 export const getSavedPosts = catchAsync(async (req: any, res: Response, next: NextFunction) => {
-    const saved = await SocialService.getSavedPosts(req.user.id);
+    const cursor = req.query.cursor as string | undefined;
+    const saved = await SocialService.getSavedPosts(req.user.id, cursor);
     res.json(saved);
 });
 
@@ -109,4 +116,3 @@ export const toggleCommentLike = catchAsync(async (req: any, res: Response, next
     const result = await SocialService.toggleCommentLike(req.user.id, req.params.commentId);
     res.json(result);
 });
-

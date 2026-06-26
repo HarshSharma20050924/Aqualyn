@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, Pin, Users, CheckCheck, Mic, UserPlus, Lock, Pen, Bot, Globe, MoreVertical, Download, Moon, Sun, Trash2, CheckSquare, Archive, Volume2, VolumeX, Eye, EyeOff, FolderPlus, Eraser, ChevronRight, X, Check } from 'lucide-react';
+import { Search, Pin, Users, CheckCheck, Mic, UserPlus, Lock, Pen, Bot, Globe, MoreVertical, Download, Moon, Sun, Trash2, CheckSquare, Archive, Volume2, VolumeX, Eye, EyeOff, FolderPlus, Eraser, ChevronRight, X, Check, Droplet } from 'lucide-react';
+import { AIService } from '../services/ai.service';
 import { useAppContext } from '../context/AppContext';
 import NewChatModal from '../components/chat/NewChatModal';
 import NewFolderModal from '../components/modals/NewFolderModal';
@@ -15,9 +16,7 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
   const { currentUser, chats, setActiveChatId, messages, isLoading, isFetchingData, folders, archiveChat, pinChat, muteChat, deleteChat, clearHistory, markAsRead, addChatToFolder, addToast, archiveLockPin, theme, setTheme, globalUsers, setGlobalUsers, followUser, startChatWithContact, setActiveContactId } = useAppContext();
   const [activeTab, setActiveTab] = useState<string>('all');
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [globalSearchResults, setGlobalSearchResults] = useState<any[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
+  const [isLynLoading, setIsLynLoading] = useState(false);
   const [showHeaderMenu, setShowHeaderMenu] = useState(false);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedChats, setSelectedChats] = useState<Set<string>>(new Set());
@@ -32,35 +31,6 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
   const [chatToDelete, setChatToDelete] = useState<string | null>(null);
   const peekTimer = React.useRef<NodeJS.Timeout | null>(null);
 
-  const [isSearchLoading, setIsSearchLoading] = useState(false);
-
-  React.useEffect(() => {
-    if (searchQuery && isSearching) {
-      setIsSearchLoading(true);
-      const timer = setTimeout(() => {
-        apiFetch(ENDPOINTS.USER_SEARCH(searchQuery))
-          .then(res => res.json())
-          .then(data => {
-            setGlobalSearchResults(data);
-            // Merge into AppContext globalUsers so ContactProfileScreen can find them
-            setGlobalUsers(prev => {
-              const existingIds = new Set(prev.map(u => u.id));
-              const newUsers = data.filter((u: any) => !existingIds.has(u.id));
-              return [...prev, ...newUsers];
-            });
-            setIsSearchLoading(false);
-          })
-          .catch(e => {
-            console.error(e);
-            setIsSearchLoading(false);
-          });
-      }, 300); // debounce 300ms
-      return () => clearTimeout(timer);
-    } else {
-      setGlobalSearchResults([]);
-      setIsSearchLoading(false);
-    }
-  }, [searchQuery, isSearching]);
 
   const handleChatClick = (id: string) => {
     if (isSelectionMode) {
@@ -148,7 +118,7 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
   };
 
   let filteredChats = chats;
-  
+
   if (activeTab === 'unread') {
     filteredChats = chats.filter(c => c.unreadCount && c.unreadCount > 0);
   } else if (activeTab === 'groups') {
@@ -171,12 +141,6 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
     filteredChats = filteredChats.filter(c => !c.isArchived);
   }
 
-  if (searchQuery) {
-    filteredChats = filteredChats.filter(c => 
-      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.lastMessage?.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }
 
   const pinnedChats = filteredChats.filter(c => c.isPinned);
   const recentChats = filteredChats.filter(c => !c.isPinned);
@@ -228,7 +192,7 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
                 </button>
               </div>
               <div className="flex items-center gap-1">
-                <button 
+                <button
                   onClick={() => {
                     selectedChats.forEach(id => archiveChat(id));
                     setIsSelectionMode(false);
@@ -240,7 +204,7 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
                 >
                   <Archive className="w-6 h-6" />
                 </button>
-                <button 
+                <button
                   onClick={() => {
                     selectedChats.forEach(id => pinChat(id));
                     setIsSelectionMode(false);
@@ -251,7 +215,7 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
                 >
                   <Pin className="w-6 h-6" />
                 </button>
-                <button 
+                <button
                   onClick={() => {
                     selectedChats.forEach(id => muteChat(id));
                     setIsSelectionMode(false);
@@ -267,21 +231,6 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
                 </button>
               </div>
             </div>
-          ) : isSearching ? (
-            <div className="flex-1 flex items-center gap-2 bg-white/50 rounded-full px-4 py-2 border border-white/40">
-              <Search className="w-5 h-5 text-on-surface-variant" />
-              <input 
-                autoFocus
-                type="text" 
-                placeholder="Global Search..." 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="flex-1 bg-transparent outline-none text-on-surface"
-              />
-              <button onClick={() => { setIsSearching(false); setSearchQuery(''); }} className="text-on-surface-variant hover:text-on-surface">
-                <span className="text-sm font-bold">Cancel</span>
-              </button>
-            </div>
           ) : (
             <>
               <div className="flex items-center gap-3">
@@ -291,7 +240,7 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
                 <h1 className="text-2xl font-black bg-gradient-to-br from-cyan-600 to-blue-500 bg-clip-text text-transparent font-headline tracking-tight">Aqualyn</h1>
               </div>
               <div className="flex items-center gap-2 relative">
-                <button onClick={() => setIsSearching(true)} className="p-2 rounded-full text-cyan-600 hover:bg-white/20 transition-colors active:scale-95 duration-200">
+                <button onClick={() => onNavigate('explore')} className="p-2 rounded-full text-cyan-600 hover:bg-white/20 transition-colors active:scale-95 duration-200">
                   <Search className="w-6 h-6" />
                 </button>
                 <button onClick={() => setShowHeaderMenu(!showHeaderMenu)} className="p-2 rounded-full text-cyan-600 hover:bg-white/20 transition-colors active:scale-95 duration-200">
@@ -312,7 +261,7 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
                           <CheckSquare className="w-4 h-4" /> Select Chats
                         </button>
                         <button onClick={toggleTheme} className="flex items-center gap-3 px-3 py-2 hover:bg-white/10 rounded-xl text-sm font-medium text-on-surface transition-colors">
-                          {theme.mode === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />} 
+                          {theme.mode === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
                           {theme.mode === 'dark' ? 'Light Mode' : 'Dark Mode'}
                         </button>
                       </motion.div>
@@ -323,12 +272,12 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
             </>
           )}
         </div>
-        
+
         {/* Tabs */}
-        {!isSearching && !isSelectionMode && (
+        {!isSelectionMode && (
           <div className="flex gap-2 px-4 py-3 overflow-x-auto scrollbar-hide items-center">
             {['all', ...folders.map(f => f.name.toLowerCase()), 'personal', 'groups', 'unread', 'bots', 'archived'].map((tab) => (
-              <button 
+              <button
                 key={tab}
                 onClick={() => {
                   if (tab === 'archived') {
@@ -337,11 +286,10 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
                     setActiveTab(tab);
                   }
                 }}
-                className={`flex items-center px-5 py-1.5 rounded-full font-semibold text-sm whitespace-nowrap transition-all capitalize ${
-                  activeTab === tab 
-                    ? 'bg-secondary text-white shadow-md' 
+                className={`flex items-center px-5 py-1.5 rounded-full font-semibold text-sm whitespace-nowrap transition-all capitalize ${activeTab === tab
+                    ? 'bg-secondary text-white shadow-md'
                     : 'bg-white/40 text-on-surface-variant hover:bg-white/60 border border-white/20 shadow-sm'
-                }`}
+                  }`}
               >
                 {tab}
                 {(() => {
@@ -352,12 +300,11 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
                     if (tab === 'unread') return c.unreadCount > 0;
                     return false;
                   }).length;
-                  
+
                   if (count > 0) {
                     return (
-                      <span className={`ml-2 min-w-[18px] h-[18px] flex items-center justify-center text-[10px] rounded-full font-black ${
-                        activeTab === tab ? 'bg-white text-secondary' : 'bg-secondary text-white'
-                      }`}>
+                      <span className={`ml-2 min-w-[18px] h-[18px] flex items-center justify-center text-[10px] rounded-full font-black ${activeTab === tab ? 'bg-white text-secondary' : 'bg-secondary text-white'
+                        }`}>
                         {count > 9 ? '9+' : count}
                       </span>
                     );
@@ -366,7 +313,7 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
                 })()}
               </button>
             ))}
-            <button 
+            <button
               onClick={() => setIsNewFolderModalOpen(true)}
               className="px-3 py-1.5 rounded-full font-semibold text-sm whitespace-nowrap transition-all bg-white/40 text-on-surface-variant hover:bg-white/60 border border-white/20 flex items-center justify-center shrink-0"
             >
@@ -376,96 +323,21 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
         )}
       </header>
 
-        <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar relative z-0 p-2 sm:p-4">
-          {(isLoading || isFetchingData) && chats.length === 0 ? (
-            <div className="space-y-3">
-              {[1, 2, 3, 4, 5].map(i => <SkeletonChat key={`main-skel-${i}`} />)}
-            </div>
-          ) : (
+      <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar relative z-0 p-2 sm:p-4">
+        {(isLoading || isFetchingData) && chats.length === 0 ? (
+          <div className="space-y-3">
+            {[1, 2, 3, 4, 5].map(i => <SkeletonChat key={`main-skel-${i}`} />)}
+          </div>
+        ) : (
           <>
-            {filteredChats.length === 0 && !searchQuery && (
+            {filteredChats.length === 0 && (
               <div className="text-center mt-20 opacity-60">
                 <p className="text-on-surface-variant font-medium">
                   {activeTab === 'all' ? 'No chats yet.' : `No ${activeTab} chats.`}
                 </p>
                 {activeTab === 'all' && <p className="text-sm mt-2">Go to Contacts to start a conversation.</p>}
               </div>
-            )}
-            {searchQuery && (
-              <div className="mb-6">
-                <div className="flex items-center gap-2 px-2 mb-4 text-on-surface-variant">
-                  <Globe className="w-4 h-4" />
-                  <h2 className="font-headline font-bold text-sm tracking-tight uppercase">Global Search Results</h2>
-                </div>
-                
-                {isSearchLoading ? (
-                  <div className="space-y-2">
-                    {[1, 2, 3].map(i => <SkeletonChat key={`search-skel-${i}`} />)}
-                  </div>
-                ) : (
-                  <div className="space-y-3 mb-6">
-                    {globalSearchResults
-                    .filter(u => u.id !== currentUser?.id)
-                    .map(user => {
-                      const isFollowing = currentUser?.following?.includes(user.id);
-                      const isRequested = user.followRequests?.includes(currentUser?.id || '');
-                      
-                      return (
-                        <div 
-                          key={user.id}
-                          className="glass-card p-4 rounded-2xl flex items-center gap-4 border border-secondary-fixed/20 hover:bg-white/60 transition-all"
-                        >
-                          <div 
-                            className="w-14 h-14 rounded-full overflow-hidden cursor-pointer"
-                            onClick={() => {
-                              setActiveContactId(user.id);
-                              onNavigate('contact-profile');
-                            }}
-                          >
-                            <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1">
-                              <h3 className="font-headline font-bold text-on-surface truncate">{user.displayName || user.name || 'User'}</h3>
-                              {user.isPrivate && <Lock className="w-3 h-3 text-on-surface-variant" />}
-                            </div>
-                            <p className="text-sm text-on-surface-variant truncate">@{user.username || 'user'}</p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {isFollowing ? (
-                              <button 
-                                onClick={() => {
-                                  startChatWithContact(user.id);
-                                  onNavigate('chat-detail');
-                                }}
-                                className="px-4 py-1.5 rounded-full bg-secondary/10 text-secondary text-xs font-bold hover:bg-secondary/20 transition-colors"
-                              >
-                                Message
-                              </button>
-                            ) : isRequested ? (
-                              <button className="px-4 py-1.5 rounded-full bg-surface-container text-on-surface-variant text-xs font-bold cursor-default">
-                                Requested
-                              </button>
-                            ) : (
-                              <button 
-                                onClick={() => followUser(user.id)}
-                                className="px-4 py-1.5 rounded-full liquid-gradient text-white text-xs font-bold shadow-sm active:scale-95 transition-all"
-                              >
-                                Follow
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Real Search Results */}
-              </div>
-            )}
-
-            {pinnedChats.length > 0 && (
+            )}            {pinnedChats.length > 0 && (
               <div className="mb-8">
                 <div className="flex items-center justify-between px-2 mb-4">
                   <h2 className="font-headline font-bold text-lg tracking-tight text-on-surface">Pinned</h2>
@@ -475,9 +347,9 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
                   {pinnedChats.map(chat => {
                     const lastMsg = getLastMessage(chat.id);
                     return (
-                      <div 
-                        key={chat.id} 
-                        onClick={() => handleChatClick(chat.id)} 
+                      <div
+                        key={chat.id}
+                        onClick={() => handleChatClick(chat.id)}
                         onMouseDown={(e) => handleTouchStart(e, chat.id)}
                         onMouseUp={handleTouchEnd}
                         onMouseLeave={handleTouchEnd}
@@ -569,9 +441,9 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
                   {recentChats.map(chat => {
                     const lastMsg = getLastMessage(chat.id);
                     return (
-                      <div 
-                        key={chat.id} 
-                        onClick={() => handleChatClick(chat.id)} 
+                      <div
+                        key={chat.id}
+                        onClick={() => handleChatClick(chat.id)}
                         onMouseDown={(e) => handleTouchStart(e, chat.id)}
                         onMouseUp={handleTouchEnd}
                         onMouseLeave={handleTouchEnd}
@@ -654,43 +526,74 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
         <div className="mt-12 flex flex-col items-center gap-2 opacity-50">
           <Lock className="text-on-surface-variant w-5 h-5" />
           <p className="text-[10px] font-medium text-center uppercase tracking-widest text-on-surface-variant">
-            Messages are end-to-end encrypted.<br/>No one outside this chat can read them.
+            Messages are end-to-end encrypted.<br />No one outside this chat can read them.
           </p>
         </div>
       </div>
 
-      <button 
+      {/* Lyn AI FAB — opens Lyn chat directly like a friend DM */}
+      <button
+        onClick={async () => {
+          if (isLynLoading) return;
+          setIsLynLoading(true);
+          try {
+            const chat = await AIService.initiateLynChat();
+            if (chat?.id) {
+              setActiveChatId(chat.id);
+              onNavigate('chat-detail');
+            }
+          } catch {
+            addToast('Could not open Lyn chat', 'error');
+          } finally {
+            setIsLynLoading(false);
+          }
+        }}
+        title="Chat with Lyn AI"
+        className="fixed right-6 bottom-40 z-40 active:scale-95 transition-all"
+      >
+        <div className="relative w-12 h-12 group">
+          <div className="absolute inset-0 bg-gradient-to-br from-secondary-fixed to-primary-container rounded-2xl rotate-12 opacity-40 group-hover:rotate-45 transition-transform duration-700" />
+          <div className="relative w-full h-full bg-surface-container-lowest rounded-2xl flex items-center justify-center glass-card inner-glow aqua-glow shadow-xl">
+            {isLynLoading
+              ? <span className="w-4 h-4 border-2 border-secondary border-t-transparent rounded-full animate-spin" />
+              : <Droplet className="text-secondary w-6 h-6 fill-secondary" />}
+          </div>
+        </div>
+      </button>
+
+      {/* Compose FAB */}
+      <button
         onClick={() => setIsNewChatModalOpen(true)}
         className="fixed right-6 bottom-24 liquid-gradient w-14 h-14 rounded-2xl shadow-xl flex items-center justify-center text-white aqua-glow active:scale-95 transition-all z-40"
       >
         <Pen className="w-6 h-6 fill-white" />
       </button>
 
-      <NewChatModal 
-        isOpen={isNewChatModalOpen} 
-        onClose={() => setIsNewChatModalOpen(false)} 
+      <NewChatModal
+        isOpen={isNewChatModalOpen}
+        onClose={() => setIsNewChatModalOpen(false)}
         onNavigate={onNavigate}
       />
 
       <AnimatePresence>
         {isArchivePinModalOpen && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center p-6">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="absolute inset-0 bg-black/60 backdrop-blur-md"
               onClick={() => setIsArchivePinModalOpen(false)}
             />
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.9, y: 20 }} 
-              animate={{ opacity: 1, scale: 1, y: 0 }} 
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
               className="relative w-full max-w-sm glass-card rounded-[2.5rem] p-8 shadow-2xl border border-white/40"
             >
               <h3 className="text-2xl font-black font-headline text-on-surface mb-2">Archive Locked</h3>
               <p className="text-on-surface-variant text-sm mb-6">Enter your PIN to access archived chats.</p>
-              
-              <input 
-                type="password" 
+
+              <input
+                type="password"
                 maxLength={4}
                 autoFocus
                 value={archivePinValue}
@@ -698,15 +601,15 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
                 placeholder="••••"
                 className="w-full h-16 text-center text-3xl tracking-[1rem] font-bold rounded-2xl bg-white/50 border border-white/40 focus:ring-2 focus:ring-primary/20 outline-none mb-6"
               />
-              
+
               <div className="flex gap-3">
-                <button 
+                <button
                   onClick={() => setIsArchivePinModalOpen(false)}
                   className="flex-1 py-4 rounded-2xl font-bold text-on-surface-variant hover:bg-white/40 transition-colors"
                 >
                   Cancel
                 </button>
-                <button 
+                <button
                   onClick={handleVerifyArchivePin}
                   className="flex-1 py-4 rounded-2xl bg-primary text-white font-bold shadow-lg shadow-primary/20 hover:brightness-110 active:scale-95 transition-all"
                 >
@@ -721,28 +624,28 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
       <AnimatePresence>
         {contextMenuChatId && (
           <>
-            <motion.div 
-              initial={{ opacity: 0 }} 
-              animate={{ opacity: 1 }} 
-              exit={{ opacity: 0 }} 
-              className="fixed inset-0 z-[100] bg-black/5" 
-              onClick={() => { setContextMenuChatId(null); setShowFolderSubmenu(false); }} 
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[100] bg-black/5"
+              onClick={() => { setContextMenuChatId(null); setShowFolderSubmenu(false); }}
             />
             <motion.div
               initial={{ opacity: 0, scale: 0.9, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 10 }}
-              style={{ 
-                left: Math.min(contextMenuPos.x, window.innerWidth - 220), 
-                top: Math.min(contextMenuPos.y, window.innerHeight - 350) 
+              style={{
+                left: Math.min(contextMenuPos.x, window.innerWidth - 220),
+                top: Math.min(contextMenuPos.y, window.innerHeight - 350)
               }}
               className="fixed z-[101] w-52 glass-card rounded-2xl p-2 shadow-2xl border border-white/20 flex flex-col gap-1"
             >
-              <button 
+              <button
                 onClick={() => handleContextAction(() => {
                   setIsSelectionMode(true);
                   if (contextMenuChatId) toggleSelection(contextMenuChatId);
-                })} 
+                })}
                 className="flex items-center gap-3 px-3 py-2 hover:bg-white/10 rounded-xl text-sm font-medium text-blue-500 transition-colors"
               >
                 <CheckSquare className="w-4 h-4" /> Select
@@ -767,18 +670,18 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
                 <Pin className="w-4 h-4" /> {chats.find(c => c.id === contextMenuChatId)?.isPinned ? 'Unpin' : 'Pin'}
               </button>
               <button onClick={() => handleContextAction(() => muteChat(contextMenuChatId))} className="flex items-center gap-3 px-3 py-2 hover:bg-white/10 rounded-xl text-sm font-medium text-on-surface transition-colors">
-                {chats.find(c => c.id === contextMenuChatId)?.isMuted ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />} 
+                {chats.find(c => c.id === contextMenuChatId)?.isMuted ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
                 {chats.find(c => c.id === contextMenuChatId)?.isMuted ? 'Unmute' : 'Mute'}
               </button>
               <button onClick={() => handleContextAction(() => markAsRead(contextMenuChatId))} className="flex items-center gap-3 px-3 py-2 hover:bg-white/10 rounded-xl text-sm font-medium text-on-surface transition-colors">
-                {chats.find(c => c.id === contextMenuChatId)?.unreadCount ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />} 
+                {chats.find(c => c.id === contextMenuChatId)?.unreadCount ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                 {chats.find(c => c.id === contextMenuChatId)?.unreadCount ? 'Mark as read' : 'Mark as unread'}
               </button>
 
-              
+
               <div className="relative">
-                <button 
-                  onClick={(e) => { e.stopPropagation(); setShowFolderSubmenu(!showFolderSubmenu); }} 
+                <button
+                  onClick={(e) => { e.stopPropagation(); setShowFolderSubmenu(!showFolderSubmenu); }}
                   className="w-full flex items-center justify-between gap-3 px-3 py-2 hover:bg-white/10 rounded-xl text-sm font-medium text-on-surface transition-colors"
                 >
                   <div className="flex items-center gap-3">
@@ -786,15 +689,15 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
                   </div>
                   <ChevronRight className={`w-4 h-4 transition-transform ${showFolderSubmenu ? 'rotate-90' : ''}`} />
                 </button>
-                
+
                 {showFolderSubmenu && (
-                  <motion.div 
+                  <motion.div
                     initial={{ opacity: 0, x: 10 }}
                     animate={{ opacity: 1, x: 0 }}
                     className="absolute left-full top-0 ml-2 w-40 glass-card rounded-xl p-1 shadow-xl border border-white/20 flex flex-col gap-1"
                   >
                     {folders.map(f => (
-                      <button 
+                      <button
                         key={f.id}
                         onClick={() => handleContextAction(() => {
                           if (contextMenuChatId) {
@@ -832,7 +735,7 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
 
       <AnimatePresence>
         {peekChatId && (
-          <ChatPeekPreview 
+          <ChatPeekPreview
             chat={chats.find(c => c.id === peekChatId)!}
             messages={messages[peekChatId] || []}
             currentUser={currentUser}
@@ -853,7 +756,7 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
         )}
       </AnimatePresence>
 
-      <DeleteChatDialog 
+      <DeleteChatDialog
         isOpen={!!chatToDelete}
         chatName={chats.find(c => c.id === chatToDelete)?.name || 'this user'}
         onConfirm={(forEveryone) => {

@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Search, Users, ArrowRight, Camera, Check, ArrowLeft, Shield, Clock, UserPlus } from 'lucide-react';
+import { X, Search, Users, ArrowRight, Camera, Check, ArrowLeft, Shield, Clock, UserPlus, Radio, Globe, Lock, ChevronDown } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import AddContactModal from '../modals/AddContactModal';
+import { ENDPOINTS } from '../../config/api';
+import { apiFetch } from '../../utils/fetcher';
 
 interface NewChatModalProps {
   isOpen: boolean;
@@ -35,17 +37,25 @@ const ToggleRow = ({ icon, title, subtitle, state, setState }: any) => (
 );
 
 export default function NewChatModal({ isOpen, onClose, onNavigate }: NewChatModalProps) {
-  const { contacts, currentUser, startChatWithContact, createGroupChat, globalUsers } = useAppContext();
+  const { contacts, currentUser, startChatWithContact, createGroupChat, globalUsers, addToast, fetchInitialData } = useAppContext();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
-  const [mode, setMode] = useState<'default' | 'group-select' | 'group-info'>('default');
+  const [mode, setMode] = useState<'default' | 'group-select' | 'group-info' | 'channel-info'>('default');
   
   // Group Info State
   const [groupName, setGroupName] = useState('');
   const [groupDesc, setGroupDesc] = useState('');
   const [disappearing, setDisappearing] = useState(false);
   const [adminOnly, setAdminOnly] = useState(false);
-  
+
+  // Channel creation state
+  const [channelName, setChannelName] = useState('');
+  const [channelHandle, setChannelHandle] = useState('');
+  const [channelDesc, setChannelDesc] = useState('');
+  const [channelCategory, setChannelCategory] = useState('');
+  const [channelType, setChannelType] = useState<'PUBLIC' | 'PRIVATE' | 'INVITE_ONLY'>('PUBLIC');
+  const [isChannelCreating, setIsChannelCreating] = useState(false);
+
   const [isAddContactOpen, setIsAddContactOpen] = useState(false);
 
   // Combine local contacts and other global users for global discovery
@@ -93,6 +103,36 @@ export default function NewChatModal({ isOpen, onClose, onNavigate }: NewChatMod
     onNavigate('chat-detail');
   };
 
+  const handleCreateChannel = async () => {
+    if (!channelName.trim() || !channelHandle.trim()) return;
+    setIsChannelCreating(true);
+    try {
+      const res = await apiFetch(ENDPOINTS.CHANNELS, {
+        method: 'POST',
+        body: JSON.stringify({
+          name: channelName.trim(),
+          handle: channelHandle.trim().toLowerCase().replace(/[^a-z0-9_]/g, ''),
+          description: channelDesc.trim() || undefined,
+          category: channelCategory.trim() || undefined,
+          type: channelType,
+          isDiscoverable: channelType === 'PUBLIC',
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        addToast(err.message || 'Failed to create channel', 'error');
+        return;
+      }
+      addToast(`Channel @${channelHandle} created!`, 'success');
+      await fetchInitialData();
+      handleClose();
+    } catch {
+      addToast('Failed to create channel', 'error');
+    } finally {
+      setIsChannelCreating(false);
+    }
+  };
+
   const handleClose = () => {
     setMode('default');
     setSelectedContacts([]);
@@ -101,6 +141,11 @@ export default function NewChatModal({ isOpen, onClose, onNavigate }: NewChatMod
     setSearchQuery('');
     setDisappearing(false);
     setAdminOnly(false);
+    setChannelName('');
+    setChannelHandle('');
+    setChannelDesc('');
+    setChannelCategory('');
+    setChannelType('PUBLIC');
     onClose();
   };
 
@@ -134,14 +179,11 @@ export default function NewChatModal({ isOpen, onClose, onNavigate }: NewChatMod
               )}
               <div className="flex-1">
                 <h2 className="text-xl font-bold font-headline text-on-surface">
-                  {mode === 'default' ? 'New Chat' : 'New Group'}
+                  {mode === 'default' ? 'New Chat' : mode === 'channel-info' ? 'New Channel' : 'New Group'}
                 </h2>
-                {mode === 'group-select' && (
-                  <p className="text-xs text-on-surface-variant">Add members</p>
-                )}
-                {mode === 'group-info' && (
-                  <p className="text-xs text-on-surface-variant">Add subject</p>
-                )}
+                {mode === 'group-select' && <p className="text-xs text-on-surface-variant">Add members</p>}
+                {mode === 'group-info' && <p className="text-xs text-on-surface-variant">Add subject</p>}
+                {mode === 'channel-info' && <p className="text-xs text-on-surface-variant">Set up your channel</p>}
               </div>
               {mode === 'default' && (
                 <button onClick={handleClose} className="p-2 rounded-full hover:bg-white/10 transition-colors">
@@ -212,23 +254,41 @@ export default function NewChatModal({ isOpen, onClose, onNavigate }: NewChatMod
                     <div className="flex-1 overflow-y-auto p-2 pb-24">
                       {mode === 'default' && !searchQuery && (
                         <div className="mb-4">
-                          <div 
+                          <div
                             className="p-4 flex items-center gap-4 cursor-pointer hover:bg-white/5 rounded-xl transition-colors"
                             onClick={() => setMode('group-select')}
                           >
                             <div className="w-12 h-12 rounded-full bg-secondary flex items-center justify-center text-on-secondary shadow-lg shadow-secondary/20">
                               <Users className="w-6 h-6" />
                             </div>
-                            <h3 className="font-semibold text-on-surface">New Group</h3>
+                            <div>
+                              <h3 className="font-semibold text-on-surface">New Group</h3>
+                              <p className="text-xs text-on-surface-variant">Chat with multiple people</p>
+                            </div>
                           </div>
-                          <div 
+                          <div
+                            className="p-4 flex items-center gap-4 cursor-pointer hover:bg-white/5 rounded-xl transition-colors"
+                            onClick={() => setMode('channel-info')}
+                          >
+                            <div className="w-12 h-12 rounded-full bg-secondary flex items-center justify-center text-on-secondary shadow-lg shadow-secondary/20">
+                              <Radio className="w-6 h-6" />
+                            </div>
+                            <div>
+                              <h3 className="font-semibold text-on-surface">New Channel</h3>
+                              <p className="text-xs text-on-surface-variant">Broadcast to followers</p>
+                            </div>
+                          </div>
+                          <div
                             className="p-4 flex items-center gap-4 cursor-pointer hover:bg-white/5 rounded-xl transition-colors"
                             onClick={() => setIsAddContactOpen(true)}
                           >
                             <div className="w-12 h-12 rounded-full bg-secondary flex items-center justify-center text-on-secondary shadow-lg shadow-secondary/20">
                               <UserPlus className="w-6 h-6" />
                             </div>
-                            <h3 className="font-semibold text-on-surface">New Contact</h3>
+                            <div>
+                              <h3 className="font-semibold text-on-surface">New Contact</h3>
+                              <p className="text-xs text-on-surface-variant">Add someone to your list</p>
+                            </div>
                           </div>
                         </div>
                       )}
@@ -348,6 +408,99 @@ export default function NewChatModal({ isOpen, onClose, onNavigate }: NewChatMod
                     </div>
                   </motion.div>
                 )}
+                {/* CHANNEL INFO MODE */}
+                {mode === 'channel-info' && (
+                  <motion.div
+                    key="channel-mode"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                    className="flex-1 flex flex-col overflow-y-auto absolute inset-0 pb-28 px-4 pt-4 space-y-5"
+                  >
+                    {/* Icon + Name */}
+                    <div className="flex items-center gap-4 mt-2">
+                      <div className="w-16 h-16 rounded-2xl bg-secondary/20 flex items-center justify-center text-secondary shrink-0">
+                        <Radio className="w-7 h-7" />
+                      </div>
+                      <div className="flex-1 space-y-1">
+                        <div className="border-b border-secondary/40 pb-1">
+                          <input
+                            type="text"
+                            value={channelName}
+                            onChange={e => {
+                              setChannelName(e.target.value);
+                              setChannelHandle(e.target.value.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, ''));
+                            }}
+                            placeholder="Channel Name"
+                            className="w-full bg-transparent text-on-surface text-lg font-semibold outline-none placeholder:text-on-surface-variant/50 placeholder:font-normal"
+                            autoFocus
+                          />
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className="text-on-surface-variant text-sm">@</span>
+                          <input
+                            type="text"
+                            value={channelHandle}
+                            onChange={e => setChannelHandle(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                            placeholder="handle"
+                            className="w-full bg-transparent text-secondary text-sm font-mono outline-none placeholder:text-on-surface-variant/40"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Description */}
+                    <div className="border-b border-white/10 pb-2">
+                      <textarea
+                        value={channelDesc}
+                        onChange={e => setChannelDesc(e.target.value)}
+                        placeholder="Description (optional)"
+                        rows={2}
+                        className="w-full bg-transparent text-on-surface text-sm outline-none placeholder:text-on-surface-variant/50 resize-none"
+                      />
+                    </div>
+
+                    {/* Category */}
+                    <div className="border-b border-white/10 pb-2">
+                      <input
+                        type="text"
+                        value={channelCategory}
+                        onChange={e => setChannelCategory(e.target.value)}
+                        placeholder="Category — e.g. Tech, Music, Business (optional)"
+                        className="w-full bg-transparent text-on-surface text-sm outline-none placeholder:text-on-surface-variant/50"
+                      />
+                    </div>
+
+                    {/* Type */}
+                    <div>
+                      <h3 className="text-xs font-bold text-secondary uppercase tracking-wider mb-3">Channel Type</h3>
+                      <div className="space-y-2">
+                        {([
+                          { value: 'PUBLIC', icon: <Globe className="w-4 h-4" />, label: 'Public', desc: 'Anyone can find and join' },
+                          { value: 'PRIVATE', icon: <Lock className="w-4 h-4" />, label: 'Private', desc: 'Only invited members can join' },
+                          { value: 'INVITE_ONLY', icon: <Shield className="w-4 h-4" />, label: 'Invite Only', desc: 'Join via invite link only' },
+                        ] as const).map(opt => (
+                          <button
+                            key={opt.value}
+                            onClick={() => setChannelType(opt.value)}
+                            className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all text-left ${
+                              channelType === opt.value
+                                ? 'border-secondary/50 bg-secondary/10 text-secondary'
+                                : 'border-white/10 hover:bg-white/5 text-on-surface-variant'
+                            }`}
+                          >
+                            {opt.icon}
+                            <div>
+                              <p className="text-sm font-semibold">{opt.label}</p>
+                              <p className="text-xs opacity-70">{opt.desc}</p>
+                            </div>
+                            {channelType === opt.value && <Check className="w-4 h-4 ml-auto" />}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
               </AnimatePresence>
             </div>
 
@@ -373,6 +526,20 @@ export default function NewChatModal({ isOpen, onClose, onNavigate }: NewChatMod
                   className="absolute bottom-6 right-6 w-14 h-14 bg-secondary text-on-secondary rounded-full shadow-lg shadow-secondary/20 flex items-center justify-center hover:scale-105 active:scale-95 transition-all z-50"
                 >
                   <Check className="w-6 h-6" />
+                </motion.button>
+              )}
+              {mode === 'channel-info' && channelName.trim().length > 0 && channelHandle.trim().length > 0 && (
+                <motion.button
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0, opacity: 0 }}
+                  onClick={handleCreateChannel}
+                  disabled={isChannelCreating}
+                  className="absolute bottom-6 right-6 w-14 h-14 bg-secondary text-on-secondary rounded-full shadow-lg shadow-secondary/20 flex items-center justify-center hover:scale-105 active:scale-95 transition-all z-50 disabled:opacity-60"
+                >
+                  {isChannelCreating
+                    ? <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    : <Check className="w-6 h-6" />}
                 </motion.button>
               )}
             </AnimatePresence>

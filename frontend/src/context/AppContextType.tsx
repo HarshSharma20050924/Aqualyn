@@ -99,6 +99,7 @@ export interface AppContextType {
   requestSecretChat: (targetUserId: string) => Promise<void>;
   handleSecretChatInvitation: (chatId: string, action: 'accept' | 'decline') => Promise<void>;
   handleGroupInvitation: (chatId: string, action: 'accept' | 'decline') => Promise<void>;
+  fetchInitialData: () => Promise<void>;
 }
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);

@@ -187,6 +187,23 @@ export const useAppActions = (
       }
     }
 
+    const getStoredSetting = (key: string, fallback: any) => {
+      try {
+        const val = localStorage.getItem(`lyn_${key}_${chatId}`);
+        if (val !== null) return JSON.parse(val);
+      } catch {}
+      return fallback;
+    };
+
+    const aiSettings = {
+      enabled: getStoredSetting('enabled', true) !== false,
+      personality: (() => {
+        const custom = getStoredSetting('customPersonality', '');
+        if (typeof custom === 'string' && custom.trim()) return custom.trim();
+        return getStoredSetting('personality', 'friendly') || 'friendly';
+      })()
+    };
+
     const newMessage: Message = {
       id: `temp-${Date.now()}`,
       chatId,
@@ -222,7 +239,8 @@ export const useAppActions = (
             location: options?.location,
             contact: options?.contact,
             payment: options?.payment,
-            replyToId: options?.replyToId
+            replyToId: options?.replyToId,
+            aiSettings: aiSettings
         });
         socket.emit('typing', { chatId, userId: currentUser?.id, userName: currentUser?.displayName || currentUser?.username, isTyping: false });
 

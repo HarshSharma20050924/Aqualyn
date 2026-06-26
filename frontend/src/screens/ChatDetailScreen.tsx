@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import BubbleLoader from '../components/ui/BubbleLoader';
-import { ArrowLeft, Video, Phone, MoreVertical, Plus, Smile, Mic, CheckCheck, Users, X, Clock, Lock, Search, Download, Trash2, Edit2, Share2, UserPlus, User } from 'lucide-react';
+import { ArrowLeft, Video, Phone, MoreVertical, Plus, Smile, Mic, CheckCheck, Users, X, Clock, Lock, Search, Download, Trash2, Edit2, Share2, UserPlus, User, Sparkles, Droplet } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { useCall } from '../context/CallContext';
 import { auth } from '../config/firebase';
@@ -15,6 +15,8 @@ import MediaGallery from '../components/chat/MediaGallery';
 import GroupInfoScreen from './GroupInfoScreen';
 import SecretChatInfoScreen from './SecretChatInfoScreen';
 import ShareContactModal from '../components/chat/ShareContactModal';
+import LynPanel from '../components/ai/LynPanel';
+import { AIService } from '../services/ai.service';
 
 import { apiFetch } from '../utils/fetcher';
 import { uploadFile } from '../utils/uploads';
@@ -46,8 +48,91 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
 
   const [isGroupInfoOpen, setIsGroupInfoOpen] = useState(false);
   const [isSecretInfoOpen, setIsSecretInfoOpen] = useState(false);
+  const [showLynPanel, setShowLynPanel] = useState(false);
+  const [isAiMentionMenuOpen, setIsAiMentionMenuOpen] = useState(false);
+
+  // Lyn AI settings (persisted per-chat in localStorage)
+  const getSavedSetting = (chatId: string | null, key: string, defaultVal: any) => {
+    if (!chatId) return defaultVal;
+    try {
+      const saved = localStorage.getItem(`lyn_${key}_${chatId}`);
+      if (saved !== null) return JSON.parse(saved);
+    } catch {}
+    return defaultVal;
+  };
+
+  const [aiEnabled, setAiEnabled] = useState(() => getSavedSetting(activeChatId, 'enabled', true));
+  const [aiSuggestionsEnabled, setAiSuggestionsEnabled] = useState(() => getSavedSetting(activeChatId, 'suggestions', true));
+  const [lynPersonality, setLynPersonality] = useState(() => getSavedSetting(activeChatId, 'personality', 'friendly'));
+  const [lynCustomPersonality, setLynCustomPersonality] = useState(() => getSavedSetting(activeChatId, 'customPersonality', ''));
+
+  // Re-load settings when the active chat changes
+  const isInitialMount = useRef(true);
+  useEffect(() => {
+    isInitialMount.current = true;
+    setAiEnabled(getSavedSetting(activeChatId, 'enabled', true));
+    setAiSuggestionsEnabled(getSavedSetting(activeChatId, 'suggestions', true));
+    setLynPersonality(getSavedSetting(activeChatId, 'personality', 'friendly'));
+    setLynCustomPersonality(getSavedSetting(activeChatId, 'customPersonality', ''));
+  }, [activeChatId]);
+
+  // Only save when explicitly triggered by the LynPanel Save button
+  const handleLynSave = ({ aiEnabled: en, aiSuggestionsEnabled: sug, personality: per, customPersonality: cus }: {
+    aiEnabled: boolean; aiSuggestionsEnabled: boolean; personality: string; customPersonality: string;
+  }) => {
+    if (!activeChatId) return;
+    setAiEnabled(en);
+    setAiSuggestionsEnabled(sug);
+    setLynPersonality(per);
+    setLynCustomPersonality(cus);
+    localStorage.setItem(`lyn_enabled_${activeChatId}`, JSON.stringify(en));
+    localStorage.setItem(`lyn_suggestions_${activeChatId}`, JSON.stringify(sug));
+    localStorage.setItem(`lyn_personality_${activeChatId}`, JSON.stringify(per));
+    localStorage.setItem(`lyn_customPersonality_${activeChatId}`, JSON.stringify(cus));
+    addToast('Lyn settings saved ✓', 'success');
+  };
+
+  // Draft flow
+  const [isDraftConfirmOpen, setIsDraftConfirmOpen] = useState(false);
+  const [draftText, setDraftText] = useState('');
+  const [isDraftLoading, setIsDraftLoading] = useState(false);
+
+  // Smart replies — fetched from AI, refreshed when chat changes or a new message arrives
+  const [smartReplies, setSmartReplies] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!activeChatId || !aiEnabled || !aiSuggestionsEnabled) {
+      setSmartReplies([]);
+      return;
+    }
+    let cancelled = false;
+    const fetchReplies = async () => {
+      try {
+        const replies = await AIService.getSmartReplies(activeChatId);
+        if (!cancelled && Array.isArray(replies) && replies.length > 0) {
+          setSmartReplies(replies.slice(0, 4));
+        }
+      } catch {
+        // silently fail — smart replies are optional
+      }
+    };
+    fetchReplies();
+    return () => { cancelled = true; };
+  }, [activeChatId, aiEnabled, aiSuggestionsEnabled, (messages[activeChatId || ''] || []).length]);
+
+  const handleGenerateDraft = async () => {
+    setIsDraftLoading(true);
+    setDraftText('');
+    try {
+      const tone = lynCustomPersonality.trim() || lynPersonality;
+      const res = await AIService.draftResponse(activeChatId!, tone);
+      setDraftText(res.draft);
+    } catch { setDraftText('Unable to generate a draft. Please try again.'); }
+    finally { setIsDraftLoading(false); }
+  };
 
   const chat = chats.find(c => c.id === activeChatId);
+  const isLynChat = chat?.name === 'Lyn';
   const chatMessages = activeChatId ? (messages[activeChatId] || []) : [];
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [screenshotAlert, setScreenshotAlert] = useState(false);
@@ -66,6 +151,14 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
     }
     setTimeout(() => setScreenshotAlert(false), 2500);
   };
+
+  if (!chat) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-surface">
+        <BubbleLoader />
+      </div>
+    );
+  }
 
   useEffect(() => {
     if (!chat || !chat.isSecret) return;
@@ -450,6 +543,18 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
             <button onClick={() => startCall(chat.id, chat.name, chat.avatar, 'VOICE')} className={`p-2 rounded-full transition-colors active:scale-95 duration-200 ${chat.isSecret ? 'text-slate-400 hover:bg-slate-800/50' : 'text-cyan-600 hover:bg-white/20'}`}>
               <Phone className="w-5 h-5 fill-current" />
             </button>
+            {/* Lyn AI Settings — available in any non-secret chat */}
+            {!chat.isSecret && (
+              <button
+                onClick={() => setShowLynPanel(prev => !prev)}
+                className={`relative p-2 rounded-full transition-all active:scale-95 duration-200 ${showLynPanel ? 'bg-secondary/15' : ''
+                  } text-secondary hover:bg-white/20`}
+                title="Lyn AI Settings"
+              >
+                <Droplet className={`w-5 h-5 transition-all ${showLynPanel ? 'fill-secondary' : 'fill-secondary/30'}`} />
+                {showLynPanel && <span className="absolute top-0.5 right-0.5 w-2 h-2 bg-secondary rounded-full shadow-md" />}
+              </button>
+            )}
             <button onClick={() => setShowHeaderMenu(!showHeaderMenu)} className={`p-2 rounded-full transition-colors active:scale-95 duration-200 ${chat.isSecret ? 'text-slate-400 hover:bg-slate-800/50' : 'text-cyan-600 hover:bg-white/20'}`}>
               <MoreVertical className="w-5 h-5" />
             </button>
@@ -485,6 +590,11 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
                     <button onClick={() => { setIsSearchOpen(!isSearchOpen); setShowHeaderMenu(false); }} className="flex items-center gap-3 px-3 py-2 hover:bg-white/10 rounded-xl text-sm font-medium text-on-surface transition-colors">
                       <Search className="w-4 h-4" /> Search
                     </button>
+                    {!chat.isSecret && (
+                      <button onClick={() => { setShowLynPanel(true); setShowHeaderMenu(false); }} className="flex items-center gap-3 px-3 py-2 hover:bg-white/10 rounded-xl text-sm font-medium text-secondary transition-colors">
+                        <Droplet className="w-4 h-4 fill-secondary/20" /> Lyn AI Settings
+                      </button>
+                    )}
                     <button onClick={() => { setShowHeaderMenu(false); setIsShareContactOpen(true); }} className="flex items-center gap-3 px-3 py-2 hover:bg-white/10 rounded-xl text-sm font-medium text-on-surface transition-colors">
                       <Share2 className="w-4 h-4" /> Share Contact
                     </button>
@@ -529,9 +639,27 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Lyn AI Settings Panel — available in any chat */}
+        <AnimatePresence>
+          {showLynPanel && (
+            <LynPanel
+              onClose={() => setShowLynPanel(false)}
+              aiEnabled={aiEnabled}
+              aiSuggestionsEnabled={aiSuggestionsEnabled}
+              personality={lynPersonality}
+              customPersonality={lynCustomPersonality}
+              onSave={handleLynSave}
+              onDiscoverChannels={() => {
+                window.localStorage.setItem('exploreQuery', chat.name || '');
+                onNavigate?.('explore');
+              }}
+            />
+          )}
+        </AnimatePresence>
       </header>
 
-      <main ref={scrollRef} onScroll={handleScroll} className={`flex-1 ${isSearchOpen ? 'pt-28' : 'pt-20'} pb-28 px-4 md:px-8 max-w-4xl mx-auto w-full flex flex-col overflow-y-auto`}>
+      <main ref={scrollRef} onScroll={handleScroll} className={`flex-1 ${showLynPanel ? 'pt-52' : isSearchOpen ? 'pt-28' : 'pt-20'} pb-28 px-4 md:px-8 max-w-4xl mx-auto w-full flex flex-col overflow-y-auto`}>
         <div className="flex-1 min-h-[20px]"></div>
         <div className="flex justify-center my-8">
           <span className="bg-surface-container-low px-4 py-1 rounded-full text-[11px] font-semibold text-on-surface-variant uppercase tracking-widest border border-white/40">Today, Oct 24</span>
@@ -549,59 +677,64 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
                   <BubbleLoader />
                 </div>
               )}
-              {filteredMessages.map((msg, i) => {
-              if (msg.text?.startsWith('[System] 🔒 Secret Chat Request:::')) {
-                const secretChatId = msg.text.split(':::')[1];
-                const isSender = msg.senderId === currentUser?.id;
-                return (
-                  <div key={msg.id} className="flex justify-center my-4">
-                    <div className="bg-surface-container border border-blue-500/30 p-4 rounded-2xl w-full max-w-sm flex flex-col items-center shadow-[0_8px_32px_rgba(0,122,255,0.1)]">
-                      <div className="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-500 mb-3">
-                        <Lock className="w-6 h-6" />
-                      </div>
-                      <h4 className="text-on-surface font-bold text-lg mb-1">Secret Chat Request</h4>
-                      <p className="text-sm text-on-surface-variant text-center mb-4">
-                        {isSender
-                          ? 'Waiting for the other user to accept your request to start an end-to-end encrypted session.'
-                          : 'Wants to start an end-to-end encrypted secret chat with you.'}
-                      </p>
-
-                      {!isSender && (
-                        <div className="flex w-full gap-2 mt-2">
-                          <button
-                            onClick={async () => {
-                              await handleSecretChatInvitation(secretChatId, 'accept');
-                              setActiveChatId(secretChatId);
-                            }}
-                            className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-medium py-2 rounded-xl transition-colors"
-                          >
-                            Accept
-                          </button>
-                          <button
-                            onClick={() => handleSecretChatInvitation(secretChatId, 'decline')}
-                            className="flex-1 bg-surface-container-highest hover:bg-surface-container-high text-on-surface-variant font-medium py-2 rounded-xl transition-colors"
-                          >
-                            Decline
-                          </button>
+              {(() => {
+                const LYN_ID = 'lyn-ai-user-id';
+                const lastLynMsgId = [...filteredMessages].reverse().find(m => m.senderId === LYN_ID)?.id;
+                return filteredMessages.map((msg, i) => {
+                if (msg.text?.startsWith('[System] 🔒 Secret Chat Request:::')) {
+                  const secretChatId = msg.text.split(':::')[1];
+                  const isSender = msg.senderId === currentUser?.id;
+                  return (
+                    <div key={msg.id} className="flex justify-center my-4">
+                      <div className="bg-surface-container border border-blue-500/30 p-4 rounded-2xl w-full max-w-sm flex flex-col items-center shadow-[0_8px_32px_rgba(0,122,255,0.1)]">
+                        <div className="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-500 mb-3">
+                          <Lock className="w-6 h-6" />
                         </div>
-                      )}
+                        <h4 className="text-on-surface font-bold text-lg mb-1">Secret Chat Request</h4>
+                        <p className="text-sm text-on-surface-variant text-center mb-4">
+                          {isSender
+                            ? 'Waiting for the other user to accept your request to start an end-to-end encrypted session.'
+                            : 'Wants to start an end-to-end encrypted secret chat with you.'}
+                        </p>
+
+                        {!isSender && (
+                          <div className="flex w-full gap-2 mt-2">
+                            <button
+                              onClick={async () => {
+                                await handleSecretChatInvitation(secretChatId, 'accept');
+                                setActiveChatId(secretChatId);
+                              }}
+                              className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-medium py-2 rounded-xl transition-colors"
+                            >
+                              Accept
+                            </button>
+                            <button
+                              onClick={() => handleSecretChatInvitation(secretChatId, 'decline')}
+                              className="flex-1 bg-surface-container-highest hover:bg-surface-container-high text-on-surface-variant font-medium py-2 rounded-xl transition-colors"
+                            >
+                              Decline
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                );
-              }
-              return (
-                <MessageBubble
-                  key={msg.id}
-                  msg={msg}
-                  isMe={msg.senderId === currentUser?.id}
-                  onReply={setReplyingTo}
-                  onEdit={handleEdit}
-                  replyMessage={msg.replyToId ? chatMessages.find(m => m.id === msg.replyToId) : undefined}
-                  onMediaClick={handleMediaClick}
-                  isSecret={chat.isSecret}
-                />
-              );
-            })}
+                  );
+                }
+                  return (
+                    <MessageBubble
+                      key={msg.id}
+                      msg={msg}
+                      isMe={msg.senderId === currentUser?.id}
+                      onReply={setReplyingTo}
+                      onEdit={handleEdit}
+                      replyMessage={msg.replyToId ? chatMessages.find(m => m.id === msg.replyToId) : undefined}
+                      onMediaClick={handleMediaClick}
+                      isSecret={chat.isSecret}
+                      animateTyping={msg.id === lastLynMsgId && msg.senderId === LYN_ID}
+                    />
+                  );
+                });
+              })()}
             </>
           )}
 
@@ -680,6 +813,10 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
                 <p className="text-xs text-slate-500">Both participants must verify each other before chatting. Tap the header to open Security Settings.</p>
               </div>
             </div>
+          ) : chat.isChannel && !['OWNER', 'ADMIN'].includes(chat.myRole || '') ? (
+            <div className="flex flex-col items-center justify-center py-6 px-4 border-t border-outline-variant/10 bg-surface-container/30">
+              <p className="text-sm font-medium text-on-surface-variant">Only admins can send messages</p>
+            </div>
           ) : (
             <>
               <AnimatePresence>
@@ -726,57 +863,211 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
               />
 
               {!isRecordingAudio && (
-                <form onSubmit={handleSend} className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setIsAttachmentPickerOpen(!isAttachmentPickerOpen)}
-                    className={`w-12 h-12 flex items-center justify-center rounded-full backdrop-blur-md border transition-all active:scale-90 duration-200 ${isAttachmentPickerOpen
-                      ? (chat.isSecret ? 'bg-blue-600 text-white border-blue-500 shadow-lg shadow-blue-500/10' : 'bg-secondary text-white border-secondary shadow-lg shadow-secondary/20')
-                      : (chat.isSecret ? 'bg-black/60 border-slate-700/30 text-slate-400 hover:bg-slate-800/50 shadow-sm' : 'bg-white/60 border-white/40 text-on-surface-variant hover:bg-white shadow-sm')
-                      }`}
-                  >
-                    <Plus className={`w-6 h-6 transition-transform duration-300 ${isAttachmentPickerOpen ? 'rotate-45' : ''}`} />
-                  </button>
+                <div className="w-full flex flex-col gap-2">
 
-                  <div className="flex-1 relative flex items-center">
-                    <input
-                      type="text"
-                      value={text}
-                      onChange={e => setText(e.target.value)}
-                      placeholder={`Message ${chat.name}...`}
-                      className={`w-full h-12 pl-4 pr-20 rounded-full border outline-none transition-all ${chat.isSecret
-                        ? 'bg-black border-slate-700/30 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/50 text-slate-200 placeholder:text-slate-600 font-sans'
-                        : 'bg-white/70 backdrop-blur-2xl border-white/40 focus:ring-2 focus:ring-secondary/20 focus:border-secondary text-on-surface placeholder:text-on-surface-variant/50'
-                        }`}
-                    />
-                    <div className="absolute right-2 flex items-center">
-                      <button type="button" className={`p-1.5 transition-colors ${chat.isSecret ? 'text-slate-500 hover:text-slate-300' : 'text-on-surface-variant hover:text-secondary'}`}>
-                        <Smile className="w-5 h-5" />
-                      </button>
+                  {/* @lyn mention popup */}
+                  <AnimatePresence>
+                    {isAiMentionMenuOpen && aiEnabled && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 10 }}
+                        className="w-full bg-surface-container-lowest border border-outline-variant/20 shadow-xl rounded-2xl overflow-hidden z-50 p-2"
+                      >
+                        <div className="px-3 py-2 border-b border-outline-variant/10 text-[10px] font-black uppercase tracking-widest text-on-surface-variant flex items-center gap-2">
+                          <Droplet className="w-3.5 h-3.5 text-secondary fill-secondary" /> AI Actions
+                        </div>
+                        <div className="mt-1 space-y-0.5">
+                          <button
+                            onClick={() => {
+                              setText(t => t.replace(/@lyn/i, '').trim());
+                              setIsAiMentionMenuOpen(false);
+                              setIsDraftConfirmOpen(true);
+                            }}
+                            className="w-full text-left px-3 py-2.5 hover:bg-surface-container rounded-xl flex flex-col gap-0.5 transition-colors"
+                          >
+                            <span className="font-bold text-sm text-on-surface font-headline">Draft Message</span>
+                            <span className="text-[11px] text-on-surface-variant">Write a context-aware reply in your tone</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              setText(t => t.replace(/@lyn/i, '').trim());
+                              setIsAiMentionMenuOpen(false);
+                              window.localStorage.setItem('exploreQuery', 'AI_RECOMMENDED_PEOPLE');
+                              onNavigate?.('explore');
+                            }}
+                            className="w-full text-left px-3 py-2.5 hover:bg-surface-container rounded-xl flex flex-col gap-0.5 transition-colors"
+                          >
+                            <span className="font-bold text-sm text-on-surface font-headline">Discover People Like You</span>
+                            <span className="text-[11px] text-on-surface-variant">Find others discussing similar topics</span>
+                          </button>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {/* Draft confirm + textarea */}
+                  <AnimatePresence>
+                    {isDraftConfirmOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 8 }}
+                        className="w-full glass-card rounded-2xl border border-outline-variant/20 shadow-xl p-4 space-y-3"
+                      >
+                        {/* Tone row */}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className="relative w-6 h-6 shrink-0">
+                              <div className="absolute inset-0 bg-gradient-to-br from-secondary-fixed to-primary-container rounded-md rotate-12 opacity-30" />
+                              <div className="relative w-full h-full glass-card rounded-md flex items-center justify-center">
+                                <Droplet className="w-3.5 h-3.5 text-secondary fill-secondary" />
+                              </div>
+                            </div>
+                            <span className="text-[11px] font-black uppercase tracking-widest text-on-surface-variant">Draft Message</span>
+                          </div>
+                          <button onClick={() => { setIsDraftConfirmOpen(false); setDraftText(''); }} className="p-1 rounded-full text-on-surface-variant hover:bg-white/20">
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        {/* Tone indicator */}
+                        <div className="flex items-center gap-2 bg-surface-container rounded-xl px-3 py-2 border border-outline-variant/10">
+                          <span className="text-[11px] text-on-surface-variant">Tone:</span>
+                          <span className="text-[11px] font-bold text-secondary capitalize">
+                            {lynCustomPersonality.trim() || lynPersonality}
+                          </span>
+                          {isLynChat && (
+                            <button
+                              onClick={() => { setIsDraftConfirmOpen(false); setDraftText(''); setShowLynPanel(true); }}
+                              className="ml-auto text-[10px] text-secondary underline underline-offset-2"
+                            >
+                              Change in Lyn Settings
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Draft textarea */}
+                        {draftText ? (
+                          <textarea
+                            value={draftText}
+                            onChange={e => setDraftText(e.target.value)}
+                            rows={4}
+                            className="w-full rounded-xl bg-surface-container border border-outline-variant/20 px-3 py-2.5 text-sm text-on-surface resize-none focus:outline-none focus:ring-2 focus:ring-secondary/20 focus:border-secondary transition-all"
+                          />
+                        ) : (
+                          <div className="w-full h-24 rounded-xl bg-surface-container border border-outline-variant/10 flex items-center justify-center">
+                            {isDraftLoading ? (
+                              <div className="flex gap-1">
+                                {[0, 150, 300].map(d => (
+                                  <span key={d} className="w-2 h-2 bg-secondary rounded-full animate-bounce" style={{ animationDelay: `${d}ms` }} />
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-xs text-on-surface-variant italic">Draft will appear here</span>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Actions */}
+                        <div className="flex gap-2">
+                          <button
+                            onClick={handleGenerateDraft}
+                            disabled={isDraftLoading}
+                            className="flex-1 py-2.5 rounded-xl liquid-gradient text-white text-xs font-bold active:scale-95 transition-all aqua-glow disabled:opacity-60"
+                          >
+                            {isDraftLoading ? 'Generating...' : draftText ? 'Retry' : 'Generate'}
+                          </button>
+                          {draftText && (
+                            <button
+                              onClick={() => { setText(draftText); setIsDraftConfirmOpen(false); setDraftText(''); }}
+                              className="flex-1 py-2.5 rounded-xl bg-secondary/10 text-secondary text-xs font-bold active:scale-95 transition-all border border-secondary/20"
+                            >
+                              Use Draft
+                            </button>
+                          )}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {/* Smart reply bar — reference style */}
+                  {smartReplies.length > 0 && chatMessages.length > 0 && !text && (
+                    <div className="flex items-center gap-2 overflow-x-auto pb-1 custom-scrollbar">
+                      <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-secondary bg-secondary/10 px-2 py-1.5 rounded-lg border border-secondary/20 shrink-0">
+                        <Droplet className="w-3.5 h-3.5 fill-secondary" /> Lyn
+                      </div>
+                      {smartReplies.map((reply, i) => (
+                        <button
+                          key={i}
+                          onClick={() => setText(reply)}
+                          className="shrink-0 whitespace-nowrap px-4 py-1.5 rounded-full bg-surface-container backdrop-blur-md border border-outline-variant/30 text-on-surface font-semibold text-[13px] hover:bg-surface-container-high transition-colors active:scale-95"
+                        >
+                          {reply}
+                        </button>
+                      ))}
                     </div>
-                  </div>
-
-                  {text.trim() ? (
-                    <button type="submit" className={`w-12 h-12 flex items-center justify-center rounded-full transition-all active:scale-90 duration-200 ${chat.isSecret
-                      ? 'bg-blue-600 text-white shadow-[0_4px_16px_rgba(59,130,246,0.2)] hover:bg-blue-500'
-                      : 'glass-sent text-white shadow-[0_4px_16px_rgba(0,87,189,0.2)]'
-                      }`}>
-                      <CheckCheck className="w-5 h-5" />
-                    </button>
-                  ) : (
+                  )}
+                  <form onSubmit={handleSend} className="flex items-center gap-3">
                     <button
                       type="button"
-                      onMouseDown={() => setIsRecordingAudio(true)}
-                      onTouchStart={() => setIsRecordingAudio(true)}
-                      className={`w-12 h-12 flex items-center justify-center rounded-full transition-all active:scale-90 duration-200 ${chat.isSecret
-                        ? 'bg-blue-600 text-white shadow-[0_4px_16px_rgba(59,130,246,0.2)] hover:bg-blue-500'
-                        : 'glass-sent text-white shadow-[0_4px_16px_rgba(0,87,189,0.2)]'
+                      onClick={() => setIsAttachmentPickerOpen(!isAttachmentPickerOpen)}
+                      className={`w-12 h-12 flex items-center justify-center rounded-full backdrop-blur-md border transition-all active:scale-90 duration-200 ${isAttachmentPickerOpen
+                        ? (chat.isSecret ? 'bg-blue-600 text-white border-blue-500 shadow-lg shadow-blue-500/10' : 'bg-secondary text-white border-secondary shadow-lg shadow-secondary/20')
+                        : (chat.isSecret ? 'bg-black/60 border-slate-700/30 text-slate-400 hover:bg-slate-800/50 shadow-sm' : 'bg-white/60 border-white/40 text-on-surface-variant hover:bg-white shadow-sm')
                         }`}
                     >
-                      <Mic className="w-5 h-5 fill-current" />
+                      <Plus className={`w-6 h-6 transition-transform duration-300 ${isAttachmentPickerOpen ? 'rotate-45' : ''}`} />
                     </button>
-                  )}
-                </form>
+
+                    <div className="flex-1 relative flex items-center">
+                      <input
+                        type="text"
+                        value={text}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setText(val);
+                          if (val.toLowerCase().includes('@lyn')) {
+                            setIsAiMentionMenuOpen(true);
+                          } else {
+                            setIsAiMentionMenuOpen(false);
+                          }
+                        }}
+                        placeholder={`Message ${chat.name}...`}
+                        className={`w-full h-12 pl-4 pr-20 rounded-full border outline-none transition-all ${chat.isSecret
+                          ? 'bg-black border-slate-700/30 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/50 text-slate-200 placeholder:text-slate-600 font-sans'
+                          : 'bg-white/70 backdrop-blur-2xl border-white/40 focus:ring-2 focus:ring-secondary/20 focus:border-secondary text-on-surface placeholder:text-on-surface-variant/50'
+                          }`}
+                      />
+                      <div className="absolute right-2 flex items-center">
+                        <button type="button" className={`p-1.5 transition-colors ${chat.isSecret ? 'text-slate-500 hover:text-slate-300' : 'text-on-surface-variant hover:text-secondary'}`}>
+                          <Smile className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {text.trim() ? (
+                      <button type="submit" className={`w-12 h-12 flex items-center justify-center rounded-full transition-all active:scale-90 duration-200 ${chat.isSecret
+                        ? 'bg-blue-600 text-white shadow-[0_4px_16px_rgba(59,130,246,0.2)] hover:bg-blue-500'
+                        : 'glass-sent text-white shadow-[0_4px_16px_rgba(0,87,189,0.2)]'
+                        }`}>
+                        <CheckCheck className="w-5 h-5" />
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onMouseDown={() => setIsRecordingAudio(true)}
+                        onTouchStart={() => setIsRecordingAudio(true)}
+                        className={`w-12 h-12 flex items-center justify-center rounded-full transition-all active:scale-90 duration-200 ${chat.isSecret
+                          ? 'bg-blue-600 text-white shadow-[0_4px_16px_rgba(59,130,246,0.2)] hover:bg-blue-500'
+                          : 'glass-sent text-white shadow-[0_4px_16px_rgba(0,87,189,0.2)]'
+                          }`}
+                      >
+                        <Mic className="w-5 h-5 fill-current" />
+                      </button>
+                    )}
+                  </form>
+                </div>
               )}
 
               <MediaAttachmentPicker
@@ -872,6 +1163,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
 
       <div className="fixed top-20 right-[-10%] w-[40%] h-[40%] bg-primary-container/10 blur-[100px] rounded-full pointer-events-none -z-10"></div>
       <div className="fixed bottom-20 left-[-5%] w-[30%] h-[30%] bg-secondary-container/20 blur-[80px] rounded-full pointer-events-none -z-10"></div>
+
     </motion.div>
   );
 }

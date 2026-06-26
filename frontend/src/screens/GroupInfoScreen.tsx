@@ -26,19 +26,28 @@ export default function GroupInfoScreen({ chat, onBack, onNavigate }: GroupInfoS
   const [adminCount, setAdminCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  // Fetch real group info from backend
+  // Fetch real group/channel info from backend
   useEffect(() => {
-    const fetchGroupInfo = async () => {
+    const fetchInfo = async () => {
       try {
-        const res = await apiFetch(ENDPOINTS.GROUP_INFO(chat.id));
+        const endpoint = chat.isChannel ? ENDPOINTS.CHANNEL_INFO(chat.id) : ENDPOINTS.GROUP_INFO(chat.id);
+        const res = await apiFetch(endpoint);
         if (res.ok) {
           const data = await res.json();
-          setParticipants(data.participants?.map((p: any) => ({
-            id: p.user.id,
-            name: p.user.displayName || p.user.username || 'User',
-            avatar: p.user.avatar,
-            role: p.role
-          })) || []);
+          setParticipants(chat.isChannel 
+            ? (data.members?.map((m: any) => ({
+                id: m.userId,
+                name: m.role,
+                avatar: data.avatar || chat.avatar,
+                role: m.role
+              })) || [])
+            : (data.participants?.map((p: any) => ({
+                id: p.user.id,
+                name: p.user.displayName || p.user.username || 'User',
+                avatar: p.user.avatar,
+                role: p.role
+              })) || [])
+          );
           setMediaCount(data.mediaCount || { images: 0, videos: 0, docs: 0, total: 0 });
           setAdminCount(data.adminCount || 0);
           // Apply saved settings
@@ -49,12 +58,12 @@ export default function GroupInfoScreen({ chat, onBack, onNavigate }: GroupInfoS
           if (settings.topicsEnabled !== undefined) setTopicsEnabled(settings.topicsEnabled);
         }
       } catch (e) {
-        console.error('[GroupInfo] Fetch error:', e);
+        console.error('[InfoScreen] Fetch error:', e);
       }
       setLoading(false);
     };
-    fetchGroupInfo();
-  }, [chat.id]);
+    fetchInfo();
+  }, [chat.id, chat.isChannel, chat.avatar]);
 
   const updateSetting = async (key: string, value: any) => {
     try {
@@ -88,7 +97,7 @@ export default function GroupInfoScreen({ chat, onBack, onNavigate }: GroupInfoS
         <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-surface-container-high transition-colors">
           <ArrowLeft className="w-6 h-6 text-on-surface" />
         </button>
-        <h1 className="ml-4 text-xl font-headline font-bold text-on-surface">Group Info</h1>
+        <h1 className="ml-4 text-xl font-headline font-bold text-on-surface">{chat.isChannel ? 'Channel Info' : 'Group Info'}</h1>
       </header>
 
       <div className="flex flex-col items-center py-8 px-4 border-b border-surface-container">
@@ -99,7 +108,7 @@ export default function GroupInfoScreen({ chat, onBack, onNavigate }: GroupInfoS
           </button>
         </div>
         <h2 className="text-2xl font-headline font-bold text-on-surface text-center">{chat.name}</h2>
-        <p className="text-on-surface-variant mt-1">Group • {participants.length} participants</p>
+        <p className="text-on-surface-variant mt-1">{chat.isChannel ? 'Channel' : 'Group'} • {participants.length} {chat.isChannel ? 'members' : 'participants'}</p>
       </div>
 
       <div className="p-4 space-y-6 max-w-2xl mx-auto">

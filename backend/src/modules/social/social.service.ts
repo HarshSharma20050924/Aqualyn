@@ -3,16 +3,8 @@ import { ContentService } from '../../services/ContentService';
 import { ActivityService } from '../../services/ActivityService';
 import { pubClient } from '../../config/redis';
 
-/**
- * SocialService handles the core logical operations for the Social Feed,
- * including Post creation, Feed retrieval, and Story management.
- */
 export class SocialService {
     
-    /**
-     * Create a new post with optional media.
-     * High-scale Ready: Uses specific selection on return.
-     */
     static async createPost(userId: string, data: { content?: string, mediaUrl?: string, mediaType?: string }) {
         if (!userId) throw new Error('User ID is required');
         if (!data.content && !data.mediaUrl) throw new Error('Post must have content or media');
@@ -32,14 +24,12 @@ export class SocialService {
                 }
             });
 
-            // 🟢 DISTRIBUTED MENTION LOGIC (Run in background)
             if (data.content) {
                 ContentService.handlePostMentions(userId, post.id, data.content).catch((e: any) => 
                     console.error('[SocialService] Mention Error:', e)
                 );
             }
 
-            // 🔵 REAL-TIME BROADCAST (Background)
             const followers = await (prisma as any).userFollows.findMany({
                 where: { followingId: userId },
                 select: { followerId: true }
@@ -47,12 +37,17 @@ export class SocialService {
             const followerIds = followers.map((f: any) => f.followerId);
 
             if (followerIds.length > 0) {
-                pubClient.publish('SOCIAL_POST_UPDATE', JSON.stringify({ 
-                    userId, 
-                    postId: post.id, 
-                    post,
-                    followerIds 
-                }));
+                // Safeguard against Redis process crashes
+                try {
+                    pubClient.publish('SOCIAL_POST_UPDATE', JSON.stringify({ 
+                        userId, 
+                        postId: post.id, 
+                        post,
+                        followerIds 
+                    }));
+                } catch (redisError) {
+                    console.error('[SocialService] Redis publish failed for createPost:', redisError);
+                }
             }
 
             return post;
@@ -69,7 +64,15 @@ export class SocialService {
             if (!post) throw new Error('Post not found');
             if (post.authorId !== userId) throw new Error('Not authorized');
 
-            await (prisma as any).post.delete({ where: { id: postId } });
+            // Sequential teardown inside a transactional unit to handle constraints safely
+            await (prisma as any).$transaction([
+                (prisma as any).commentLike.deleteMany({ where: { comment: { postId } } }),
+                (prisma as any).comment.deleteMany({ where: { postId } }),
+                (prisma as any).like.deleteMany({ where: { postId } }),
+                (prisma as any).savedPost.deleteMany({ where: { postId } }),
+                (prisma as any).post.delete({ where: { id: postId } })
+            ]);
+
             return { success: true };
         } catch (error) {
             console.error('[SocialService] deletePost failed:', error);
@@ -118,6 +121,7 @@ export class SocialService {
                     },
                     likes: { select: { userId: true } },
                     comments: {
+                        where: { parentId: null },
                         include: {
                             user: { select: { id: true, username: true, displayName: true, avatar: true } }
                         },
@@ -167,12 +171,16 @@ export class SocialService {
                 }).catch(() => {});
             }
 
-            pubClient.publish('SOCIAL_STORY_UPDATE', JSON.stringify({ 
-                userId, 
-                storyId: story.id, 
-                story,
-                followerIds 
-            }));
+            try {
+                pubClient.publish('SOCIAL_STORY_UPDATE', JSON.stringify({ 
+                    userId, 
+                    storyId: story.id, 
+                    story,
+                    followerIds 
+                }));
+            } catch (redisError) {
+                console.error('[SocialService] Redis publish failed for createStory:', redisError);
+            }
 
             return story;
         } catch (error) {
@@ -218,9 +226,10 @@ export class SocialService {
             if (!story) throw new Error('Story not found');
             if (story.userId !== userId) throw new Error('Not authorized to delete this story');
 
-            await (prisma as any).story.delete({
-                where: { id: storyId }
-            });
+            await (prisma as any).$transaction([
+                (prisma as any).storyView.deleteMany({ where: { storyId } }),
+                (prisma as any).story.delete({ where: { id: storyId } })
+            ]);
 
             return { success: true };
         } catch (error) {
@@ -229,17 +238,21 @@ export class SocialService {
         }
     }
 
-    static async getUserPosts(userId: string) {
+    static async getUserPosts(userId: string, cursor?: string, limit: number = 20) {
         try {
             return await (prisma as any).post.findMany({
                 where: { authorId: userId },
+                take: limit,
+                ...(cursor && { skip: 1, cursor: { id: cursor } }),
                 orderBy: { createdAt: 'desc' },
                 include: {
                     author: { select: { id: true, username: true, displayName: true, avatar: true } },
                     likes: { select: { userId: true } },
                     comments: {
+                        where: { parentId: null },
                         include: { user: { select: { id: true, username: true, displayName: true, avatar: true } } },
-                        orderBy: { createdAt: 'asc' }, take: 5
+                        orderBy: { createdAt: 'asc' }, 
+                        take: 5
                     },
                     _count: { select: { likes: true, comments: true } }
                 }
@@ -288,8 +301,11 @@ export class SocialService {
                     }).catch(() => {});
                 }
 
-                // 🔵 Broadcast Like
-                pubClient.publish('SOCIAL_LIKE_UPDATE', JSON.stringify({ userId, postId, liked: true }));
+                try {
+                    pubClient.publish('SOCIAL_LIKE_UPDATE', JSON.stringify({ userId, postId, liked: true }));
+                } catch (redisError) {
+                    console.error('[SocialService] Redis publish failed for toggleLike:', redisError);
+                }
                 
                 return { liked: true, like };
             }
@@ -320,8 +336,11 @@ export class SocialService {
                 }).catch(() => {});
             }
 
-            // 🔵 Broadcast Comment
-            pubClient.publish('SOCIAL_COMMENT_UPDATE', JSON.stringify({ userId, postId, comment }));
+            try {
+                pubClient.publish('SOCIAL_COMMENT_UPDATE', JSON.stringify({ userId, postId, comment }));
+            } catch (redisError) {
+                console.error('[SocialService] Redis publish failed for addComment:', redisError);
+            }
 
             return comment;
         } catch (error) {
@@ -329,6 +348,34 @@ export class SocialService {
             throw new Error('Comment failed');
         }
     }
+
+    static async deleteComment(userId: string, commentId: string) {
+        if (!userId || !commentId) throw new Error('Missing fields');
+        try {
+            const comment = await (prisma as any).comment.findUnique({
+                where: { id: commentId },
+                include: { post: true }
+            });
+            if (!comment) throw new Error('Comment not found');
+            
+            // Authorized if user wrote the comment OR user owns the post
+            if (comment.userId !== userId && comment.post.authorId !== userId) {
+                throw new Error('Not authorized');
+            }
+
+            await (prisma as any).$transaction([
+                (prisma as any).commentLike.deleteMany({ where: { commentId } }),
+                (prisma as any).comment.deleteMany({ where: { parentId: commentId } }), // wipe nested sub-replies
+                (prisma as any).comment.delete({ where: { id: commentId } })
+            ]);
+
+            return { success: true };
+        } catch (error) {
+            console.error('[SocialService] deleteComment failed:', error);
+            throw new Error('Comment deletion failed');
+        }
+    }
+
     static async getComments(postId: string, cursor?: string, limit: number = 20) {
         return await (prisma as any).comment.findMany({
             where: { postId, parentId: null },
@@ -362,7 +409,6 @@ export class SocialService {
             }
         });
 
-        // Notify parent comment author
         if (parent.userId !== userId) {
             ActivityService.createActivity({
                 userId: parent.userId,
@@ -390,7 +436,6 @@ export class SocialService {
     }
 
     static async getStoryViews(userId: string, storyId: string) {
-        // Only the story owner can see views
         const story = await (prisma as any).story.findUnique({ where: { id: storyId } });
         if (!story) throw new Error('Story not found');
         if (story.userId !== userId) throw new Error('Only the story owner can see views');
@@ -431,9 +476,11 @@ export class SocialService {
         }
     }
 
-    static async getSavedPosts(userId: string) {
+    static async getSavedPosts(userId: string, cursor?: string, limit: number = 20) {
         const saved = await (prisma as any).savedPost.findMany({
             where: { userId },
+            take: limit,
+            ...(cursor && { skip: 1, cursor: { id: cursor } }),
             include: {
                 post: {
                     include: { author: { select: { id: true, username: true, displayName: true, avatar: true } } }

@@ -125,6 +125,7 @@ export interface Chat {
   id: string;
   name: string;
   isGroup?: boolean;
+  isChannel?: boolean;
   isSecret?: boolean;
   selfDestructTimer?: number;
   avatar?: string;

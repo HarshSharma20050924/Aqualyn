@@ -12,7 +12,37 @@ interface MessageBubbleProps {
   replyMessage?: Message;
   onMediaClick?: (msg: Message) => void;
   isSecret?: boolean;
+  animateTyping?: boolean; // play typewriter for newest Lyn message
 }
+
+// Typewriter effect for Lyn AI responses
+const TypewriterText = ({ text, className }: { text: string; className?: string }) => {
+  const [displayed, setDisplayed] = useState('');
+  const indexRef = useRef(0);
+
+  useEffect(() => {
+    indexRef.current = 0;
+    setDisplayed('');
+    const interval = setInterval(() => {
+      if (indexRef.current < text.length) {
+        setDisplayed(text.slice(0, indexRef.current + 1));
+        indexRef.current++;
+      } else {
+        clearInterval(interval);
+      }
+    }, 18); // ~55 chars/sec — natural reading speed
+    return () => clearInterval(interval);
+  }, [text]);
+
+  return (
+    <span className={className}>
+      {displayed}
+      {displayed.length < text.length && (
+        <span className="inline-block w-[2px] h-[1em] bg-current ml-0.5 align-middle animate-pulse" />
+      )}
+    </span>
+  );
+};
 
 const ScrambledText = ({ text, isSecret }: { text: string; isSecret?: boolean }) => {
   const [displayText, setDisplayText] = useState(text);
@@ -52,7 +82,7 @@ const ScrambledText = ({ text, isSecret }: { text: string; isSecret?: boolean })
   );
 };
 
-const MessageBubbleComponent = ({ msg, isMe, onReply, onEdit, replyMessage, onMediaClick, isSecret }: MessageBubbleProps) => {
+const MessageBubbleComponent = ({ msg, isMe, onReply, onEdit, replyMessage, onMediaClick, isSecret, animateTyping }: MessageBubbleProps) => {
   const { deleteMessage, addReaction, currentUser, addToast, chats } = useAppContext();
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -412,7 +442,9 @@ const MessageBubbleComponent = ({ msg, isMe, onReply, onEdit, replyMessage, onMe
           {/* Text Content */}
           {msg.text && (
             <p className={`text-[15px] leading-relaxed ${isMe ? 'text-white' : 'text-on-surface'}`}>
-              <ScrambledText text={msg.text} isSecret={isSecret} />
+              {animateTyping
+                ? <TypewriterText text={msg.text} className={isMe ? 'text-white' : 'text-on-surface'} />
+                : <ScrambledText text={msg.text} isSecret={isSecret} />}
             </p>
           )}
         </div>

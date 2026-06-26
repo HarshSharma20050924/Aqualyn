@@ -189,26 +189,43 @@ export default function SecuritySettings() {
       </h3>
       <div className="glass-card rounded-[2rem] overflow-hidden border border-white/40 shadow-sm">
         <div className="p-5 space-y-4">
-          <label className="text-sm font-bold text-on-surface">Who can call me into a chat (@username)?</label>
-          <div className="flex gap-2">
-            {(['everyone', 'mutual', 'no_one'] as const).map(option => (
-              <button 
-                key={option}
-                onClick={() => updateInvitationSetting(option)}
-                className={`flex-1 py-3 rounded-xl border font-bold text-xs capitalize transition-all ${
-                  invitationSetting === option
-                    ? 'bg-secondary text-white border-secondary' 
-                    : 'bg-white/40 text-on-surface-variant border-white/20 hover:bg-white/60'
-                }`}
-              >
-                {option.replace('_', ' ')}
-              </button>
-            ))}
+          <div>
+            <label className="text-sm font-bold text-on-surface block mb-2">Who can call me into a chat (@username)?</label>
+            <div className="flex gap-2 mb-2">
+              {(['everyone', 'mutual', 'no_one'] as const).map(option => (
+                <button 
+                  key={option}
+                  onClick={() => updateInvitationSetting(option)}
+                  className={`flex-1 py-3 rounded-xl border font-bold text-xs capitalize transition-all ${
+                    invitationSetting === option
+                      ? 'bg-secondary text-white border-secondary' 
+                      : 'bg-white/40 text-on-surface-variant border-white/20 hover:bg-white/60'
+                  }`}
+                >
+                  {option.replace('_', ' ')}
+                </button>
+              ))}
+            </div>
+            <p className="text-[10px] text-on-surface-variant px-1 font-medium leading-relaxed">
+              When someone mentions your @username in a 1-to-1 chat, you'll receive an invitation to join. 
+              Joining turns the chat into a temporary group without showing previous history.
+            </p>
           </div>
-          <p className="text-[10px] text-on-surface-variant px-1 font-medium leading-relaxed">
-            When someone mentions your @username in a 1-to-1 chat, you'll receive an invitation to join. 
-            Joining turns the chat into a temporary group without showing previous history.
-          </p>
+
+          <div className="pt-4 border-t border-white/20">
+            <label className="text-sm font-bold text-on-surface flex justify-between items-center mb-2">
+              AI Discoverability
+              <button 
+                onClick={() => updatePrivacy({ aiDiscoverable: !(currentUser?.settings?.privacy?.aiDiscoverable ?? false) })}
+                className={`w-12 h-6 rounded-full transition-colors relative ${((currentUser?.settings?.privacy?.aiDiscoverable ?? false)) ? 'bg-secondary' : 'bg-surface-container-high border border-outline-variant/30'}`}
+              >
+                <div className={`w-5 h-5 bg-white rounded-full shadow-sm absolute top-0.5 transition-all ${(currentUser?.settings?.privacy?.aiDiscoverable ?? false) ? 'left-[26px]' : 'left-0.5'}`} />
+              </button>
+            </label>
+            <p className="text-[10px] text-on-surface-variant px-1 font-medium leading-relaxed">
+              Allow Lyn AI to recommend channels and people aligned with your interests on the Explore screen.
+            </p>
+          </div>
         </div>
       </div>
 

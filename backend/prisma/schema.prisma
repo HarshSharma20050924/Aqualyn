@@ -63,9 +63,68 @@ model User {
   callerCalls      CallLog[]      @relation("callerCalls")
   calleeCalls      CallLog[]      @relation("calleeCalls")
 
+  aiConversations  AIConversation[]
+  aiMemories       AIMemory[]
+  aiTasks          AITask[]
+  aiActions        AIAction[]
+
   @@index([firebaseUid])
   @@index([username])
 }
+
+// ... existing models ...
+
+model AIConversation {
+  id        String   @id @default(uuid())
+  userId    String
+  agentName String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model AIMemory {
+  id         String   @id @default(uuid())
+  userId     String
+  memoryType String
+  content    String
+  embedding  Float[]
+  createdAt  DateTime @default(now())
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model AITask {
+  id          String    @id @default(uuid())
+  userId      String
+  task        String
+  status      String    @default("pending")
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model AIAction {
+  id         String   @id @default(uuid())
+  userId     String
+  actionType String
+  payload    Json
+  status     String   @default("pending")
+  createdAt  DateTime @default(now())
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
 
 model UserFollows {
   followerId    String
@@ -403,3 +462,66 @@ model MessageReaction {
   @@unique([messageId, userId, emoji])
   @@index([messageId])
 }
+
+// ─────────────────────────────────────────────────────────────────
+// Channels — public/private broadcast rooms with active membership
+// ─────────────────────────────────────────────────────────────────
+enum ChannelType {
+  PUBLIC
+  PRIVATE
+  INVITE_ONLY
+}
+
+model Channel {
+  id              String      @id @default(uuid())
+  name            String
+  handle          String      @unique // @channelname
+  description     String?
+  avatar          String?
+  banner          String?
+  category        String?     // Tech, Creative, Lifestyle, etc.
+  type            ChannelType @default(PUBLIC)
+  ownerId         String
+  isVerified      Boolean     @default(false)
+  isDiscoverable  Boolean     @default(true) // AI discovery opt-in
+  memberCount     Int         @default(0)
+  settings        Json        @default("{}") // slowMode, postPermission, etc.
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  members         ChannelMember[]
+  posts           ChannelPost[]
+
+  @@index([category])
+  @@index([type, isDiscoverable])
+  @@index([ownerId])
+}
+
+model ChannelMember {
+  id        String    @id @default(uuid())
+  channelId String
+  userId    String
+  role      GroupRole @default(MEMBER) // reuse MEMBER/ADMIN/OWNER
+  joinedAt  DateTime  @default(now())
+
+  channel   Channel   @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@unique([channelId, userId])
+  @@index([channelId])
+}
+
+model ChannelPost {
+  id          String   @id @default(uuid())
+  channelId   String
+  authorId    String
+  content     String?
+  mediaUrl    String?
+  mediaType   String?  // image, video
+  isPinned    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  channel     Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@index([channelId, createdAt(sort: Desc)])
+}
+

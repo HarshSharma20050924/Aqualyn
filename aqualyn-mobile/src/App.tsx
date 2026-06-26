@@ -66,7 +66,7 @@ export default function App() {
       <View style={[styles.centerContainer, { backgroundColor: activeColors.background }]}>
         <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
         <View style={styles.spinnerWrapper}>
-          <BubbleLoader size={120} />
+          <BubbleLoader size={120} showWakeText={true} />
         </View>
         <Text style={[
           styles.brandHeadline, 

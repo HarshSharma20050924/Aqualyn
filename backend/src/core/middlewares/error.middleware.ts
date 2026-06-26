@@ -1,13 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
 import { AppError } from '../exceptions/AppError';
 import { ZodError } from 'zod';
+import { logger } from '../utils/logger';
 
 export const errorHandler = (err: any, req: Request, res: Response, next: NextFunction) => {
     let error = { ...err };
     error.message = err.message;
-
-    // Log error for dev
-    console.error(err);
 
     // Zod Validation Error
     if (err instanceof ZodError) {
@@ -27,7 +25,22 @@ export const errorHandler = (err: any, req: Request, res: Response, next: NextFu
     }
 
     const statusCode = error.statusCode || 500;
-    const message = error.message || 'Server Error';
+    const message = error.message || 'Internal Server Error';
+
+    // Log the error using Pino
+    if (statusCode === 500) {
+        logger.error({ 
+            err: err, 
+            req: {
+                method: req.method,
+                url: req.originalUrl,
+                ip: req.ip,
+                body: req.body // CAUTION: filter sensitive data in prod!
+            }
+        }, 'Unhandled Exception Caught by Global Error Handler');
+    } else {
+        logger.warn({ message: err.message, statusCode, path: req.originalUrl }, 'App Warning/Error');
+    }
 
     res.status(statusCode).json({
         success: false,

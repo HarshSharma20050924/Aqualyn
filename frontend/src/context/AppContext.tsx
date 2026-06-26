@@ -75,17 +75,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       const mapPost = (p: any): Post => ({
         ...p,
-        userName: p.author?.displayName || p.author?.username || 'User',
-        userAvatar: p.author?.avatar,
-        caption: p.content || '',
+        userId: p.authorId || p.userId,
+        userName: p.author?.displayName || p.author?.username || p.userName || 'User',
+        userAvatar: p.author?.avatar || p.userAvatar,
+        caption: p.content || p.caption || '',
         likes: p.likes?.map((l: any) => l.userId).filter(Boolean) || [],
         comments: p.comments?.map((c: any) => ({
           id: c.id, userId: c.userId,
-          userName: c.user?.displayName || c.user?.username || 'User',
-          userAvatar: c.user?.avatar, text: c.content || '',
+          userName: c.user?.displayName || c.user?.username || c.userName || 'User',
+          userAvatar: c.user?.avatar || c.userAvatar, text: c.content || c.text || '',
           timestamp: c.createdAt ? new Date(c.createdAt).toLocaleString() : 'Just now'
         })) || [],
-        timestamp: p.createdAt ? new Date(p.createdAt).toLocaleString() : 'Just now'
+        timestamp: p.createdAt ? new Date(p.createdAt).toLocaleString() : 'Just now',
+        mediaUrl: p.mediaUrl || p.imageUrl || p.videoUrl,
+        imageUrl: p.mediaUrl || p.imageUrl,
+        videoUrl: p.videoUrl,
       });
 
       if (notifRes.ok) {
@@ -147,7 +151,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         } else if (isMounted && res.status === 401) {
           // Stale JWT — call logout so the server clears the httpOnly cookie
           console.log("[Auth] Session invalid (401) — clearing stale cookie...");
-          await apiFetch(`${API_BASE_URL}/api/auth/logout`, { method: 'POST' }).catch(() => {});
+          await apiFetch(`${API_BASE_URL}/api/auth/logout`, { method: 'POST' }).catch(() => { });
           setCurrentUser(null);
         }
       } catch (e) {
@@ -369,7 +373,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     <AppContext.Provider value={{
       currentUser, setCurrentUser, socket, chats, setChats, messages, setMessages, contacts, ...actions,
       activeChatId, setActiveChatId, originChatId, setOriginChatId, activeContactId, setActiveContactId,
-      toasts, addToast, removeToast, isLoading, setIsLoading, isFetchingData,
+      toasts, addToast, removeToast, isLoading, setIsLoading, isFetchingData, fetchInitialData,
       folders, setFolders, theme, setTheme, aquaIntensity, setAquaIntensity,
       appLockPin, setAppLockPin, archiveLockPin, setArchiveLockPin, isAppLocked, setIsAppLocked,
       stories, setStories, typingUsers, logout: actions.logout,

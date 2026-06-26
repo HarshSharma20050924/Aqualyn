@@ -8,7 +8,7 @@ import { apiFetch } from '../utils/fetcher';
 import { uploadFile } from '../utils/uploads';
 
 export default function EditProfileScreen({ onBack }: { onBack: () => void }) {
-  const { currentUser, setCurrentUser, addToast } = useAppContext();
+  const { currentUser, setCurrentUser, addToast, updatePrivacy } = useAppContext();
   
   const [name, setName] = useState(currentUser?.displayName || currentUser?.name || '');
   const [username, setUsername] = useState(currentUser?.username || '');
@@ -17,6 +17,7 @@ export default function EditProfileScreen({ onBack }: { onBack: () => void }) {
   const [phone, setPhone] = useState(currentUser?.phone || '');
   const [showPhoneTo, setShowPhoneTo] = useState(currentUser?.showPhoneTo || 'everyone');
   const [searchByPhone, setSearchByPhone] = useState(currentUser?.searchByPhone ?? true);
+  const [aiDiscoverable, setAiDiscoverable] = useState(currentUser?.settings?.privacy?.aiDiscoverable ?? false);
   const [avatar, setAvatar] = useState(currentUser?.largeAvatar || currentUser?.avatar || '');
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
@@ -63,6 +64,11 @@ export default function EditProfileScreen({ onBack }: { onBack: () => void }) {
       }
       const data = await res.json();
       setCurrentUser(data.user);
+      
+      if (currentUser?.settings?.privacy?.aiDiscoverable !== aiDiscoverable) {
+        await updatePrivacy({ aiDiscoverable });
+      }
+      
       addToast('Profile updated successfully', 'success');
       onBack();
     } catch (e) {
@@ -255,6 +261,23 @@ export default function EditProfileScreen({ onBack }: { onBack: () => void }) {
                   <motion.div 
                     initial={false}
                     animate={{ x: searchByPhone ? 24 : 2 }}
+                    className="absolute top-1 left-0 w-4 h-4 bg-white rounded-full shadow"
+                  />
+                </button>
+              </div>
+              
+              <div className="flex items-center justify-between p-4 bg-white/40 rounded-2xl border border-white/40">
+                <div>
+                  <h3 className="font-bold text-on-surface text-sm">AI Discoverability</h3>
+                  <p className="text-xs text-on-surface-variant max-w-[200px]">Allow Lyn AI to recommend channels and people aligned with your interests.</p>
+                </div>
+                <button 
+                  onClick={() => setAiDiscoverable(!aiDiscoverable)}
+                  className={`relative w-12 h-6 rounded-full transition-colors ${aiDiscoverable ? 'bg-secondary' : 'bg-surface-container'}`}
+                >
+                  <motion.div 
+                    initial={false}
+                    animate={{ x: aiDiscoverable ? 24 : 2 }}
                     className="absolute top-1 left-0 w-4 h-4 bg-white rounded-full shadow"
                   />
                 </button>

@@ -1,6 +1,8 @@
 import prisma from '../../config/prisma';
 import { SocketService } from '../../services/SocketService';
 import { AppError } from '../../core/exceptions/AppError';
+import { AIService } from '../ai/ai.service';
+
 
 export class ChatService {
     static async formatChat(chat: any, userId: string) {
@@ -166,28 +168,73 @@ export class ChatService {
             return !deletedFor.includes(userId);
         });
 
-        return activeChats.map((c: any) => {
-            const myParticipant = c.participants.find((p: any) => p.userId === userId);
-            const otherParticipant = c.participants.find((p: any) => p.userId !== userId);
-            return {
-                id: c.id,
-                name: c.name || otherParticipant?.user.displayName || otherParticipant?.user.username || 'User',
-                avatar: c.isGroup ? c.avatar : otherParticipant?.user.avatar,
-                lastMessage: c.messages[0]?.text || '',
-                lastMessageTime: c.messages[0]?.createdAt 
-                    ? new Date(c.messages[0].createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                    : 'Recent',
-                isGroup: c.isGroup,
-                isSecret: c.isSecret,
-                unreadCount: countsMap.get(c.id) || 0,
-                selfDestructTimer: c.selfDestructTimer,
-                participantIds: c.participants.map((p: any) => p.userId),
-                isMuted: mutedSet.has(c.id),
-                myStatus: myParticipant?.status || 'JOINED',
-                myRole: myParticipant?.role || 'MEMBER',
-                isArchived: myParticipant?.isArchived || false,
-                isPinned: myParticipant?.isPinned || false
-            };
+        // Fetch user's joined channels
+        const channels = await (prisma as any).channel.findMany({
+            where: { members: { some: { userId } } },
+            select: {
+                id: true, name: true, handle: true, avatar: true,
+                updatedAt: true,
+                posts: {
+                    orderBy: { createdAt: 'desc' },
+                    take: 1,
+                    select: { content: true, createdAt: true }
+                },
+                members: {
+                    where: { userId },
+                    select: { role: true }
+                }
+            }
+        });
+
+        const formattedChannels = channels.map((c: any) => ({
+            id: c.id,
+            name: c.name || c.handle,
+            avatar: c.avatar,
+            lastMessage: c.posts?.[0]?.content || 'Created channel',
+            lastMessageTime: c.posts?.[0]?.createdAt 
+                ? new Date(c.posts[0].createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                : 'Recent',
+            isGroup: true,
+            isChannel: true,
+            isSecret: false,
+            unreadCount: 0,
+            selfDestructTimer: 0,
+            participantIds: [],
+            isMuted: false,
+            myStatus: 'JOINED',
+            myRole: c.members?.[0]?.role || 'MEMBER',
+            isArchived: false,
+            isPinned: false
+        }));
+
+        return [
+            ...activeChats.map((c: any) => {
+                const myParticipant = c.participants.find((p: any) => p.userId === userId);
+                const otherParticipant = c.participants.find((p: any) => p.userId !== userId);
+                return {
+                    id: c.id,
+                    name: c.name || otherParticipant?.user.displayName || otherParticipant?.user.username || 'User',
+                    avatar: c.isGroup ? c.avatar : otherParticipant?.user.avatar,
+                    lastMessage: c.messages[0]?.text || '',
+                    lastMessageTime: c.messages[0]?.createdAt 
+                        ? new Date(c.messages[0].createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                        : 'Recent',
+                    isGroup: c.isGroup,
+                    isSecret: c.isSecret,
+                    unreadCount: countsMap.get(c.id) || 0,
+                    selfDestructTimer: c.selfDestructTimer,
+                    participantIds: c.participants.map((p: any) => p.userId),
+                    isMuted: mutedSet.has(c.id),
+                    myStatus: myParticipant?.status || 'JOINED',
+                    myRole: myParticipant?.role || 'MEMBER',
+                    isArchived: myParticipant?.isArchived || false,
+                    isPinned: myParticipant?.isPinned || false
+                };
+            }),
+            ...formattedChannels
+        ].sort((a: any, b: any) => {
+            // Very simple sort by logic — could be improved with actual timestamp sort
+            return 0;
         });
     }
 
@@ -230,7 +277,7 @@ export class ChatService {
                 replyToId: replyToId
             }
         });
-        
+
         return {
             ...message,
             timestamp: new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })

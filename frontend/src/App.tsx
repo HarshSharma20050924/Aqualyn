@@ -10,6 +10,7 @@ import EditProfileScreen from './screens/EditProfileScreen';
 import ContactProfileScreen from './screens/ContactProfileScreen';
 import NotificationsScreen from './screens/NotificationsScreen';
 import FeedScreen from './screens/FeedScreen';
+import ExploreScreen from './screens/ExploreScreen';
 import BottomNav from './components/BottomNav';
 import ToastContainer from './components/ui/ToastContainer';
 import AppLockScreen from './components/AppLockScreen';
@@ -115,6 +116,7 @@ export default function App() {
           <AnimatePresence mode="wait">
             {currentScreen === 'login' && <LoginScreen key="login" onLogin={() => navigateTo('chats')} />}
             {currentScreen === 'feed' && <FeedScreen key="feed" onNavigate={navigateTo} />}
+            {currentScreen === 'explore' && <ExploreScreen key="explore" onBack={() => navigateTo(previousScreen || 'chats')} onNavigate={navigateTo} />}
             {currentScreen === 'chats' && <ChatListScreen key="chats" onNavigate={navigateTo} />}
             {currentScreen === 'chat-detail' && <ChatDetailScreen key="chat-detail" onBack={() => navigateTo('chats')} onNavigate={navigateTo} />}
             {currentScreen === 'profile' && <ProfileScreen key="profile" onNavigate={navigateTo} />}
