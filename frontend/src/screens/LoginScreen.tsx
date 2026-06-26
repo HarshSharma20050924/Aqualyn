@@ -345,22 +345,22 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
           {step === 'intro' && (
             <motion.div key="intro" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
               className="flex flex-col items-center text-center w-full max-w-md mx-auto px-4">
-              <div className="mb-10 relative group">
-                <img src="/aqualyn.png" alt="Aqualyn" className="w-32 h-32 sm:w-40 sm:h-40 object-contain drop-shadow-2xl group-hover:scale-105 transition-transform duration-500 rounded-3xl" />
+              <div className="mb-6 sm:mb-10 relative group">
+                <img src="/aqualyn.png" alt="Aqualyn" className="w-24 h-24 sm:w-40 sm:h-40 object-contain drop-shadow-2xl group-hover:scale-105 transition-transform duration-500 rounded-3xl mx-auto" />
               </div>
-              <h1 className="font-headline text-5xl sm:text-6xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-br from-primary to-secondary mb-4 drop-shadow-sm">Aqualyn</h1>
-              <h2 className="font-headline text-2xl sm:text-3xl font-bold text-on-surface mb-4">India's Best Messaging App</h2>
-              <p className="font-body text-on-surface-variant text-lg font-medium tracking-wide mb-10 max-w-sm mx-auto leading-relaxed">
+              <h1 className="font-headline text-4xl sm:text-6xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-br from-primary to-secondary mb-2 sm:mb-4 drop-shadow-sm">Aqualyn</h1>
+              <h2 className="font-headline text-xl sm:text-3xl font-bold text-on-surface mb-3 sm:mb-4">India's Best Messaging App</h2>
+              <p className="font-body text-on-surface-variant text-base sm:text-lg font-medium tracking-wide mb-8 sm:mb-10 max-w-sm mx-auto leading-relaxed">
                 Experience crystal clear, fluid communication designed for the modern world.
               </p>
-              <div className="flex flex-col gap-4 w-full">
+              <div className="flex flex-col gap-3 sm:gap-4 w-full">
                 <button onClick={() => setStep('email')}
-                  className="w-full h-16 bg-gradient-to-br from-secondary to-primary text-white font-headline font-bold rounded-full shadow-xl shadow-primary/20 hover:scale-[1.02] hover:shadow-primary/30 active:scale-[0.98] transition-all flex items-center justify-center gap-3 text-xl">
-                  <Mail className="w-6 h-6" /> Login with Email
+                  className="w-full h-14 sm:h-16 bg-gradient-to-br from-secondary to-primary text-white font-headline font-bold rounded-full shadow-xl shadow-primary/20 hover:scale-[1.02] hover:shadow-primary/30 active:scale-[0.98] transition-all flex items-center justify-center gap-3 text-lg sm:text-xl">
+                  <Mail className="w-5 h-5 sm:w-6 sm:h-6" /> Login with Email
                 </button>
                 <button onClick={() => setStep('qr')}
-                  className="w-full h-14 glass-card border border-white/30 text-on-surface font-headline font-semibold rounded-full hover:bg-white/40 active:scale-[0.98] transition-all flex items-center justify-center gap-3 text-base">
-                  <QrCode className="w-5 h-5 text-secondary" /> Scan QR Code from Mobile
+                  className="w-full h-12 sm:h-14 glass-card border border-white/30 text-on-surface font-headline font-semibold rounded-full hover:bg-white/40 active:scale-[0.98] transition-all flex items-center justify-center gap-3 text-sm sm:text-base">
+                  <QrCode className="w-4 h-4 sm:w-5 sm:h-5 text-secondary" /> Scan QR Code from Mobile
                 </button>
               </div>
             </motion.div>
@@ -592,9 +592,9 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
         <footer className="mt-auto pt-8 pb-6 text-center w-full relative block z-10 clear-both">
           <div className="flex items-center justify-center gap-6">
             {[
-              { Icon: Globe, url: 'https://amoghchakra.com', label: 'Website' },
-              { Icon: Shield, url: 'https://amoghchakra.com/privacy', label: 'Privacy' },
-              { Icon: Headset, url: 'https://amoghchakra.com/help', label: 'Help & Support' }
+              { Icon: Globe, url: 'https://aqualyn-web-page.vercel.app/', label: 'Website' },
+              { Icon: Shield, url: 'https://aqualyn-web-page.vercel.app/privacy', label: 'Privacy' },
+              { Icon: Headset, url: 'https://aqualyn-web-page.vercel.app/help', label: 'Help & Support' }
             ].map(({ Icon, url, label }, i) => (
               <a 
                 key={i} 

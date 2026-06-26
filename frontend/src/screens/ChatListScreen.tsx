@@ -353,8 +353,10 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
                         onMouseDown={(e) => handleTouchStart(e, chat.id)}
                         onMouseUp={handleTouchEnd}
                         onMouseLeave={handleTouchEnd}
+                        onMouseMove={handleTouchEnd}
                         onTouchStart={(e) => handleTouchStart(e, chat.id)}
                         onTouchEnd={handleTouchEnd}
+                        onTouchMove={handleTouchEnd}
                         className={`glass-card p-4 rounded-2xl flex items-center gap-4 border border-secondary-fixed/20 aqua-glow cursor-pointer hover:bg-white/60 transition-all ${selectedChats.has(chat.id) ? 'bg-secondary/20 border-secondary' : ''}`}
                       >
                         <div className="relative">
@@ -447,8 +449,10 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
                         onMouseDown={(e) => handleTouchStart(e, chat.id)}
                         onMouseUp={handleTouchEnd}
                         onMouseLeave={handleTouchEnd}
+                        onMouseMove={handleTouchEnd}
                         onTouchStart={(e) => handleTouchStart(e, chat.id)}
                         onTouchEnd={handleTouchEnd}
+                        onTouchMove={handleTouchEnd}
                         className={`p-4 rounded-2xl flex items-center gap-4 cursor-pointer hover:bg-white/40 transition-all ${selectedChats.has(chat.id) ? 'bg-secondary/20 border-secondary' : ''}`}
                       >
                         {chat.isSystem ? (
@@ -645,14 +649,14 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
                 left: Math.min(contextMenuPos.x, window.innerWidth - 220),
                 top: Math.min(contextMenuPos.y, window.innerHeight - 350)
               }}
-              className="fixed z-[101] w-52 glass-card rounded-2xl p-2 shadow-2xl border border-white/20 flex flex-col gap-1"
+              className="fixed z-[101] w-52 bg-surface-container-high backdrop-blur-xl rounded-2xl p-2 shadow-2xl border border-outline-variant/20 flex flex-col gap-1"
             >
               <button
                 onClick={() => handleContextAction(() => {
                   setIsSelectionMode(true);
                   if (contextMenuChatId) toggleSelection(contextMenuChatId);
                 })}
-                className="flex items-center gap-3 px-3 py-2 hover:bg-white/10 rounded-xl text-sm font-medium text-blue-500 transition-colors"
+                className="flex items-center gap-3 px-3 py-2 hover:bg-on-surface/5 rounded-xl text-sm font-medium text-blue-500 transition-colors"
               >
                 <CheckSquare className="w-4 h-4" /> Select
               </button>
@@ -669,17 +673,17 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
                     }
                   }
                 }
-              })} className="flex items-center gap-3 px-3 py-2 hover:bg-white/10 rounded-xl text-sm font-medium text-on-surface transition-colors">
+              })} className="flex items-center gap-3 px-3 py-2 hover:bg-on-surface/5 rounded-xl text-sm font-medium text-on-surface transition-colors">
                 <Archive className="w-4 h-4" /> {chats.find(c => c.id === contextMenuChatId)?.isArchived ? 'Unarchive' : 'Archive'}
               </button>
-              <button onClick={() => handleContextAction(() => pinChat(contextMenuChatId))} className="flex items-center gap-3 px-3 py-2 hover:bg-white/10 rounded-xl text-sm font-medium text-on-surface transition-colors">
+              <button onClick={() => handleContextAction(() => pinChat(contextMenuChatId))} className="flex items-center gap-3 px-3 py-2 hover:bg-on-surface/5 rounded-xl text-sm font-medium text-on-surface transition-colors">
                 <Pin className="w-4 h-4" /> {chats.find(c => c.id === contextMenuChatId)?.isPinned ? 'Unpin' : 'Pin'}
               </button>
-              <button onClick={() => handleContextAction(() => muteChat(contextMenuChatId))} className="flex items-center gap-3 px-3 py-2 hover:bg-white/10 rounded-xl text-sm font-medium text-on-surface transition-colors">
+              <button onClick={() => handleContextAction(() => muteChat(contextMenuChatId))} className="flex items-center gap-3 px-3 py-2 hover:bg-on-surface/5 rounded-xl text-sm font-medium text-on-surface transition-colors">
                 {chats.find(c => c.id === contextMenuChatId)?.isMuted ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
                 {chats.find(c => c.id === contextMenuChatId)?.isMuted ? 'Unmute' : 'Mute'}
               </button>
-              <button onClick={() => handleContextAction(() => markAsRead(contextMenuChatId))} className="flex items-center gap-3 px-3 py-2 hover:bg-white/10 rounded-xl text-sm font-medium text-on-surface transition-colors">
+              <button onClick={() => handleContextAction(() => markAsRead(contextMenuChatId))} className="flex items-center gap-3 px-3 py-2 hover:bg-on-surface/5 rounded-xl text-sm font-medium text-on-surface transition-colors">
                 {chats.find(c => c.id === contextMenuChatId)?.unreadCount ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                 {chats.find(c => c.id === contextMenuChatId)?.unreadCount ? 'Mark as read' : 'Mark as unread'}
               </button>
@@ -688,7 +692,7 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
               <div className="relative">
                 <button
                   onClick={(e) => { e.stopPropagation(); setShowFolderSubmenu(!showFolderSubmenu); }}
-                  className="w-full flex items-center justify-between gap-3 px-3 py-2 hover:bg-white/10 rounded-xl text-sm font-medium text-on-surface transition-colors"
+                  className="w-full flex items-center justify-between gap-3 px-3 py-2 hover:bg-on-surface/5 rounded-xl text-sm font-medium text-on-surface transition-colors"
                 >
                   <div className="flex items-center gap-3">
                     <FolderPlus className="w-4 h-4" /> Add to folder
@@ -700,7 +704,7 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
                   <motion.div
                     initial={{ opacity: 0, x: 10 }}
                     animate={{ opacity: 1, x: 0 }}
-                    className="absolute left-full top-0 ml-2 w-40 glass-card rounded-xl p-1 shadow-xl border border-white/20 flex flex-col gap-1"
+                    className="absolute left-full top-0 ml-2 w-40 bg-surface-container-high backdrop-blur-xl rounded-xl p-1 shadow-xl border border-outline-variant/20 flex flex-col gap-1"
                   >
                     {folders.map(f => (
                       <button
@@ -710,7 +714,7 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
                             addChatToFolder(contextMenuChatId, f.id);
                           }
                         })}
-                        className="px-3 py-2 hover:bg-white/10 rounded-lg text-xs font-medium text-on-surface text-left"
+                        className="px-3 py-2 hover:bg-on-surface/5 rounded-lg text-xs font-medium text-on-surface text-left"
                       >
                         {f.name}
                       </button>
@@ -719,14 +723,14 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
                 )}
               </div>
 
-              <button onClick={() => handleContextAction(() => clearHistory(contextMenuChatId))} className="flex items-center gap-3 px-3 py-2 hover:bg-white/10 rounded-xl text-sm font-medium text-on-surface transition-colors">
+              <button onClick={() => handleContextAction(() => clearHistory(contextMenuChatId))} className="flex items-center gap-3 px-3 py-2 hover:bg-on-surface/5 rounded-xl text-sm font-medium text-on-surface transition-colors">
                 <Eraser className="w-4 h-4" /> Clear history
               </button>
               <button onClick={() => {
                 setChatToDelete(contextMenuChatId);
                 setShowFolderSubmenu(false);
                 setContextMenuChatId(null);
-              }} className="flex items-center gap-3 px-3 py-2 hover:bg-white/10 rounded-xl text-sm font-medium text-red-500 transition-colors">
+              }} className="flex items-center gap-3 px-3 py-2 hover:bg-on-surface/5 rounded-xl text-sm font-medium text-red-500 transition-colors">
                 <Trash2 className="w-4 h-4" /> Delete chat
               </button>
             </motion.div>

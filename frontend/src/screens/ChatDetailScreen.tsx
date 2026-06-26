@@ -139,6 +139,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [isFetchingMore, setIsFetchingMore] = useState(false);
+  const [hideSmartReplies, setHideSmartReplies] = useState(false);
 
   const triggerScreenshotAlert = () => {
     const settings = (chat as any)?.settings || {};
@@ -183,12 +184,16 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
 
   useEffect(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTo({
-        top: scrollRef.current.scrollHeight,
-        behavior: 'smooth'
-      });
+      setTimeout(() => {
+        if (scrollRef.current) {
+          scrollRef.current.scrollTo({
+            top: scrollRef.current.scrollHeight,
+            behavior: 'smooth'
+          });
+        }
+      }, 50);
     }
-  }, [chatMessages]);
+  }, [chatMessages.length]);
 
   useEffect(() => {
     if (activeChatId) {
@@ -283,8 +288,10 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
     setReplyingTo(null);
     if (activeChatId) setTyping(activeChatId, false);
 
-    // Force scroll to bottom immediately
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    // Force scroll to bottom immediately and slightly after render
+    setTimeout(() => {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 50);
   };
 
   const handleEdit = (msg: Message) => {
@@ -517,7 +524,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
               )}
               <div className={`absolute bottom-0 right-0 w-3 h-3 border-2 rounded-full ${chat.isSecret ? 'bg-blue-500 border-[#0a0f14] shadow-[0_0_8px_#3b82f6]' : 'bg-secondary-fixed border-white shadow-[0_0_8px_#0bfbff]'}`}></div>
             </div>
-            <div className="flex flex-col cursor-pointer" onClick={() => {
+            <div className="flex flex-col cursor-pointer min-w-0" onClick={() => {
               if (chat.isGroup) setIsGroupInfoOpen(true);
               else if (chat.isSecret) setIsSecretInfoOpen(true);
               else {
@@ -526,13 +533,13 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
                 onNavigate('contact-profile');
               }
             }}>
-              <span className={`font-headline tracking-tight font-bold text-lg leading-tight flex items-center gap-1 ${chat.isSecret ? 'text-slate-200' : 'text-on-surface'}`}>
-                {chat.isSecret && <Lock className="w-4 h-4 text-blue-400" />}
-                {chat.name}
+              <span className={`font-headline tracking-tight font-bold text-lg leading-tight flex items-center gap-1 truncate ${chat.isSecret ? 'text-slate-200' : 'text-on-surface'}`}>
+                {chat.isSecret && <Lock className="w-4 h-4 text-blue-400 shrink-0" />}
+                <span className="truncate">{chat.name}</span>
               </span>
-              <span className={`text-[11px] font-bold tracking-wider uppercase ${chat.isSecret ? 'text-blue-400' : 'text-secondary-fixed-variant'
+              <span className={`text-[11px] font-bold tracking-wider uppercase truncate ${chat.isSecret ? 'text-blue-400' : 'text-secondary-fixed-variant'
                 }`}>
-                {chat.isSecret ? '🔒 Incognito Session' : 'online now'}
+                {chat.isSecret ? '🔒 Incognito Session' : (typingInThisChat.length > 0 ? (typingInThisChat.length === 1 ? 'Typing...' : `${typingInThisChat.length} typing...`) : '')}
               </span>
             </div>
           </div>
@@ -992,10 +999,13 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
                   </AnimatePresence>
 
                   {/* Smart reply bar — reference style */}
-                  {smartReplies.length > 0 && chatMessages.length > 0 && !text && (
+                  {smartReplies.length > 0 && chatMessages.length > 0 && !text && !hideSmartReplies && (
                     <div className="flex items-center gap-2 overflow-x-auto pb-1 custom-scrollbar">
                       <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-secondary bg-secondary/10 px-2 py-1.5 rounded-lg border border-secondary/20 shrink-0">
                         <Droplet className="w-3.5 h-3.5 fill-secondary" /> Lyn
+                        <button onClick={() => setHideSmartReplies(true)} className="ml-1 hover:text-red-500 transition-colors">
+                          <X className="w-3 h-3" />
+                        </button>
                       </div>
                       {smartReplies.map((reply, i) => (
                         <button
@@ -1021,10 +1031,12 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
                     </button>
 
                     <div className="flex-1 relative flex items-center">
-                      <input
-                        type="text"
+                      <textarea
                         value={text}
+                        rows={1}
                         onChange={e => {
+                          e.target.style.height = '48px';
+                          e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
                           const val = e.target.value;
                           setText(val);
                           if (val.toLowerCase().includes('@lyn')) {
@@ -1033,10 +1045,17 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
                             setIsAiMentionMenuOpen(false);
                           }
                         }}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            handleSend(e);
+                            e.currentTarget.style.height = '48px';
+                          }
+                        }}
                         placeholder={`Message ${chat.name}...`}
-                        className={`w-full h-12 pl-4 pr-20 rounded-full border outline-none transition-all ${chat.isSecret
-                          ? 'bg-black border-slate-700/30 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/50 text-slate-200 placeholder:text-slate-600 font-sans'
-                          : 'bg-white/70 backdrop-blur-2xl border-white/40 focus:ring-2 focus:ring-secondary/20 focus:border-secondary text-on-surface placeholder:text-on-surface-variant/50'
+                        className={`w-full min-h-[48px] py-3 pl-4 pr-10 rounded-2xl border outline-none transition-all resize-none ${chat.isSecret
+                          ? 'bg-black border-slate-700/30 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/50 text-slate-200 placeholder:text-slate-600 font-sans custom-scrollbar'
+                          : 'bg-white/70 backdrop-blur-2xl border-white/40 focus:ring-2 focus:ring-secondary/20 focus:border-secondary text-on-surface placeholder:text-on-surface-variant/50 custom-scrollbar'
                           }`}
                       />
                       <div className="absolute right-2 flex items-center">
