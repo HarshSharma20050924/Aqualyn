@@ -12,10 +12,10 @@ everything-claude-code/.agent
 .kilo
 /Aqualyn/.agents
 Aqualyn/graphify
-graphify
-graphify-out
+graphify/
+graphify-out/
 /graphify-out
 
 1.txt
 
-knowledge
+knowledge/
