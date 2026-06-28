@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import BubbleLoader from '../components/ui/BubbleLoader';
-import { ArrowLeft, Video, Phone, MoreVertical, Plus, Smile, Mic, CheckCheck, Users, X, Clock, Lock, Search, Download, Trash2, Edit2, Share2, UserPlus, User, Sparkles, Droplet } from 'lucide-react';
+import { ArrowLeft, ChevronDown, Video, Phone, MoreVertical, Plus, Smile, Mic, CheckCheck, Users, X, Clock, Lock, Search, Download, Trash2, Edit2, Share2, UserPlus, User, Sparkles, Droplet } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { useCall } from '../context/CallContext';
 import { auth } from '../config/firebase';
@@ -22,6 +22,8 @@ import { apiFetch } from '../utils/fetcher';
 import { uploadFile } from '../utils/uploads';
 import { dataURLtoFile } from '../utils/media';
 
+const cachedScrollPositions: Record<string, number> = {};
+
 export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () => void, onNavigate: (s: string) => void }) {
   const { messages, setMessages, sendMessage, editMessage, deleteMessage, currentUser, chats, activeChatId, addToast, setActiveChatId, setOriginChatId, setActiveContactId, contacts, globalUsers, followUser, typingUsers, setTyping, markAsRead, handleSecretChatInvitation } = useAppContext();
   const { startCall } = useCall();
@@ -40,6 +42,17 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isShareContactOpen, setIsShareContactOpen] = useState(false);
+  const [showScrollBottom, setShowScrollBottom] = useState(false);
+  const needsScrollRestoreRef = useRef(true);
+
+  // Track initial message IDs to prevent animating old Lyn messages on chat open
+  const lastActiveChatIdRef = useRef<string | null>(null);
+  const oldMessageIdsRef = useRef<Set<string>>(new Set());
+
+  if (activeChatId !== lastActiveChatIdRef.current) {
+    lastActiveChatIdRef.current = activeChatId;
+    oldMessageIdsRef.current = new Set((messages[activeChatId || ''] || []).map(m => m.id));
+  }
 
   // New states for modals
   const [galleryMedia, setGalleryMedia] = useState<{ id: string, url: string, type: 'image' | 'video' }[]>([]);
@@ -191,17 +204,44 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
   if (!chat) return null;
 
   useEffect(() => {
-    if (scrollRef.current) {
-      setTimeout(() => {
-        if (scrollRef.current) {
-          scrollRef.current.scrollTo({
-            top: scrollRef.current.scrollHeight,
-            behavior: 'smooth'
-          });
-        }
-      }, 50);
+    needsScrollRestoreRef.current = true;
+  }, [activeChatId]);
+
+  useEffect(() => {
+    if (!scrollRef.current) return;
+
+    if (needsScrollRestoreRef.current && chatMessages.length > 0) {
+      needsScrollRestoreRef.current = false;
+      const savedPos = activeChatId ? cachedScrollPositions[activeChatId] : undefined;
+
+      // Use double rAF to ensure DOM has fully painted before measuring
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (!scrollRef.current) return;
+          if (savedPos !== undefined && savedPos > 0) {
+            scrollRef.current.scrollTop = savedPos;
+          } else {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+          }
+          // Update scroll-to-bottom button visibility after restore
+          const dist = scrollRef.current.scrollHeight - scrollRef.current.scrollTop - scrollRef.current.clientHeight;
+          setShowScrollBottom(dist > 150);
+        });
+      });
+      return;
     }
-  }, [chatMessages.length]);
+
+    // Normal message arrival auto-scroll — only if user is near the bottom
+    const target = scrollRef.current;
+    const isNearBottom = target.scrollHeight - target.scrollTop - target.clientHeight < 250;
+    if (isNearBottom) {
+      requestAnimationFrame(() => {
+        if (scrollRef.current) {
+          scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+      });
+    }
+  }, [chatMessages.length, activeChatId]);
 
   useEffect(() => {
     if (activeChatId) {
@@ -234,6 +274,12 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
 
   const handleScroll = async (e: React.UIEvent<HTMLDivElement>) => {
     const target = e.currentTarget;
+    if (activeChatId) {
+      cachedScrollPositions[activeChatId] = target.scrollTop;
+    }
+    const distToBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
+    setShowScrollBottom(distToBottom > 150);
+
     if (target.scrollTop < 100 && hasMore && !isFetchingMore && !isLoadingMessages) {
       setIsFetchingMore(true);
       try {
@@ -480,7 +526,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: 20 }}
-      className={`min-h-screen flex flex-col transition-all duration-500 relative overflow-hidden ${chat.isSecret
+      className={`h-screen flex flex-col transition-all duration-500 relative overflow-hidden ${chat.isSecret
         ? 'bg-[#0a0f14] text-slate-300 font-sans selection:bg-blue-500/30 selection:text-white'
         : 'bg-aqua-depth'
         }`}
@@ -687,7 +733,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
         </AnimatePresence>
       </header>
 
-      <main ref={scrollRef} onScroll={handleScroll} className={`flex-1 ${showLynPanel ? 'pt-52' : isSearchOpen ? 'pt-28' : 'pt-20'} pb-28 px-4 md:px-8 max-w-4xl mx-auto w-full flex flex-col overflow-y-auto`}>
+      <main ref={scrollRef} onScroll={handleScroll} className={`flex-1 min-h-0 ${showLynPanel ? 'pt-52' : isSearchOpen ? 'pt-28' : 'pt-20'} pb-28 px-4 md:px-8 max-w-4xl mx-auto w-full flex flex-col overflow-y-auto`}>
         <div className="flex-1 min-h-[20px]"></div>
         <div className="flex justify-center my-8">
           <span className="bg-surface-container-low px-4 py-1 rounded-full text-[11px] font-semibold text-on-surface-variant uppercase tracking-widest border border-white/40">Today, Oct 24</span>
@@ -765,7 +811,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
                           replyMessage={msg.replyToId ? chatMessages.find(m => m.id === msg.replyToId) : undefined}
                           onMediaClick={handleMediaClick}
                           isSecret={chat.isSecret}
-                          animateTyping={msg.id === lastLynMsgId && isLyn}
+                          animateTyping={msg.id === lastLynMsgId && isLyn && !oldMessageIdsRef.current.has(msg.id)}
                         />
                       </div>
                     </div>
@@ -784,6 +830,26 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
           <div ref={bottomRef} className="h-4 w-full" />
         </div>
       </main>
+
+      <AnimatePresence>
+        {showScrollBottom && (
+          <motion.button 
+            initial={{ opacity: 0, scale: 0.8, y: 10 }} 
+            animate={{ opacity: 1, scale: 1, y: 0 }} 
+            exit={{ opacity: 0, scale: 0.8, y: 10 }}
+            onClick={() => {
+              scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+            }}
+            className={`fixed bottom-[120px] right-6 p-3.5 rounded-full shadow-2xl hover:scale-110 active:scale-95 transition-all duration-200 z-50 flex items-center justify-center border ${
+              chat.isSecret
+                ? 'bg-slate-800 border-slate-700 text-blue-400 shadow-blue-500/20'
+                : 'bg-surface-container-highest border-white/30 text-secondary shadow-secondary/20 backdrop-blur-md'
+            }`}
+          >
+            <ChevronDown className="w-5 h-5" strokeWidth={2.5} />
+          </motion.button>
+        )}
+      </AnimatePresence>
 
       <div className={`fixed bottom-0 left-0 w-full p-4 md:p-6 z-50 transition-colors duration-300 ${chat.isSecret
         ? 'bg-gradient-to-t from-black via-black/95 to-transparent'

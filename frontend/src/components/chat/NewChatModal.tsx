@@ -37,7 +37,7 @@ const ToggleRow = ({ icon, title, subtitle, state, setState }: any) => (
 );
 
 export default function NewChatModal({ isOpen, onClose, onNavigate }: NewChatModalProps) {
-  const { contacts, currentUser, startChatWithContact, createGroupChat, globalUsers, addToast, fetchInitialData } = useAppContext();
+  const { contacts, currentUser, startChatWithContact, createGroupChat, globalUsers, addToast, fetchInitialData, setActiveChatId } = useAppContext();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
   const [mode, setMode] = useState<'default' | 'group-select' | 'group-info' | 'channel-info'>('default');

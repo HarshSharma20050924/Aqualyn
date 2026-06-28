@@ -105,7 +105,7 @@ export default function App() {
   }
 
   return (
-    <div className={`min-h-screen bg-surface text-on-surface font-body selection:bg-secondary-container/30 overflow-x-hidden bubble-${theme.bubbleStyle}`}>
+    <div className={`min-h-screen bg-surface text-on-surface font-body selection:bg-secondary-container/30 overflow-x-hidden overflow-y-auto bubble-${theme.bubbleStyle}`}>
       <ToastContainer />
       <CallOverlay />
       
