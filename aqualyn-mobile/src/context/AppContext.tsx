@@ -181,6 +181,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
         if (res.ok && isMounted) {
           const data = await res.json();
+          if (data.token) {
+            await AsyncStorage.setItem('auth_token', data.token);
+          }
           const syncedUser = data.user;
           if (!syncedUser || data.status === 'needs_profile') {
             setIsLoading(false);

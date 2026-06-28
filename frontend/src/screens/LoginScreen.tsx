@@ -462,7 +462,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
           {/* ── PROFILE STEP ── */}
           {step === 'profile' && (
             <motion.div key="profile" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
-              className="w-full glass-card border border-white/30 rounded-[2.5rem] p-8 sm:p-10 inner-glow shadow-2xl">
+              className="w-full glass-card border border-white/30 rounded-[2.5rem] p-8 sm:p-10 inner-glow shadow-2xl relative z-20">
               <div className="mb-8">
                 <h2 className="text-2xl font-bold font-headline text-on-surface mb-2">Complete Profile</h2>
                 <p className="text-on-surface-variant text-sm">Just a few details to get you started.</p>
@@ -589,7 +589,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
 </AnimatePresence>
 
 {step !== 'intro' && (
-        <footer className="mt-auto pt-8 pb-6 text-center w-full relative block z-10 clear-both">
+        <footer className="mt-auto pt-8 pb-6 text-center w-full relative block z-0 clear-both">
           <div className="flex items-center justify-center gap-6">
             {[
               { Icon: Globe, url: 'https://aqualyn-web-page.vercel.app/', label: 'Website' },

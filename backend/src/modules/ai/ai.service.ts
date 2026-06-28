@@ -70,7 +70,7 @@ export class AIService {
     /**
      * Intercepts messages in a chat to see if Lyn needs to respond
      */
-    static async handleMessageAdded(chatId: string, senderId: string, text: string, aiSettings?: { enabled?: boolean; personality?: string }) {
+    static async handleMessageAdded(chatId: string, senderId: string, text: string, aiSettings?: { enabled?: boolean; personality?: string; friendMode?: boolean; responseRate?: number; customPersonality?: string }) {
         await this.ensureLynUser();
         const lynId = 'lyn-ai-user-id';
 
@@ -86,7 +86,16 @@ export class AIService {
         });
 
         const isLynParticipant = participants.some((p: any) => p.userId === lynId);
-        if (!isLynParticipant) return;
+        const isMentioned = text.toLowerCase().includes('lyn');
+        const friendMode = aiSettings?.friendMode === true;
+        const responseRate = aiSettings?.responseRate ?? 0;
+
+        if (!isLynParticipant && !isMentioned && !friendMode) return;
+
+        if (!isMentioned && friendMode && !isLynParticipant) {
+            const roll = Math.random() * 100;
+            if (roll > responseRate) return;
+        }
 
         // Fetch recent messages for rich context (last 20)
         const recentMessages = await (prisma as any).message.findMany({
@@ -98,12 +107,16 @@ export class AIService {
 
         const senderUser = recentMessages.find((m: any) => m.senderId === senderId)?.sender;
         const senderName = senderUser?.displayName || senderUser?.username || 'User';
+        const otherParticipants = participants.filter((p: any) => p.userId !== lynId && p.userId !== senderId).map((p: any) => p.user?.displayName || p.user?.username).join(', ');
 
         // Format chat history for the model
-        const formattedHistory = recentMessages.reverse().map((msg: any) => ({
-            role: msg.senderId === lynId ? 'assistant' : 'user',
-            content: msg.text || ''
-        })).filter((m: any) => m.content.trim());
+        const formattedHistory = recentMessages.reverse().map((msg: any) => {
+            const mName = msg.sender?.displayName || msg.sender?.username || 'User';
+            return {
+                role: msg.senderId === lynId ? 'assistant' : 'user',
+                content: msg.senderId === lynId ? msg.text || '' : `[${mName}]: ${msg.text || ''}`
+            };
+        }).filter((m: any) => m.content.trim());
 
         // Build personality guide
         const personalityGuide: Record<string, string> = {
@@ -115,10 +128,12 @@ export class AIService {
             creative:     'You are expressive, imaginative, and think outside the box.',
         };
 
-        const personality = aiSettings?.personality || 'friendly';
-        const personalityStyle = personalityGuide[personality] || personality; // supports custom string too
+        const personalityStyle = aiSettings?.customPersonality?.trim() 
+            ? aiSettings.customPersonality.trim() 
+            : (personalityGuide[aiSettings?.personality || 'friendly'] || 'friendly');
 
-        const systemPrompt = `You are Lyn, an AI assistant on Aqualyn chatting with ${senderName}.
+        const systemPrompt = `You are Lyn, an AI assistant on Aqualyn chatting with ${senderName}${otherParticipants ? ` and ${otherParticipants}` : ''}.
+If this is a group chat, talk mutually like you are part of a friend group, addressing both sender and receiver.
 
 EXTREMELY STRICT RULES - IF YOU BREAK THESE YOU FAIL:
 1. Speak like a casual, helpful Gen-Z person texting.
@@ -197,7 +212,7 @@ Drafts: If they ask you to draft a message for them to send, just output the exa
                 SocketService.emitToUser(p.userId, 'receive_message', payload);
             });
 
-            console.log(`[Lyn] Responded in chat ${chatId} with personality: ${personality}`);
+            console.log(`[Lyn] Responded in chat ${chatId} with personality style: ${personalityStyle}`);
         } catch (error) {
             console.error('[Lyn] Error generating response:', error);
         } finally {

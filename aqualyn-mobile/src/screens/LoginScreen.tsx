@@ -125,6 +125,9 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
     const resData = await res.json().catch(() => ({}));
     if (res.status === 401) { setStep('email'); return; }
     if (!res.ok) throw new Error(resData.error || 'Sync failed');
+    if (resData.token) {
+      await AsyncStorage.setItem('auth_token', resData.token);
+    }
     if (resData.status === 'needs_profile') {
       if (resData.user?.displayName) setDisplayName(resData.user.displayName);
       setStep('profile'); return;
@@ -153,6 +156,9 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
       });
       const resData = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(resData.error || 'Setup failed');
+      if (resData.token) {
+        await AsyncStorage.setItem('auth_token', resData.token);
+      }
       if (resData.user) {
         setCurrentUser({ ...resData.user,
           following: resData.user.following?.map((f: any) => f.followingId || f.userId).filter(Boolean) || [],

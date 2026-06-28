@@ -201,7 +201,10 @@ export const useAppActions = (
         const custom = getStoredSetting('customPersonality', '');
         if (typeof custom === 'string' && custom.trim()) return custom.trim();
         return getStoredSetting('personality', 'friendly') || 'friendly';
-      })()
+      })(),
+      customPersonality: getStoredSetting('customPersonality', ''),
+      friendMode: getStoredSetting('friendMode', false),
+      responseRate: getStoredSetting('responseRate', 50)
     };
 
     const newMessage: Message = {

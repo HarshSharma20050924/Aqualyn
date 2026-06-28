@@ -9,11 +9,15 @@ interface LynPanelProps {
   aiSuggestionsEnabled: boolean;
   personality: string;
   customPersonality: string;
+  friendMode: boolean;
+  responseRate: number;
   onSave: (settings: {
     aiEnabled: boolean;
     aiSuggestionsEnabled: boolean;
     personality: string;
     customPersonality: string;
+    friendMode: boolean;
+    responseRate: number;
   }) => void;
   onDiscoverChannels?: () => void;
 }
@@ -34,6 +38,8 @@ export default function LynPanel({
   aiSuggestionsEnabled,
   personality,
   customPersonality,
+  friendMode,
+  responseRate,
   onSave,
   onDiscoverChannels,
 }: LynPanelProps) {
@@ -42,6 +48,8 @@ export default function LynPanel({
   const [draftSuggestions, setDraftSuggestions] = useState(aiSuggestionsEnabled);
   const [draftPersonality, setDraftPersonality] = useState(personality);
   const [draftCustom, setDraftCustom] = useState(customPersonality);
+  const [draftFriendMode, setDraftFriendMode] = useState(friendMode);
+  const [draftResponseRate, setDraftResponseRate] = useState(responseRate);
   const [showPersonality, setShowPersonality] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -49,7 +57,9 @@ export default function LynPanel({
     draftEnabled !== aiEnabled ||
     draftSuggestions !== aiSuggestionsEnabled ||
     draftPersonality !== personality ||
-    draftCustom !== customPersonality;
+    draftCustom !== customPersonality ||
+    draftFriendMode !== friendMode ||
+    draftResponseRate !== responseRate;
 
   const handleSave = () => {
     onSave({
@@ -57,6 +67,8 @@ export default function LynPanel({
       aiSuggestionsEnabled: draftSuggestions,
       personality: draftPersonality,
       customPersonality: draftCustom,
+      friendMode: draftFriendMode,
+      responseRate: draftResponseRate,
     });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -167,6 +179,51 @@ export default function LynPanel({
                       className="w-5 h-5 bg-white rounded-full shadow-sm absolute"
                     />
                   </button>
+                </div>
+                
+                {/* Lyn as a Friend toggle */}
+                <div className="flex flex-col px-4 py-3 border-t border-outline-variant/10">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-bold text-on-surface font-headline">Lyn as a Friend</p>
+                      <p className="text-[10px] text-on-surface-variant mt-0.5">
+                        Lyn will respond to messages naturally, even if not mentioned
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setDraftFriendMode(f => !f)}
+                      className={`w-11 h-6 rounded-full relative transition-colors duration-200 flex items-center shrink-0 ${
+                        draftFriendMode ? 'bg-secondary' : 'bg-surface-container-highest'
+                      }`}
+                    >
+                      <motion.div
+                        animate={{ x: draftFriendMode ? 20 : 2 }}
+                        transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                        className="w-5 h-5 bg-white rounded-full shadow-sm absolute"
+                      />
+                    </button>
+                  </div>
+
+                  {draftFriendMode && (
+                    <div className="mt-3">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-[10px] font-bold text-on-surface-variant uppercase">Response Rate</span>
+                        <span className="text-[10px] font-bold text-secondary">{draftResponseRate}%</span>
+                      </div>
+                      <input 
+                        type="range" 
+                        min="0" 
+                        max="100" 
+                        step="10"
+                        value={draftResponseRate} 
+                        onChange={(e) => setDraftResponseRate(Number(e.target.value))}
+                        className="w-full h-1.5 bg-surface-container-highest rounded-lg appearance-none cursor-pointer accent-secondary"
+                      />
+                      <p className="text-[9px] text-on-surface-variant/70 mt-1">
+                        {draftResponseRate === 100 ? 'Lyn will reply to every message.' : draftResponseRate >= 50 ? 'Lyn will reply often.' : 'Lyn will only chime in occasionally.'}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </motion.div>
             )}

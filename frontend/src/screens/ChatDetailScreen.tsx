@@ -65,6 +65,8 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
   const [aiSuggestionsEnabled, setAiSuggestionsEnabled] = useState(() => getSavedSetting(activeChatId, 'suggestions', true));
   const [lynPersonality, setLynPersonality] = useState(() => getSavedSetting(activeChatId, 'personality', 'friendly'));
   const [lynCustomPersonality, setLynCustomPersonality] = useState(() => getSavedSetting(activeChatId, 'customPersonality', ''));
+  const [lynFriendMode, setLynFriendMode] = useState(() => getSavedSetting(activeChatId, 'friendMode', false));
+  const [lynResponseRate, setLynResponseRate] = useState(() => getSavedSetting(activeChatId, 'responseRate', 50));
 
   // Re-load settings when the active chat changes
   const isInitialMount = useRef(true);
@@ -74,21 +76,27 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
     setAiSuggestionsEnabled(getSavedSetting(activeChatId, 'suggestions', true));
     setLynPersonality(getSavedSetting(activeChatId, 'personality', 'friendly'));
     setLynCustomPersonality(getSavedSetting(activeChatId, 'customPersonality', ''));
+    setLynFriendMode(getSavedSetting(activeChatId, 'friendMode', false));
+    setLynResponseRate(getSavedSetting(activeChatId, 'responseRate', 50));
   }, [activeChatId]);
 
   // Only save when explicitly triggered by the LynPanel Save button
-  const handleLynSave = ({ aiEnabled: en, aiSuggestionsEnabled: sug, personality: per, customPersonality: cus }: {
-    aiEnabled: boolean; aiSuggestionsEnabled: boolean; personality: string; customPersonality: string;
+  const handleLynSave = ({ aiEnabled: en, aiSuggestionsEnabled: sug, personality: per, customPersonality: cus, friendMode: fm, responseRate: rr }: {
+    aiEnabled: boolean; aiSuggestionsEnabled: boolean; personality: string; customPersonality: string; friendMode: boolean; responseRate: number;
   }) => {
     if (!activeChatId) return;
     setAiEnabled(en);
     setAiSuggestionsEnabled(sug);
     setLynPersonality(per);
     setLynCustomPersonality(cus);
+    setLynFriendMode(fm);
+    setLynResponseRate(rr);
     localStorage.setItem(`lyn_enabled_${activeChatId}`, JSON.stringify(en));
     localStorage.setItem(`lyn_suggestions_${activeChatId}`, JSON.stringify(sug));
     localStorage.setItem(`lyn_personality_${activeChatId}`, JSON.stringify(per));
     localStorage.setItem(`lyn_customPersonality_${activeChatId}`, JSON.stringify(cus));
+    localStorage.setItem(`lyn_friendMode_${activeChatId}`, JSON.stringify(fm));
+    localStorage.setItem(`lyn_responseRate_${activeChatId}`, JSON.stringify(rr));
     addToast('Lyn settings saved ✓', 'success');
   };
 
@@ -280,12 +288,20 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
       setEditingMessage(null);
     } else {
       sendMessage(activeChatId, text, {
-        replyToId: replyingTo?.id
+        replyToId: replyingTo?.id,
+        aiSettings: {
+          enabled: aiEnabled,
+          personality: lynCustomPersonality.trim() ? lynCustomPersonality : lynPersonality,
+          customPersonality: lynCustomPersonality,
+          friendMode: lynFriendMode,
+          responseRate: lynResponseRate
+        }
       });
     }
 
     setText('');
     setReplyingTo(null);
+    setIsAiMentionMenuOpen(false);
     if (activeChatId) setTyping(activeChatId, false);
     // Reset textarea height
     const ta = document.querySelector<HTMLTextAreaElement>('textarea[data-msg-input]');
@@ -659,6 +675,8 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
               aiSuggestionsEnabled={aiSuggestionsEnabled}
               personality={lynPersonality}
               customPersonality={lynCustomPersonality}
+              friendMode={lynFriendMode}
+              responseRate={lynResponseRate}
               onSave={handleLynSave}
               onDiscoverChannels={() => {
                 window.localStorage.setItem('exploreQuery', chat.name || '');
@@ -730,18 +748,27 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
                     </div>
                   );
                 }
+                  const isLyn = msg.senderId === LYN_ID;
                   return (
-                    <MessageBubble
-                      key={msg.id}
-                      msg={msg}
-                      isMe={msg.senderId === currentUser?.id}
-                      onReply={setReplyingTo}
-                      onEdit={handleEdit}
-                      replyMessage={msg.replyToId ? chatMessages.find(m => m.id === msg.replyToId) : undefined}
-                      onMediaClick={handleMediaClick}
-                      isSecret={chat.isSecret}
-                      animateTyping={msg.id === lastLynMsgId && msg.senderId === LYN_ID}
-                    />
+                    <div key={msg.id} className={`flex w-full ${isLyn ? 'gap-2 items-end' : ''}`}>
+                      {isLyn && (
+                        <div className="w-7 h-7 rounded-full overflow-hidden shrink-0 border border-secondary/20 mb-6 bg-surface-container-high">
+                           <img src="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150" alt="Lyn AI" className="w-full h-full object-cover" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <MessageBubble
+                          msg={msg}
+                          isMe={msg.senderId === currentUser?.id}
+                          onReply={setReplyingTo}
+                          onEdit={handleEdit}
+                          replyMessage={msg.replyToId ? chatMessages.find(m => m.id === msg.replyToId) : undefined}
+                          onMediaClick={handleMediaClick}
+                          isSecret={chat.isSecret}
+                          animateTyping={msg.id === lastLynMsgId && isLyn}
+                        />
+                      </div>
+                    </div>
                   );
                 });
               })()}
@@ -869,8 +896,13 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
                         exit={{ opacity: 0, y: 10 }}
                         className="w-full bg-surface-container-lowest border border-outline-variant/20 shadow-xl rounded-2xl overflow-hidden z-50 p-2"
                       >
-                        <div className="px-3 py-2 border-b border-outline-variant/10 text-[10px] font-black uppercase tracking-widest text-on-surface-variant flex items-center gap-2">
-                          <Droplet className="w-3.5 h-3.5 text-secondary fill-secondary" /> AI Actions
+                        <div className="px-3 py-2 border-b border-outline-variant/10 text-[10px] font-black uppercase tracking-widest text-on-surface-variant flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Droplet className="w-3.5 h-3.5 text-secondary fill-secondary" /> AI Actions
+                          </div>
+                          <button onClick={() => setIsAiMentionMenuOpen(false)} className="p-1 hover:bg-surface-container rounded-full text-on-surface-variant transition-colors">
+                            <X className="w-3 h-3" />
+                          </button>
                         </div>
                         <div className="mt-1 space-y-0.5">
                           <button

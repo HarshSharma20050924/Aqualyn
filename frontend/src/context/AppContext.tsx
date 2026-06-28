@@ -40,10 +40,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const activeChatIdRef = useRef<string | null>(null);
   const currentUserRef = useRef<User | null>(null);
 
+  const chatsRef = useRef<Chat[]>([]);
+  
   useEffect(() => {
     activeChatIdRef.current = activeChatId;
     currentUserRef.current = currentUser;
-  }, [activeChatId, currentUser]);
+    chatsRef.current = chats;
+  }, [activeChatId, currentUser, chats]);
 
   const addToast = (message: string, type: ToastType, options?: { avatar?: string; title?: string }) => {
     const id = Date.now().toString();
@@ -223,13 +226,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
         // Show Notification if the chat isn't currently active
         if (activeChatIdRef.current !== msg.chatId) {
+          const chat = chatsRef.current.find(c => c.id === msg.chatId);
+          if (chat?.isMuted) return;
+
           const senderName = (msg as any).sender?.displayName || (msg as any).sender?.username || 'Someone';
           const chatName = (msg as any).chat?.isGroup ? `Group: ${(msg as any).chat.name}` : senderName;
           const msgText = msg.text || 'Sent an attachment';
+          const senderUsername = (msg as any).sender?.username || msg.senderId;
 
-          if ("Notification" in window && window.Notification.permission === "granted") {
+          if ('serviceWorker' in navigator && 'PushManager' in window) {
+            navigator.serviceWorker.ready.then(registration => {
+              registration.showNotification(chatName, {
+                body: `${senderName} (@${senderUsername}): ${msgText}`,
+                icon: (msg as any).sender?.avatar || '/favicon.ico',
+                tag: 'chat-message',
+              });
+            });
+          } else if ("Notification" in window && window.Notification.permission === "granted") {
             new window.Notification(chatName, {
-              body: `${senderName}: ${msgText}`,
+              body: `${senderName} (@${senderUsername}): ${msgText}`,
               icon: (msg as any).sender?.avatar || '/favicon.ico'
             });
           }
@@ -261,9 +276,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
           return prev;
         });
       });
-      newSocket.on('new_notification', (notif: Notification) => {
+      newSocket.on('new_notification', (notif: any) => {
         setNotifications(prev => [notif, ...prev]);
-        addToast(notif.text || 'New activity in your profile', 'info');
+        if (notif.type !== 'direct_message') {
+          addToast(notif.text || 'New activity in your profile', 'info');
+        }
       });
       newSocket.on('message_edited', ({ chatId, messageId, newText }) => {
         setMessages(prev => ({ ...prev, [chatId]: (prev[chatId] || []).map(m => m.id === messageId ? { ...m, text: newText, isEdited: true } : m) }));

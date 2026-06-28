@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Play, Pause, FileText, Download, MapPin, CheckCheck, Reply, Copy, Trash2, Smile, Timer, Edit2, Wallet, ArrowRight, ShieldAlert } from 'lucide-react';
+import { Play, Pause, FileText, Download, MapPin, CheckCheck, Reply, Copy, Trash2, Smile, Timer, Edit2, Wallet, ArrowRight, ShieldAlert, Clock } from 'lucide-react';
 import { Message } from '../../types';
 import { useAppContext } from '../../context/AppContext';
 
@@ -474,7 +474,9 @@ const MessageBubbleComponent = ({ msg, isMe, onReply, onEdit, replyMessage, onMe
         <span className="text-[10px] text-on-surface-variant">{msg.timestamp}</span>
         {isMe && (
           <div className="flex items-center">
-            {msg.status === 'sent' ? (
+            {msg.id.startsWith('temp-') ? (
+              <Clock className="w-[12px] h-[12px] text-on-surface-variant/40" />
+            ) : msg.status === 'sent' || (!msg.status && !msg.isRead) ? (
               <CheckCheck className="w-[14px] h-[14px] text-on-surface-variant/40" style={{ clipPath: 'inset(0 50% 0 0)' }} />
             ) : msg.status === 'delivered' ? (
               <CheckCheck className="w-[14px] h-[14px] text-on-surface-variant/40" />

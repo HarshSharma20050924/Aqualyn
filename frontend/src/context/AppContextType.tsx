@@ -36,7 +36,7 @@ export interface AppContextType {
   setTyping: (chatId: string, isTyping: boolean) => void;
   logout: () => void;
   toasts: Toast[];
-  addToast: (message: string, type: ToastType) => void;
+  addToast: (message: string, type: ToastType, options?: { avatar?: string; title?: string }) => void;
   removeToast: (id: string) => void;
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;

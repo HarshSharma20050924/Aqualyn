@@ -44,7 +44,7 @@ const SkeletonPost = () => (
 );
 
 export default function ExploreScreen({ onBack, onNavigate }: { onBack: () => void; onNavigate: (s: string) => void }) {
-  const { posts, currentUser, addToast, fetchInitialData, setActiveChatId, setActiveContactId, setGlobalUsers, followUser } = useAppContext();
+  const { posts, currentUser, addToast, fetchInitialData, setActiveChatId, setActiveContactId, setGlobalUsers, followUser, startChatWithContact } = useAppContext();
 
   const [query, setQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
@@ -251,13 +251,11 @@ export default function ExploreScreen({ onBack, onNavigate }: { onBack: () => vo
                 {searchHistory.map(h => (
                   <div
                     key={h}
+                    onMouseDown={(e) => { e.preventDefault(); setQuery(h); inputRef.current?.blur(); setIsInputFocused(false); }}
                     className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-container/50 transition-colors cursor-pointer group"
                   >
                     <Search className="w-3.5 h-3.5 text-on-surface-variant/50 shrink-0" />
-                    <span
-                      className="flex-1 text-sm text-on-surface truncate"
-                      onClick={() => { setQuery(h); inputRef.current?.blur(); }}
-                    >
+                    <span className="flex-1 text-sm text-on-surface truncate">
                       {h}
                     </span>
                     <button
@@ -533,7 +531,12 @@ export default function ExploreScreen({ onBack, onNavigate }: { onBack: () => vo
                       </div>
                       {isFollowing ? (
                         <button
-                          onClick={() => { setActiveChatId(user.id); onNavigate('chat-detail'); }}
+                          onClick={() => {
+                            startChatWithContact(user.id);
+                            setTimeout(() => {
+                              onNavigate('chat-detail');
+                            }, 50);
+                          }}
                           className="px-4 py-1.5 rounded-full bg-secondary/10 text-secondary font-bold text-[11px] transition-all hover:bg-secondary/20 shrink-0"
                         >
                           Message

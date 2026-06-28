@@ -447,7 +447,11 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
                               {chat.unreadCount > 9 ? '9+' : chat.unreadCount}
                             </div>
                           ) : lastMsg?.status === 'seen' ? (
-                            <CheckCheck className="text-on-surface-variant w-4 h-4" />
+                            <CheckCheck className="text-secondary w-4 h-4" />
+                          ) : lastMsg?.status === 'delivered' ? (
+                            <CheckCheck className="text-on-surface-variant/40 w-4 h-4" />
+                          ) : lastMsg?.status === 'sent' || (!lastMsg?.status && !lastMsg?.isRead && lastMsg?.senderId === currentUser?.id) ? (
+                            <Check className="text-on-surface-variant/40 w-4 h-4" />
                           ) : null}
                         </div>
                       </div>
@@ -536,9 +540,11 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
                             </div>
                           ) : lastMsg?.status === 'seen' ? (
                             <CheckCheck className="text-secondary w-4 h-4" />
-                          ) : (
+                          ) : lastMsg?.status === 'delivered' ? (
                             <CheckCheck className="text-on-surface-variant/40 w-4 h-4" />
-                          )}
+                          ) : lastMsg?.status === 'sent' || (!lastMsg?.status && !lastMsg?.isRead && lastMsg?.senderId === currentUser?.id) ? (
+                            <Check className="text-on-surface-variant/40 w-4 h-4" />
+                          ) : null}
                           {chat.isVoice && <Mic className="text-on-surface-variant w-4 h-4" />}
                         </div>
                       </div>
