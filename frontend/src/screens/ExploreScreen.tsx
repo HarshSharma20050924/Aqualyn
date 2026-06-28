@@ -4,6 +4,7 @@ import { Search, ArrowLeft, TrendingUp, Radio, Users, Play, Droplet, Check, Comp
 import { useAppContext } from '../context/AppContext';
 import { apiFetch } from '../utils/fetcher';
 import { ENDPOINTS } from '../config/api';
+import PostViewer from '../components/posts/PostViewer';
 
 const CATEGORIES = ['All', 'Creative', 'Tech', 'Lifestyle', 'Design', 'Health'];
 
@@ -59,6 +60,9 @@ export default function ExploreScreen({ onBack, onNavigate }: { onBack: () => vo
   const [peopleResults, setPeopleResults] = useState<any[]>([]);
   const [isSearchingPeople, setIsSearchingPeople] = useState(false);
   const [hasSearchedPeople, setHasSearchedPeople] = useState(false);
+
+  // PostViewer state
+  const [selectedPost, setSelectedPost] = useState<any | null>(null);
 
   // Search history
   const HISTORY_KEY = 'exploreSearchHistory';
@@ -313,7 +317,7 @@ export default function ExploreScreen({ onBack, onNavigate }: { onBack: () => vo
             ) : (
               <div className="grid grid-cols-3 gap-0.5 mt-2">
                 {publicPosts.map(post => (
-                  <div key={post.id} className="relative aspect-square bg-surface-container overflow-hidden group cursor-pointer">
+                  <div key={post.id} onClick={() => setSelectedPost(post)} className="relative aspect-square bg-surface-container overflow-hidden group cursor-pointer">
                     {post.mediaType === 'video' || post.videoUrl ? (
                       <video src={post.mediaUrl || post.videoUrl} className="w-full h-full object-cover" muted playsInline />
                     ) : (

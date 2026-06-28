@@ -287,6 +287,9 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
     setText('');
     setReplyingTo(null);
     if (activeChatId) setTyping(activeChatId, false);
+    // Reset textarea height
+    const ta = document.querySelector<HTMLTextAreaElement>('textarea[data-msg-input]');
+    if (ta) ta.style.height = '48px';
 
     // Force scroll to bottom immediately and slightly after render
     setTimeout(() => {
@@ -539,7 +542,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
               </span>
               <span className={`text-[11px] font-bold tracking-wider uppercase truncate ${chat.isSecret ? 'text-blue-400' : 'text-secondary-fixed-variant'
                 }`}>
-                {chat.isSecret ? '🔒 Incognito Session' : (typingInThisChat.length > 0 ? (typingInThisChat.length === 1 ? 'Typing...' : `${typingInThisChat.length} typing...`) : '')}
+                {chat.isSecret ? '🔒 Incognito Session' : chat.isGroup ? `${chat.participantIds?.length || 0} members` : ''}
               </span>
             </div>
           </div>
@@ -550,8 +553,8 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
             <button onClick={() => startCall(chat.id, chat.name, chat.avatar, 'VOICE')} className={`p-2 rounded-full transition-colors active:scale-95 duration-200 ${chat.isSecret ? 'text-slate-400 hover:bg-slate-800/50' : 'text-cyan-600 hover:bg-white/20'}`}>
               <Phone className="w-5 h-5 fill-current" />
             </button>
-            {/* Lyn AI Settings — available in any non-secret chat */}
-            {!chat.isSecret && (
+            {/* Lyn AI Settings — only in the Lyn AI chat */}
+            {isLynChat && (
               <button
                 onClick={() => setShowLynPanel(prev => !prev)}
                 className={`relative p-2 rounded-full transition-all active:scale-95 duration-200 ${showLynPanel ? 'bg-secondary/15' : ''
@@ -752,21 +755,6 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
           )}
 
           <div ref={bottomRef} className="h-4 w-full" />
-
-          {typingInThisChat.length > 0 && (
-            <div className="flex items-center gap-2 text-on-surface-variant text-sm p-4 animate-pulse">
-              <div className="flex gap-1">
-                <span className="w-1.5 h-1.5 bg-secondary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                <span className="w-1.5 h-1.5 bg-secondary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                <span className="w-1.5 h-1.5 bg-secondary rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-              </div>
-              <span className="font-medium">
-                {typingInThisChat.length === 1
-                  ? `${typingInThisChat[0]} is typing...`
-                  : `${typingInThisChat.length} people are typing...`}
-              </span>
-            </div>
-          )}
         </div>
       </main>
 
@@ -998,6 +986,20 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
                     )}
                   </AnimatePresence>
 
+                  {/* Typing indicator — shown near the input */}
+                  {typingInThisChat.length > 0 && (
+                    <div className="flex items-center gap-2 mb-1 pl-1">
+                      <div className="flex gap-0.5">
+                        <span className="w-1.5 h-1.5 bg-secondary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                        <span className="w-1.5 h-1.5 bg-secondary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                        <span className="w-1.5 h-1.5 bg-secondary rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                      </div>
+                      <span className="text-[11px] font-semibold text-on-surface-variant">
+                        {typingInThisChat.length === 1 ? `${typingInThisChat[0]} is typing...` : `${typingInThisChat.length} people are typing...`}
+                      </span>
+                    </div>
+                  )}
+
                   {/* Smart reply bar — reference style */}
                   {smartReplies.length > 0 && chatMessages.length > 0 && !text && !hideSmartReplies && (
                     <div className="flex items-center gap-2 overflow-x-auto pb-1 custom-scrollbar">
@@ -1053,6 +1055,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
                           }
                         }}
                         placeholder={`Message ${chat.name}...`}
+                        data-msg-input
                         className={`w-full min-h-[48px] py-3 pl-4 pr-10 rounded-2xl border outline-none transition-all resize-none ${chat.isSecret
                           ? 'bg-black border-slate-700/30 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/50 text-slate-200 placeholder:text-slate-600 font-sans custom-scrollbar'
                           : 'bg-white/70 backdrop-blur-2xl border-white/40 focus:ring-2 focus:ring-secondary/20 focus:border-secondary text-on-surface placeholder:text-on-surface-variant/50 custom-scrollbar'

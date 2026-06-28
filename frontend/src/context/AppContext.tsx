@@ -184,7 +184,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (currentUser?.id) newSocket.emit('join', currentUser.id);
       });
       newSocket.on('receive_message', (msg: Message) => {
-        setMessages(prev => ({ ...prev, [msg.chatId]: [...(prev[msg.chatId] || []), msg] }));
+        // Skip own messages — they are handled optimistically + via message_sent_ack
+        if (msg.senderId === currentUserRef.current?.id) return;
+
+        setMessages(prev => {
+          const existing = prev[msg.chatId] || [];
+          // Deduplicate: don't add if same id already present
+          if (existing.some(m => m.id === msg.id)) return prev;
+          return { ...prev, [msg.chatId]: [...existing, msg] };
+        });
         setChats(prev => {
           const chatIdx = prev.findIndex(c => c.id === msg.chatId);
           if (chatIdx !== -1) {

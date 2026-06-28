@@ -17,6 +17,7 @@ export default function EditProfileScreen({ onBack }: { onBack: () => void }) {
   const [phone, setPhone] = useState(currentUser?.phone || '');
   const [showPhoneTo, setShowPhoneTo] = useState(currentUser?.showPhoneTo || 'everyone');
   const [searchByPhone, setSearchByPhone] = useState(currentUser?.searchByPhone ?? true);
+  const [isPrivate, setIsPrivate] = useState(currentUser?.isPrivate ?? false);
   const [aiDiscoverable, setAiDiscoverable] = useState(currentUser?.settings?.privacy?.aiDiscoverable ?? false);
   const [avatar, setAvatar] = useState(currentUser?.largeAvatar || currentUser?.avatar || '');
   const [isSaving, setIsSaving] = useState(false);
@@ -52,7 +53,7 @@ export default function EditProfileScreen({ onBack }: { onBack: () => void }) {
     try {
       const res = await apiFetch(ENDPOINTS.AUTH_SYNC, {
         method: 'POST',
-        body: JSON.stringify({ displayName: name, username, bio, role, avatar, phone, showPhoneTo, searchByPhone })
+        body: JSON.stringify({ displayName: name, username, bio, role, avatar, phone, showPhoneTo, searchByPhone, isPrivate })
       });
       if (!res.ok) {
         if (res.status === 409) {
@@ -249,6 +250,18 @@ export default function EditProfileScreen({ onBack }: { onBack: () => void }) {
                 </AnimatePresence>
               </div>
 
+              <div className="flex items-center justify-between p-4 bg-white/50 border border-white/40 rounded-2xl">
+                <div>
+                  <h3 className="font-bold text-on-surface">Private Account</h3>
+                  <p className="text-xs text-on-surface-variant mt-0.5">When your account is private, only people you approve can see your posts and followers.</p>
+                </div>
+                <div
+                  onClick={() => setIsPrivate(!isPrivate)}
+                  className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors duration-300 ease-in-out flex items-center shrink-0 ${isPrivate ? 'bg-secondary' : 'bg-surface-container-highest'}`}
+                >
+                  <div className={`w-4 h-4 rounded-full bg-white shadow-sm transform transition-transform duration-300 ease-in-out ${isPrivate ? 'translate-x-6' : 'translate-x-0'}`} />
+                </div>
+              </div>
               <div className="flex items-center justify-between p-4 bg-white/40 rounded-2xl border border-white/40">
                 <div>
                   <h3 className="font-bold text-on-surface text-sm">Search by Phone</h3>

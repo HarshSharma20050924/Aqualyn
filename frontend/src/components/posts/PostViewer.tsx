@@ -10,7 +10,7 @@ interface PostViewerProps {
 }
 
 export default function PostViewer({ post, onClose }: PostViewerProps) {
-  const { currentUser, likePost, commentPost, addToast, archivePost, pinPost, savePost, addPostToCollection, sendMessage } = useAppContext();
+  const { currentUser, likePost, commentPost, addToast, archivePost, pinPost, savePost, addPostToCollection, sendMessage, deletePost, deleteComment, pinComment } = useAppContext();
   const [isLiked, setIsLiked] = useState(post.likes.includes(currentUser?.id || ''));
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState('');
@@ -69,11 +69,11 @@ export default function PostViewer({ post, onClose }: PostViewerProps) {
       </div>
 
       <div className="flex-1 flex items-center justify-center overflow-hidden relative">
-        {post.imageUrl && (
-          <img src={post.imageUrl} alt="Post" className="w-full h-full object-contain" />
+        {(post.imageUrl || (post.mediaUrl && post.mediaType !== 'video')) && (
+          <img src={post.imageUrl || post.mediaUrl} alt="Post" className="w-full h-full object-contain" />
         )}
-        {post.videoUrl && (
-          <video src={post.videoUrl} className="w-full h-full object-contain" controls autoPlay loop muted playsInline />
+        {(post.videoUrl || (post.mediaUrl && post.mediaType === 'video')) && (
+          <video src={post.videoUrl || post.mediaUrl} className="w-full h-full object-contain" controls autoPlay loop muted playsInline />
         )}
       </div>
 
@@ -137,6 +137,9 @@ export default function PostViewer({ post, onClose }: PostViewerProps) {
                     </button>
                     <button onClick={() => { archivePost(post.id); setShowMenu(false); }} className="p-4 text-on-surface font-semibold flex items-center gap-3 hover:bg-surface-variant transition-colors">
                       <Archive className="w-5 h-5" /> {post.isArchived ? 'Unarchive' : 'Archive'}
+                    </button>
+                    <button onClick={() => { deletePost(post.id); onClose(); }} className="p-4 text-red-500 font-semibold flex items-center gap-3 hover:bg-surface-variant transition-colors">
+                      <X className="w-5 h-5" /> Delete Post
                     </button>
                   </>
                 )}
@@ -216,16 +219,27 @@ export default function PostViewer({ post, onClose }: PostViewerProps) {
             </div>
             
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {post.comments.map((comment) => (
-                <div key={comment.id} className="flex gap-3">
+              {post.comments.map((comment: any) => (
+                <div key={comment.id} className="flex gap-3 group relative">
                   <img src={comment.userAvatar || `https://ui-avatars.com/api/?name=${comment.userName}&background=random`} alt={comment.userName} className="w-8 h-8 rounded-full" />
-                  <div>
+                  <div className="flex-1">
                     <div className="flex items-baseline gap-2">
                       <span className="font-bold text-sm text-on-surface">{comment.userName}</span>
                       <span className="text-xs text-on-surface-variant">{comment.timestamp}</span>
+                      {comment.isPinned && <Pin className="w-3 h-3 text-secondary fill-secondary" />}
                     </div>
-                    <p className="text-sm text-on-surface mt-0.5">{comment.text}</p>
+                    <p className="text-sm text-on-surface mt-0.5 pr-8">{comment.text}</p>
                   </div>
+                  {post.userId === currentUser?.id && (
+                    <div className="absolute right-0 top-1 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => pinComment(post.id, comment.id)} className="text-on-surface-variant hover:text-secondary p-1">
+                        <Pin className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => deleteComment(post.id, comment.id)} className="text-on-surface-variant hover:text-red-500 p-1">
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
               {post.comments.length === 0 && (

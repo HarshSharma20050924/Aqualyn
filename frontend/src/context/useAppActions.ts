@@ -424,6 +424,36 @@ export const useAppActions = (
     }
   };
 
+  const deleteComment = async (postId: string, commentId: string) => {
+    try {
+      setPosts(prev => prev.map(post => {
+        if (post.id === postId) {
+          return { ...post, comments: post.comments.filter((c: any) => c.id !== commentId) };
+        }
+        return post;
+      }));
+      addToast('Comment deleted', 'success');
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const pinComment = async (postId: string, commentId: string) => {
+    try {
+      setPosts(prev => prev.map(post => {
+        if (post.id === postId) {
+          const newComments = post.comments.map((c: any) => c.id === commentId ? { ...c, isPinned: !c.isPinned } : c);
+          newComments.sort((a: any, b: any) => (b.isPinned ? 1 : 0) - (a.isPinned ? 1 : 0));
+          return { ...post, comments: newComments };
+        }
+        return post;
+      }));
+      addToast('Comment pin updated', 'success');
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const followUser = async (userId: string) => {
     if (!currentUser) return;
     
@@ -945,7 +975,7 @@ export const useAppActions = (
   return {
     logout, archiveChat, pinChat, muteChat, deleteMessage, deleteChat, clearHistory, 
     blockContact, reportContact, markAsRead, createFolder, deleteFolder, addChatToFolder,
-    sendMessage, setTyping, editMessage, addReaction, addPost, likePost, commentPost,
+    sendMessage, setTyping, editMessage, addReaction, addPost, likePost, commentPost, deleteComment, pinComment,
     followUser, unfollowUser, acceptFollowRequest, rejectFollowRequest, archivePost,
     pinPost, savePost, createCollection, addPostToCollection, deletePost, addStory, deleteStory, addStoryComment,
     updateStorySettings, toggleCloseFriend, addContact, startChatWithContact, createGroupChat,

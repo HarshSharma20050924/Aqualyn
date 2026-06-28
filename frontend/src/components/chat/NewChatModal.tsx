@@ -92,9 +92,9 @@ export default function NewChatModal({ isOpen, onClose, onNavigate }: NewChatMod
     }
   };
 
-  const handleCreateGroup = () => {
+  const handleCreateGroup = async () => {
     if (!groupName.trim() || selectedContacts.length === 0) return;
-    createGroupChat(groupName, selectedContacts, {
+    await createGroupChat(groupName, selectedContacts, {
       description: groupDesc,
       adminOnly,
       disappearingMessages: disappearing
@@ -123,9 +123,17 @@ export default function NewChatModal({ isOpen, onClose, onNavigate }: NewChatMod
         addToast(err.message || 'Failed to create channel', 'error');
         return;
       }
+      const data = await res.json();
       addToast(`Channel @${channelHandle} created!`, 'success');
       await fetchInitialData();
       handleClose();
+      if (data.channel?.id) {
+        onNavigate('chat-detail');
+        // Setting timeout to allow fetchInitialData to populate chats list
+        setTimeout(() => {
+          setActiveChatId(data.channel.id);
+        }, 100);
+      }
     } catch {
       addToast('Failed to create channel', 'error');
     } finally {

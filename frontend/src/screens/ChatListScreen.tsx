@@ -17,6 +17,7 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
   const [activeTab, setActiveTab] = useState<string>('all');
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
   const [isLynLoading, setIsLynLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const [showHeaderMenu, setShowHeaderMenu] = useState(false);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedChats, setSelectedChats] = useState<Set<string>>(new Set());
@@ -122,7 +123,9 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
   if (activeTab === 'unread') {
     filteredChats = chats.filter(c => c.unreadCount && c.unreadCount > 0);
   } else if (activeTab === 'groups') {
-    filteredChats = chats.filter(c => c.isGroup);
+    filteredChats = chats.filter(c => c.isGroup && !c.isChannel);
+  } else if (activeTab === 'channels') {
+    filteredChats = chats.filter(c => c.isChannel);
   } else if (activeTab === 'personal') {
     filteredChats = chats.filter(c => !c.isGroup && !c.id.startsWith('bot'));
   } else if (activeTab === 'bots') {
@@ -139,6 +142,10 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
   // Filter out archived unless in archived view
   if (activeTab !== 'archived') {
     filteredChats = filteredChats.filter(c => !c.isArchived);
+  }
+
+  if (searchQuery.trim()) {
+    filteredChats = filteredChats.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()));
   }
 
 
@@ -273,10 +280,26 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
           )}
         </div>
 
+        {/* Search */}
+        {!isSelectionMode && (
+          <div className="px-4 mb-2">
+            <div className="relative">
+              <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
+              <input 
+                type="text" 
+                placeholder="Search chats..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-white/80 dark:bg-white/10 border border-white/40 dark:border-white/20 rounded-xl py-2 pl-10 pr-4 text-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-secondary/50 shadow-sm"
+              />
+            </div>
+          </div>
+        )}
+
         {/* Tabs */}
         {!isSelectionMode && (
-          <div className="flex gap-2 px-4 py-3 overflow-x-auto scrollbar-hide items-center">
-            {['all', ...folders.map(f => f.name.toLowerCase()), 'personal', 'groups', 'unread', 'bots', 'archived'].map((tab) => (
+          <div className="flex gap-2 overflow-x-auto pb-2 px-4 scrollbar-hide snap-x">
+            {['all', 'personal', 'groups', 'channels', 'bots', 'archived', 'unread', ...folders.map(f => f.name.toLowerCase())].map((tab) => (
               <button
                 key={tab}
                 onClick={() => {

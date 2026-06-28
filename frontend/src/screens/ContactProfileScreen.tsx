@@ -9,6 +9,7 @@ import { ENDPOINTS } from '../config/api';
 import { apiFetch } from '../utils/fetcher';
 import { User } from '../types';
 import UserListModal from '../components/social/UserListModal';
+import PostViewer from '../components/posts/PostViewer';
 
 export default function ContactProfileScreen({ onBack, onNavigate }: { onBack: () => void, onNavigate: (s: string) => void }) {
   const { contacts, activeContactId, setActiveContactId, setActiveChatId, originChatId, setOriginChatId, startChatWithContact, addToast, chats, setChats, currentUser, blockContact, reportContact, muteChat, followUser, unfollowUser, posts, globalUsers, setGlobalUsers, requestSecretChat, createGroupChat } = useAppContext();
@@ -18,6 +19,7 @@ export default function ContactProfileScreen({ onBack, onNavigate }: { onBack: (
   const [userPostsData, setUserPostsData] = React.useState<any[]>([]);
   const [userStoriesData, setUserStoriesData] = React.useState<any[]>([]);
   const [isLoadingContent, setIsLoadingContent] = React.useState(false);
+  const [selectedPost, setSelectedPost] = React.useState<any | null>(null);
   
   // Look in globalUsers first, then contacts, and finally currentUser (for self-profile view)
   const contact = globalUsers.find(c => c.id === activeContactId) || 
@@ -289,7 +291,7 @@ export default function ContactProfileScreen({ onBack, onNavigate }: { onBack: (
             </div>
             <div>
               <h3 className="text-xl font-bold text-on-surface">This Account is Private</h3>
-              <p className="text-on-surface-variant mt-1">Follow this account to see their posts and highlights.</p>
+              <p className="text-on-surface-variant mt-1">Send a follow request to see their posts and highlights.</p>
             </div>
           </div>
         ) : (
@@ -321,7 +323,7 @@ export default function ContactProfileScreen({ onBack, onNavigate }: { onBack: (
               ) : activeTab === 'posts' ? (
                 <div className="grid grid-cols-3 gap-1 pt-1">
                   {userPostsData.length > 0 ? userPostsData.map((post: any, i) => (
-                    <div key={post.id || i} className="aspect-square bg-surface-container overflow-hidden group cursor-pointer relative">
+                    <div key={post.id || i} onClick={() => setSelectedPost(post)} className="aspect-square bg-surface-container overflow-hidden group cursor-pointer relative">
                       <img src={post.mediaUrl} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
                       {post.mediaType === 'video' && (
                         <PlayCircle className="absolute top-2 right-2 w-4 h-4 text-white drop-shadow-md" />
@@ -432,6 +434,13 @@ export default function ContactProfileScreen({ onBack, onNavigate }: { onBack: (
             }
         }}
       />
+
+      {/* Post Viewer Modal */}
+      {selectedPost && (
+        <div className="fixed inset-0 z-[150] bg-background">
+          <PostViewer post={selectedPost} onClose={() => setSelectedPost(null)} />
+        </div>
+      )}
     </motion.div>
   );
 }
