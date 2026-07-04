@@ -44,7 +44,8 @@ import {
   Trash2,
   Clock,
   Check,
-  Sparkles
+  Sparkles,
+  Plus
 } from 'lucide-react-native';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -122,6 +123,8 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
   const [isShareContactOpen, setIsShareContactOpen] = useState(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const isProgrammaticScroll = useRef(false);
+  const [headerHeight, setHeaderHeight] = useState(0);
+  const inputRef = useRef<TextInput>(null);
 
   // Gallery and Modals
   const [galleryMedia, setGalleryMedia] = useState<{ id: string, url: string, type: 'image' | 'video' }[]>([]);
@@ -180,13 +183,17 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
     loadSettings();
   }, [activeChatId]);
 
+  // Reset hideSmartReplies only when switching chats
+  useEffect(() => {
+    setHideSmartReplies(false);
+  }, [activeChatId]);
+
   // Fetch smart replies when chat or messages change
   useEffect(() => {
     if (!activeChatId || !aiEnabled || !aiSuggestionsEnabled) {
       setSmartReplies([]);
       return;
     }
-    setHideSmartReplies(false);
     let cancelled = false;
     const fetchReplies = async () => {
       try {
@@ -606,7 +613,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
       )}
 
       {/* Header Bar */}
-      <View style={[styles.header, { paddingTop: insets.top + 10 }, isSecret ? styles.headerSecret : styles.headerNormal]}>
+      <View style={[styles.header, { paddingTop: insets.top + 10 }, isSecret ? styles.headerSecret : styles.headerNormal]} onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}>
         <View style={styles.headerRow}>
           <View style={styles.headerLeftContainer}>
             <TouchableOpacity onPress={onBack} style={styles.headerIconButton}>
@@ -631,7 +638,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
                   <Users size={20} color={isSecret ? '#60a5fa' : '#0057bd'} />
                 </View>
               ) : (
-                <Image source={{ uri: chat.avatar }} style={styles.userAvatar} />
+                <Image source={{ uri: chat.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(chat.name || 'U')}&background=0057bd&color=fff&size=80` }} style={styles.userAvatar} />
               )}
             </TouchableOpacity>
 
@@ -688,6 +695,12 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
         )}
       </View>
 
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+        keyboardVerticalOffset={headerHeight}
+      >
+
       {/* Lyn AI Settings Panel */}
       {showLynPanel && (
         <LynPanel
@@ -711,7 +724,8 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
         ref={scrollRef}
         onScroll={handleScroll}
         scrollEventThrottle={16}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 90 }]}
+        style={{ flex: 1 }}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: 8 }]}
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.dateStampContainer}>
@@ -835,7 +849,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
       {/* Scroll to bottom button — right side, circular */}
       {showScrollToBottom && (
         <TouchableOpacity
-          style={[styles.scrollToBottomBtn, { bottom: insets.bottom + 100 }]}
+          style={[styles.scrollToBottomBtn, { bottom: 76 }]}
           onPress={scrollToBottom}
           activeOpacity={0.85}
         >
@@ -844,11 +858,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
       )}
 
       {/* Footer System Dock Container */}
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
-        style={[styles.footerWrapper, { paddingBottom: insets.bottom + 10 }]}
-      >
+      <View style={[styles.footerWrapper, { paddingBottom: insets.bottom + 10 }]}>
         {isPrivateRestricted ? (
           <View style={styles.restrictedContainer}>
             <View style={styles.restrictedRow}>
@@ -999,11 +1009,12 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
               onPress={() => setIsAttachmentPickerOpen(!isAttachmentPickerOpen)}
               style={[styles.plusButton, isAttachmentPickerOpen ? styles.plusButtonActive : styles.plusButtonInactive]}
             >
-              <Users size={24} color={isAttachmentPickerOpen ? "#fff" : "#475569"} style={{ transform: [{ rotate: isAttachmentPickerOpen ? '45deg' : '0deg' }] }} />
+              <Plus size={24} color={isAttachmentPickerOpen ? "#fff" : "#475569"} style={{ transform: [{ rotate: isAttachmentPickerOpen ? '45deg' : '0deg' }] }} />
             </TouchableOpacity>
 
             <View style={[styles.inputWrapper, isSecret ? styles.inputSecret : styles.inputNormal]}>
               <TextInput
+                ref={inputRef}
                 style={[styles.textInput, isSecret ? { color: '#f8fafc' } : { color: '#0f172a' }, Platform.OS === 'web' && { outlineStyle: 'none' } as any]}
                 placeholder={`Message...`}
                 placeholderTextColor={isSecret ? '#64748b' : '#94a3b8'}
@@ -1017,6 +1028,9 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
                   }
                 }}
                 multiline
+                blurOnSubmit={false}
+                returnKeyType="send"
+                onSubmitEditing={() => { if (text.trim()) handleSend(); }}
                 onKeyPress={(e: any) => {
                   if (Platform.OS === 'web' && e.nativeEvent.key === 'Enter' && !e.nativeEvent.shiftKey) {
                     e.preventDefault();
@@ -1038,6 +1052,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
           </View>
           </View>
         )}
+      </View>
       </KeyboardAvoidingView>
 
       {/* Embedded Native Screens Modals */}
@@ -1166,7 +1181,7 @@ const styles = StyleSheet.create({
   typingText: { fontSize: 13, color: '#64748b', fontWeight: '500' },
 
   // System Dock System Styles
-  footerWrapper: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: 16, backgroundColor: 'transparent' },
+  footerWrapper: { paddingHorizontal: 16, backgroundColor: 'transparent' },
   footerInnerColumn: { flexDirection: 'column', width: '100%' },
   
   // AI Mention Popup

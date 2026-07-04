@@ -333,7 +333,14 @@ export default function ExploreScreen({ onBack, onNavigate }: { onBack: () => vo
             ) : (
               <View style={{ gap: 12 }}>
                 {filteredChannels.map(channel => (
-                  <TouchableOpacity key={channel.id} style={styles.channelCard} onPress={() => { if (!channel.isJoined) handleJoinChannel(channel); }}>
+                  <TouchableOpacity key={channel.id} style={styles.channelCard} onPress={() => { 
+                    if (!channel.isJoined) {
+                      handleJoinChannel(channel); 
+                    } else {
+                      setActiveChatId(channel.id);
+                      onNavigate('chat-detail');
+                    }
+                  }}>
                     <View style={styles.channelIconBox}>
                       <Hash size={20} color="#0057bd" />
                     </View>
@@ -359,7 +366,14 @@ export default function ExploreScreen({ onBack, onNavigate }: { onBack: () => vo
                       </View>
                     </View>
                     <TouchableOpacity
-                      onPress={() => { if (!channel.isJoined) handleJoinChannel(channel); }}
+                      onPress={() => { 
+                        if (!channel.isJoined) {
+                          handleJoinChannel(channel); 
+                        } else {
+                          setActiveChatId(channel.id);
+                          onNavigate('chat-detail');
+                        }
+                      }}
                       disabled={channel.isJoined || joiningChannelId === channel.id || requestedChannels.has(channel.id)}
                       style={[styles.joinBtn, channel.isJoined ? styles.joinBtnJoined : requestedChannels.has(channel.id) ? styles.joinBtnReq : styles.joinBtnActive]}
                     >
@@ -437,7 +451,7 @@ export default function ExploreScreen({ onBack, onNavigate }: { onBack: () => vo
                           <Image source={{ uri: user.avatar }} style={styles.userAvatar} />
                         ) : (
                           <View style={styles.userAvatarPlaceholder}>
-                            <Text style={styles.userAvatarTxt}>{(user.displayName || user.name || 'U')[0]}</Text>
+                            <Image source={{ uri: `https://ui-avatars.com/api/?background=random&format=png&name=${encodeURIComponent(user.displayName || user.name || 'U')}` }} style={styles.userAvatar} />
                           </View>
                         )}
                       </TouchableOpacity>

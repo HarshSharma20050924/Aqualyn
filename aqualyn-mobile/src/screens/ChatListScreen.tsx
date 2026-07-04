@@ -443,21 +443,14 @@ export default function ChatListScreen({ onNavigate }: Props) {
 
 {/* Main Messaging / Streams Center */}
        <View style={{ flex: 1, position: 'relative' }}>
-         {refreshing && (
-           <View style={{ position: 'absolute', top: headerHeight + 10, left: 0, right: 0, zIndex: 100, alignItems: 'center' }}>
-             <BubbleLoader size={30} />
-           </View>
-         )}
          <ScrollView 
            contentContainerStyle={[styles.mainScroll, { paddingTop: headerHeight + 12, paddingBottom: insets.bottom + 100 }]}
            refreshControl={
              <RefreshControl
                refreshing={refreshing}
                onRefresh={onRefresh}
-               tintColor="transparent"
-               colors={['transparent']}
-               progressBackgroundColor="transparent"
-               progressViewOffset={-1000}
+               colors={['#0057bd']}
+               tintColor="#0057bd"
              />
            }
          >
@@ -501,7 +494,7 @@ export default function ChatListScreen({ onNavigate }: Props) {
                             onPress={() => { setActiveContactId(user.id); onNavigate('contact-profile'); }}
                             style={styles.globalUserAvatarWrapper}
                           >
-                            <Image source={{ uri: user.avatar || `https://ui-avatars.com/api/?background=random&name=${encodeURIComponent(user.displayName || user.name || 'User')}` }} style={styles.globalUserAvatar} />
+                            <Image source={{ uri: (user.avatar && user.avatar.trim() !== '') ? user.avatar : `https://ui-avatars.com/api/?background=random&format=png&name=${encodeURIComponent(user.displayName || user.name || 'User')}` }} style={styles.globalUserAvatar} />
                           </TouchableOpacity>
                           <View style={styles.globalUserMeta}>
                             <View style={styles.globalUserNameRow}>
@@ -564,7 +557,7 @@ export default function ChatListScreen({ onNavigate }: Props) {
                             </View>
                           ) : (
                             <View style={styles.avatarTouchArea}>
-                              <Image source={{ uri: chat.avatar || `https://ui-avatars.com/api/?background=random&name=${encodeURIComponent(chat.name || 'Chat')}` }} style={styles.chatListItemAvatar} />
+                              <Image source={{ uri: (chat.avatar && chat.avatar.trim() !== '') ? chat.avatar : `https://ui-avatars.com/api/?background=random&format=png&name=${encodeURIComponent(chat.name || 'Chat')}` }} style={styles.chatListItemAvatar} />
                               <View style={styles.aquaGlowDot} />
                             </View>
                           )}
@@ -622,7 +615,7 @@ export default function ChatListScreen({ onNavigate }: Props) {
                               <UserPlus size={22} color="#0057bd" />
                             </View>
                           ) : (
-                            <Image source={{ uri: chat.avatar || `https://ui-avatars.com/api/?background=random&name=${encodeURIComponent(chat.name || 'Chat')}` }} style={styles.chatListItemAvatarRound} />
+                            <Image source={{ uri: (chat.avatar && chat.avatar.trim() !== '') ? chat.avatar : `https://ui-avatars.com/api/?background=random&format=png&name=${encodeURIComponent(chat.name || 'Chat')}` }} style={styles.chatListItemAvatarRound} />
                           )}
                           {isSelectionMode && (
                             <View style={[styles.selectionCheckCircle, isSelected ? styles.checkSelectedBg : styles.checkUnselectedBg]}>
