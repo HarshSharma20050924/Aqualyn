@@ -35,14 +35,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [globalUsers, setGlobalUsers] = useState<User[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [activeContactId, setActiveContactId] = useState<string | null>(null);
+  // Store the ID of the chat from which we navigated to a contact profile
+  const [originChatId, setOriginChatId] = useState<string | null>(null);
 
   const activeChatIdRef = useRef<string | null>(null);
   const currentUserRef = useRef<User | null>(null);
 
+  const chatsRef = useRef<Chat[]>([]);
+
   useEffect(() => {
     activeChatIdRef.current = activeChatId;
     currentUserRef.current = currentUser;
-  }, [activeChatId, currentUser]);
+    chatsRef.current = chats;
+  }, [activeChatId, currentUser, chats]);
 
   const addToast = (message: string, type: ToastType, options?: { avatar?: string; title?: string }) => {
     const id = Date.now().toString();
@@ -101,17 +106,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       const mapPost = (p: any): Post => ({
         ...p,
-        userName: p.author?.displayName || p.author?.username || 'User',
-        userAvatar: p.author?.avatar,
-        caption: p.content || '',
+        userId: p.authorId || p.userId,
+        userName: p.author?.displayName || p.author?.username || p.userName || 'User',
+        userAvatar: p.author?.avatar || p.userAvatar,
+        caption: p.content || p.caption || '',
         likes: p.likes?.map((l: any) => l.userId).filter(Boolean) || [],
         comments: p.comments?.map((c: any) => ({
           id: c.id, userId: c.userId,
-          userName: c.user?.displayName || c.user?.username || 'User',
-          userAvatar: c.user?.avatar, text: c.content || '',
+          userName: c.user?.displayName || c.user?.username || c.userName || 'User',
+          userAvatar: c.user?.avatar || c.userAvatar, text: c.content || c.text || '',
           timestamp: c.createdAt ? new Date(c.createdAt).toLocaleString() : 'Just now'
         })) || [],
-        timestamp: p.createdAt ? new Date(p.createdAt).toLocaleString() : 'Just now'
+        timestamp: p.createdAt ? new Date(p.createdAt).toLocaleString() : 'Just now',
+        mediaUrl: p.mediaUrl || p.imageUrl || p.videoUrl,
+        imageUrl: p.mediaUrl || p.imageUrl,
+        videoUrl: p.videoUrl,
       });
 
       let mergedNotifs: any[] = [];
@@ -234,7 +243,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (currentUser?.id) newSocket.emit('join', currentUser.id);
       });
       newSocket.on('receive_message', (msg: Message) => {
-        setMessages(prev => ({ ...prev, [msg.chatId]: [...(prev[msg.chatId] || []), msg] }));
+        // Skip own messages — they are handled optimistically + via message_sent_ack
+        if (msg.senderId === currentUserRef.current?.id) return;
+
+        setMessages(prev => {
+          const existing = prev[msg.chatId] || [];
+          // Deduplicate: don't add if same id already present
+          if (existing.some(m => m.id === msg.id)) return prev;
+          return { ...prev, [msg.chatId]: [...existing, msg] };
+        });
         setChats(prev => {
           const chatIdx = prev.findIndex(c => c.id === msg.chatId);
           if (chatIdx !== -1) {
@@ -263,13 +280,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
           }
         });
 
-        // Native Alert Management implementation mimicking logic
+        // Show toast if the chat isn't currently active
         if (activeChatIdRef.current !== msg.chatId) {
+          const chat = chatsRef.current.find(c => c.id === msg.chatId);
+          if (chat?.isMuted) return;
+
           const senderName = (msg as any).sender?.displayName || (msg as any).sender?.username || 'Someone';
+          const chatName = (msg as any).chat?.isGroup ? `Group: ${(msg as any).chat.name}` : senderName;
           const msgText = msg.text || 'Sent an attachment';
 
           addToast(msgText, 'info', {
-            title: senderName,
+            title: chatName,
             avatar: (msg as any).sender?.avatar
           });
         }
@@ -348,7 +369,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
 
       newSocket.on('receive_new_post', (data: { post: Post }) => {
-        setPosts(prev => [data.post, ...prev]);
+        setPosts(prev => [mapPost(data.post), ...prev]);
       });
 
       newSocket.on('receive_post_like', (data: { postId: string, userId: string, liked: boolean }) => {
@@ -389,7 +410,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
 
       newSocket.on('receive_new_post', (data: { post: any }) => {
-        setPosts(prev => [data.post, ...prev.filter(p => p.id !== data.post.id)]);
+        const mappedPost = mapPost(data.post);
+        setPosts(prev => [mappedPost, ...prev.filter(p => p.id !== mappedPost.id)]);
       });
       newSocket.on('chat_joined', (newGroupChat: Chat) => {
         setChats(prev => [newGroupChat, ...prev]);
@@ -422,7 +444,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   return (
     <AppContext.Provider value={{
       currentUser, setCurrentUser, socket, chats, setChats, messages, setMessages, contacts, fetchInitialData, ...actions,
-      activeChatId, setActiveChatId, activeContactId, setActiveContactId,
+      activeChatId, setActiveChatId, originChatId, setOriginChatId, activeContactId, setActiveContactId,
       toasts, addToast, removeToast, isLoading, setIsLoading, isFetchingData,
       folders, setFolders, theme, setTheme, aquaIntensity, setAquaIntensity,
       appLockPin, setAppLockPin, archiveLockPin, setArchiveLockPin, isAppLocked, setIsAppLocked,

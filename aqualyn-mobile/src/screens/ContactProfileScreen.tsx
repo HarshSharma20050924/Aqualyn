@@ -51,6 +51,9 @@ export default function ContactProfileScreen({ onBack, onNavigate }: Props) {
     contacts,
     activeContactId,
     setActiveContactId,
+    setActiveChatId,
+    originChatId,
+    setOriginChatId,
     startChatWithContact,
     addToast,
     chats,
@@ -190,6 +193,11 @@ export default function ContactProfileScreen({ onBack, onNavigate }: Props) {
 
   const handleMessage = () => {
     startChatWithContact(contact.id);
+    // If we came from a chat, restore originChatId then navigate to chat-detail
+    if (originChatId) {
+      setActiveChatId(originChatId);
+      setOriginChatId(null);
+    }
     setTimeout(() => {
       onNavigate('chat-detail');
     }, 50);
@@ -255,7 +263,7 @@ export default function ContactProfileScreen({ onBack, onNavigate }: Props) {
           <View style={styles.metaSpacing}>
             <Text style={styles.displayNameText}>{displayName}</Text>
             <Text style={styles.usernameHandleText}>@{username}</Text>
-            {contact.bio && <Text style={styles.bioText}>{contact.bio}</Text>}
+            {!!contact.bio && <Text style={styles.bioText}>{contact.bio}</Text>}
           </View>
 
           {/* Social Counts Line */}

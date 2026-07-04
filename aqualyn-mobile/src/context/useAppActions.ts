@@ -75,7 +75,7 @@ export const useAppActions = (
     setGlobalUsers([]);
 
     // Step 5: Navigate to the login screen
-    router.replace('/login');
+    router.replace('/login' as any);
   };
 
   const archiveChat = (chatId: string) => {
@@ -235,7 +235,7 @@ export const useAppActions = (
       text,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       isRead: false,
-      status: 'sending',
+      status: 'sent',
       ...options
     };
     
@@ -959,10 +959,49 @@ export const useAppActions = (
     }
   };
 
+  const deleteComment = async (postId: string, commentId: string) => {
+    // Optimistically remove from UI
+    setPosts(prev => prev.map(post => {
+      if (post.id === postId) {
+        return { ...post, comments: post.comments.filter((c: any) => c.id !== commentId) };
+      }
+      return post;
+    }));
+    try {
+      const res = await apiFetch(ENDPOINTS.DELETE_COMMENT(commentId), { method: 'DELETE' });
+      if (res.ok) {
+        addToast('Comment deleted', 'success');
+      } else {
+        // Rollback on failure by re-fetching feed (too complex to cache old state)
+        addToast('Failed to delete comment', 'error');
+      }
+    } catch (e) {
+      console.error(e);
+      addToast('Failed to delete comment', 'error');
+    }
+  };
+
+  const pinComment = async (postId: string, commentId: string) => {
+    try {
+      setPosts(prev => prev.map(post => {
+        if (post.id === postId) {
+          const newComments = post.comments.map((c: any) => c.id === commentId ? { ...c, isPinned: !c.isPinned } : c);
+          newComments.sort((a: any, b: any) => (b.isPinned ? 1 : 0) - (a.isPinned ? 1 : 0));
+          return { ...post, comments: newComments };
+        }
+        return post;
+      }));
+      addToast('Comment pin updated', 'success');
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   return {
     logout, archiveChat, pinChat, muteChat, deleteMessage, deleteChat, clearHistory, 
     blockContact, reportContact, markAsRead, createFolder, deleteFolder, addChatToFolder,
     sendMessage, setTyping, editMessage, addReaction, addPost, likePost, commentPost,
+    deleteComment, pinComment,
     followUser, unfollowUser, acceptFollowRequest, rejectFollowRequest, archivePost,
     pinPost, savePost, createCollection, addPostToCollection, deletePost, addStory, deleteStory, addStoryComment,
     updateStorySettings, toggleCloseFriend, addContact, startChatWithContact, createGroupChat,

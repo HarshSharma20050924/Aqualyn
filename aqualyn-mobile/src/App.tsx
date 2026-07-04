@@ -32,6 +32,7 @@ import ContactProfileScreen from './screens/ContactProfileScreen';
 import NotificationsScreen from './screens/NotificationsScreen';
 import FeedScreen from './screens/FeedScreen';
 import LinkedDevicesScreen from './screens/LinkedDevicesScreen';
+import ExploreScreen from './screens/ExploreScreen';
 
 // Global Overlays & Modals
 import BottomNav from './components/BottomNav';
@@ -100,6 +101,8 @@ export default function App() {
          return <LoginScreen onLogin={() => setCurrentScreen('chats')} />;
        case 'feed':
          return <FeedScreen onNavigate={setCurrentScreen} />;
+       case 'explore':
+         return <ExploreScreen onBack={() => setCurrentScreen('chats')} onNavigate={setCurrentScreen} />;
        case 'chats':
          return <ChatListScreen onNavigate={setCurrentScreen} />;
        case 'chat-detail':
@@ -128,6 +131,7 @@ const shouldShowBottomNav =
   currentScreen !== 'auth' && 
   currentScreen !== 'login' && 
   currentScreen !== 'chat-detail' && 
+  currentScreen !== 'explore' && 
   currentScreen !== 'contact-profile' && 
   currentScreen !== 'edit-profile' && 
   currentScreen !== 'notifications';

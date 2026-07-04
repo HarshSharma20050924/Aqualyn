@@ -16,14 +16,14 @@ import { X, Search, Check } from 'lucide-react-native';
 interface ShareContactModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onShare: (contactId: string) => void;
+  onShare: (contactIds: string[]) => void;
   appContext: any; // Mapped context framework passed explicitly
 }
 
 export default function ShareContactModal({ isOpen, onClose, onShare, appContext }: ShareContactModalProps) {
   const { chats, currentUser } = appContext;
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedContact, setSelectedContact] = useState<string | null>(null);
+  const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
 
   if (!isOpen) return null;
 
@@ -31,10 +31,18 @@ export default function ShareContactModal({ isOpen, onClose, onShare, appContext
   const filteredContacts = contacts.filter((c: any) => c.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
   const handleShare = () => {
-    if (selectedContact) {
-      onShare(selectedContact);
+    if (selectedContacts.length > 0) {
+      onShare(selectedContacts);
       onClose();
+      setSelectedContacts([]);
+      setSearchQuery('');
     }
+  };
+
+  const toggleContact = (id: string) => {
+    setSelectedContacts(prev => 
+      prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]
+    );
   };
 
   return (
@@ -75,11 +83,11 @@ export default function ShareContactModal({ isOpen, onClose, onShare, appContext
           {/* Scrollable Bound List Target Contact Stack */}
           <ScrollView style={styles.scrollableVerticalListStackMaxHeightContainer}>
             {filteredContacts.map((contact: any) => {
-              const isCurrentSelected = selectedContact === contact.id;
+              const isCurrentSelected = selectedContacts.includes(contact.id);
               return (
                 <TouchableOpacity
                   key={contact.id}
-                  onPress={() => setSelectedContact(contact.id)}
+                  onPress={() => toggleContact(contact.id)}
                   style={[
                     styles.contactSelectionCellContainerRow,
                     isCurrentSelected && styles.contactCellStateActiveHighlightBg
@@ -110,11 +118,13 @@ export default function ShareContactModal({ isOpen, onClose, onShare, appContext
           {/* Core Footer CTA Share Trigger Action Button */}
           <TouchableOpacity
             onPress={handleShare}
-            disabled={!selectedContact}
-            style={[styles.footerShareActionCtaButtonNode, !selectedContact && styles.ctaStateDisabledOpacity]}
+            disabled={selectedContacts.length === 0}
+            style={[styles.footerShareActionCtaButtonNode, selectedContacts.length === 0 && styles.ctaStateDisabledOpacity]}
             activeOpacity={0.8}
           >
-            <Text style={styles.ctaButtonTypographyTextLabel}>Share</Text>
+            <Text style={styles.ctaButtonTypographyTextLabel}>
+              Share {selectedContacts.length > 0 ? `(${selectedContacts.length})` : ''}
+            </Text>
           </TouchableOpacity>
 
         </Animated.View>

@@ -11,7 +11,9 @@ import {
   Platform,
 } from 'react-native';
 import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
-import { X, Search, Users, ArrowRight, Camera, Check, ArrowLeft, Shield, Clock, UserPlus } from 'lucide-react-native';
+import { X, Search, Users, ArrowRight, Camera, Check, ArrowLeft, Shield, Clock, UserPlus, Radio, Globe, Lock } from 'lucide-react-native';
+import { ENDPOINTS } from '../../config/api';
+import { apiFetch } from '../../utils/fetcher';
 
 // --- Native Custom Toggle Component ---
 const Toggle = ({ checked, onChange }: { checked: boolean; onChange: (c: boolean) => void }) => (
@@ -48,16 +50,23 @@ interface NewChatModalProps {
 }
 
 export default function NewChatModal({ isOpen, onClose, onNavigate, appContext }: NewChatModalProps) {
-  const { chats, contacts, currentUser, startChatWithContact, createGroupChat, globalUsers } = appContext;
+  const { chats, contacts, currentUser, startChatWithContact, createGroupChat, globalUsers, addToast, fetchInitialData, setActiveChatId } = appContext;
   
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
-  const [mode, setMode] = useState<'default' | 'group-select' | 'group-info'>('default');
+  const [mode, setMode] = useState<'default' | 'group-select' | 'group-info' | 'channel-info'>('default');
   
   const [groupName, setGroupName] = useState('');
   const [groupDesc, setGroupDesc] = useState('');
   const [disappearing, setDisappearing] = useState(false);
   const [adminOnly, setAdminOnly] = useState(false);
+
+  const [channelName, setChannelName] = useState('');
+  const [channelHandle, setChannelHandle] = useState('');
+  const [channelDesc, setChannelDesc] = useState('');
+  const [channelCategory, setChannelCategory] = useState('');
+  const [channelType, setChannelType] = useState<'PUBLIC' | 'PRIVATE' | 'INVITE_ONLY'>('PUBLIC');
+  const [isChannelCreating, setIsChannelCreating] = useState(false);
 
   if (!isOpen) return null;
 
@@ -140,6 +149,48 @@ export default function NewChatModal({ isOpen, onClose, onNavigate, appContext }
     onNavigate('chat-detail');
   };
 
+  const handleCreateChannel = async () => {
+    if (!channelName.trim() || !channelHandle.trim()) return;
+    setIsChannelCreating(true);
+    try {
+      const res = await apiFetch(ENDPOINTS.CHANNELS, {
+        method: 'POST',
+        body: JSON.stringify({
+          name: channelName.trim(),
+          handle: channelHandle.trim().toLowerCase().replace(/[^a-z0-9_]/g, ''),
+          description: channelDesc.trim() || undefined,
+          category: channelCategory.trim() || undefined,
+          type: channelType,
+          isDiscoverable: channelType === 'PUBLIC',
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        addToast?.(err.message || 'Failed to create channel', 'error');
+        return;
+      }
+      const data = await res.json();
+      addToast?.(`Channel @${channelHandle} created!`, 'success');
+      
+      if (data.channel) {
+        appContext.setChats?.((prev: any[]) => [data.channel, ...prev]);
+      }
+      
+      fetchInitialData?.().catch(() => {});
+      handleClose();
+      if (data.channel?.id) {
+        onNavigate('chat-detail');
+        setTimeout(() => {
+          appContext.setActiveChatId?.(data.channel.id);
+        }, 100);
+      }
+    } catch {
+      addToast?.('Failed to create channel', 'error');
+    } finally {
+      setIsChannelCreating(false);
+    }
+  };
+
   const handleClose = () => {
     setMode('default');
     setSelectedContacts([]);
@@ -148,6 +199,11 @@ export default function NewChatModal({ isOpen, onClose, onNavigate, appContext }
     setSearchQuery('');
     setDisappearing(false);
     setAdminOnly(false);
+    setChannelName('');
+    setChannelHandle('');
+    setChannelDesc('');
+    setChannelCategory('');
+    setChannelType('PUBLIC');
     onClose();
   };
 
@@ -178,10 +234,11 @@ export default function NewChatModal({ isOpen, onClose, onNavigate, appContext }
             )}
             <View style={styles.titleStackedTextLabelsColumn}>
               <Text style={styles.toolbarPrimaryTitleText}>
-                {mode === 'default' ? 'New Chat' : 'New Group'}
+                {mode === 'default' ? 'New Chat' : mode === 'channel-info' ? 'New Channel' : 'New Group'}
               </Text>
               {mode === 'group-select' && <Text style={styles.toolbarSubtitleMicroLabel}>Add members</Text>}
               {mode === 'group-info' && <Text style={styles.toolbarSubtitleMicroLabel}>Add subject</Text>}
+              {mode === 'channel-info' && <Text style={styles.toolbarSubtitleMicroLabel}>Set up your channel</Text>}
             </View>
             {mode === 'default' && (
               <TouchableOpacity onPress={handleClose} style={styles.backActionButtonCircularCircle}>
@@ -244,6 +301,12 @@ export default function NewChatModal({ isOpen, onClose, onNavigate, appContext }
                         <Users size={22} color="#ffffff" />
                       </View>
                       <Text style={styles.actionRowLabelPrimaryTypographyHeading}>New Group</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => setMode('channel-info')} style={[styles.actionRowFlexSelectionNode, { marginTop: 12 }]}>
+                      <View style={styles.actionIconContainerCircularWrapperCircle}>
+                        <Radio size={22} color="#ffffff" />
+                      </View>
+                      <Text style={styles.actionRowLabelPrimaryTypographyHeading}>New Channel</Text>
                     </TouchableOpacity>
                   </View>
                 )}
@@ -331,6 +394,92 @@ export default function NewChatModal({ isOpen, onClose, onNavigate, appContext }
               </View>
             )}
 
+            {/* CHANNEL INFO MODE */}
+            {mode === 'channel-info' && (
+              <View style={styles.groupMetaSetupFormLayoutStructureContainer}>
+                <View style={styles.groupAvatarImagePickerFlexibleRowContainer}>
+                  <TouchableOpacity style={styles.groupAvatarCameraPlaceholderCircleFrame}>
+                    <Radio size={24} color="#6366f1" />
+                  </TouchableOpacity>
+                  <View style={styles.groupNameInputWrapperBottomBorderFieldCell}>
+                    <TextInput
+                      placeholder="Channel Name"
+                      placeholderTextColor="rgba(15, 23, 42, 0.4)"
+                      value={channelName}
+                      onChangeText={(t) => {
+                        setChannelName(t);
+                        setChannelHandle(t.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, ''));
+                      }}
+                      style={styles.groupInputFieldFormTypographyFontElementText}
+                      autoFocus
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.descriptionInputFieldWrapperFullWidthContainer}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Text style={{ color: '#64748b', marginRight: 4 }}>@</Text>
+                    <TextInput
+                      placeholder="handle"
+                      placeholderTextColor="rgba(15, 23, 42, 0.4)"
+                      value={channelHandle}
+                      onChangeText={t => setChannelHandle(t.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                      style={[styles.descriptionInputFieldFormTextTypography, { flex: 1, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', color: '#6366f1' }]}
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.descriptionInputFieldWrapperFullWidthContainer}>
+                  <TextInput
+                    placeholder="Description (optional)"
+                    placeholderTextColor="rgba(15, 23, 42, 0.4)"
+                    value={channelDesc}
+                    onChangeText={setChannelDesc}
+                    style={styles.descriptionInputFieldFormTextTypography}
+                    multiline
+                  />
+                </View>
+                
+                <View style={styles.descriptionInputFieldWrapperFullWidthContainer}>
+                  <TextInput
+                    placeholder="Category (e.g. Tech, Music)"
+                    placeholderTextColor="rgba(15, 23, 42, 0.4)"
+                    value={channelCategory}
+                    onChangeText={setChannelCategory}
+                    style={styles.descriptionInputFieldFormTextTypography}
+                  />
+                </View>
+
+                <View style={styles.toggleSettingsOuterBlockPartitionList}>
+                  <Text style={styles.toggleSectionHeadingCapsLabelText}>Channel Type</Text>
+                  
+                  {([
+                    { value: 'PUBLIC', icon: <Globe size={20} color={channelType === 'PUBLIC' ? '#6366f1' : '#64748b'} />, label: 'Public', desc: 'Anyone can find and join' },
+                    { value: 'PRIVATE', icon: <Lock size={20} color={channelType === 'PRIVATE' ? '#6366f1' : '#64748b'} />, label: 'Private', desc: 'Only invited members can join' },
+                    { value: 'INVITE_ONLY', icon: <Shield size={20} color={channelType === 'INVITE_ONLY' ? '#6366f1' : '#64748b'} />, label: 'Invite Only', desc: 'Join via invite link only' },
+                  ] as const).map(opt => (
+                    <TouchableOpacity
+                      key={opt.value}
+                      onPress={() => setChannelType(opt.value as any)}
+                      style={{
+                        flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 12, borderWidth: 1,
+                        borderColor: channelType === opt.value ? 'rgba(99, 102, 241, 0.5)' : 'rgba(15, 23, 42, 0.1)',
+                        backgroundColor: channelType === opt.value ? 'rgba(99, 102, 241, 0.05)' : 'transparent',
+                        marginBottom: 8
+                      }}
+                    >
+                      {opt.icon}
+                      <View style={{ marginLeft: 12, flex: 1 }}>
+                        <Text style={{ fontSize: 14, fontWeight: '600', color: channelType === opt.value ? '#6366f1' : '#0f172a' }}>{opt.label}</Text>
+                        <Text style={{ fontSize: 12, color: '#64748b' }}>{opt.desc}</Text>
+                      </View>
+                      {channelType === opt.value && <Check size={16} color="#6366f1" />}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+
           </ScrollView>
 
           {/* Floating Action Confirmation Buttons Array */}
@@ -347,6 +496,16 @@ export default function NewChatModal({ isOpen, onClose, onNavigate, appContext }
             <TouchableOpacity 
               onPress={handleCreateGroup} 
               style={styles.floatingActionCircleStickyActionButtonElement}
+            >
+              <Check size={24} color="#ffffff" strokeWidth={2.5} />
+            </TouchableOpacity>
+          )}
+
+          {mode === 'channel-info' && channelName.trim().length > 0 && channelHandle.trim().length > 0 && (
+            <TouchableOpacity 
+              onPress={handleCreateChannel} 
+              disabled={isChannelCreating}
+              style={[styles.floatingActionCircleStickyActionButtonElement, isChannelCreating && { opacity: 0.6 }]}
             >
               <Check size={24} color="#ffffff" strokeWidth={2.5} />
             </TouchableOpacity>

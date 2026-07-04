@@ -12,7 +12,8 @@ import {
   Platform,
   Vibration,
   Alert,
-  RefreshControl
+  RefreshControl,
+  ActivityIndicator
 } from 'react-native';
 import Animated, {
   FadeIn,
@@ -48,7 +49,8 @@ import {
   ChevronRight,
   X,
   Check,
-  MonitorSmartphone
+  MonitorSmartphone,
+  Droplet
 } from 'lucide-react-native';
 
 import { useAppContext } from '../context/AppContext';
@@ -95,7 +97,9 @@ export default function ChatListScreen({ onNavigate }: Props) {
     setActiveContactId,
     globalUsers,
     createGroupChat,
-    fetchInitialData
+    fetchInitialData,
+    setChats,
+    createFolder
   } = useAppContext();
 
   const [activeTab, setActiveTab] = useState<string>('all');
@@ -122,6 +126,41 @@ export default function ChatListScreen({ onNavigate }: Props) {
   const [chatToDelete, setChatToDelete] = useState<string | null>(null);
 
   const [isSearchLoading, setIsSearchLoading] = useState(false);
+  const [isLynLoading, setIsLynLoading] = useState(false);
+
+  const handleInitiateLynChat = async () => {
+    setIsLynLoading(true);
+    try {
+      const res = await apiFetch(ENDPOINTS.AI_INITIATE_CHAT);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.chatId) {
+          setActiveChatId(data.chatId);
+          onNavigate('chat-detail');
+          return;
+        }
+      }
+      // Fallback: find the local lyn chat or use the first lyn-type chat
+      const lynChat = chats.find((c: any) => c.isLyn || c.id === 'lyn' || c.name === 'Lyn');
+      if (lynChat) {
+        setActiveChatId(lynChat.id);
+        onNavigate('chat-detail');
+      } else {
+        addToast('Lyn AI chat is not available yet', 'info');
+      }
+    } catch (error) {
+      // Network error — try local fallback
+      const lynChat = chats.find((c: any) => c.isLyn || c.id === 'lyn' || c.name === 'Lyn');
+      if (lynChat) {
+        setActiveChatId(lynChat.id);
+        onNavigate('chat-detail');
+      } else {
+        addToast('Could not open Lyn chat', 'error');
+      }
+    } finally {
+      setIsLynLoading(false);
+    }
+  };
 
   const onRefresh = React.useCallback(async () => {
     setRefreshing(true);
@@ -350,7 +389,7 @@ export default function ChatListScreen({ onNavigate }: Props) {
                 <Text style={styles.brandTitleText}>Aqualyn</Text>
               </View>
               <View style={styles.utilityActionsRow}>
-                <TouchableOpacity onPress={() => setIsSearching(true)} style={styles.iconPadCircle}>
+                <TouchableOpacity onPress={() => onNavigate('explore')} style={styles.iconPadCircle}>
                   <Search size={22} color="#0891b2" />
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => setShowHeaderMenu(!showHeaderMenu)} style={styles.iconPadCircle}>
@@ -631,7 +670,16 @@ export default function ChatListScreen({ onNavigate }: Props) {
       </View>
 
       {/* Floating Action Pen System Dock */}
-      <TouchableOpacity onPress={() => setIsNewChatModalOpen(true)} style={styles.floatingActionPen}>
+      <TouchableOpacity
+        onPress={handleInitiateLynChat}
+        style={[styles.floatingActionPen, { bottom: 160, zIndex: 10, backgroundColor: '#fff', borderWidth: 1, borderColor: '#0891b2' }]}
+      >
+        {isLynLoading
+          ? <ActivityIndicator size="small" color="#0891b2" />
+          : <Droplet size={24} color="#0891b2" />}
+      </TouchableOpacity>
+
+      <TouchableOpacity onPress={() => setIsNewChatModalOpen(true)} style={[styles.floatingActionPen, { zIndex: 9 }]}>
         <Pen size={22} color="#fff" />
       </TouchableOpacity>
 
@@ -737,8 +785,8 @@ export default function ChatListScreen({ onNavigate }: Props) {
       </Modal>
 
       {/* Auxiliary Operational Overlays */}
-      <NewChatModal isOpen={isNewChatModalOpen} onClose={() => setIsNewChatModalOpen(false)} onNavigate={onNavigate} appContext={{ chats, contacts, currentUser, addToast, globalUsers, startChatWithContact, createGroupChat }} />
-      <NewFolderModal isOpen={isNewFolderModalOpen} onClose={() => setIsNewFolderModalOpen(false)} appContext={{ addToast }} />
+      <NewChatModal isOpen={isNewChatModalOpen} onClose={() => setIsNewChatModalOpen(false)} onNavigate={onNavigate} appContext={{ chats, contacts, currentUser, addToast, globalUsers, startChatWithContact, createGroupChat, fetchInitialData, setActiveChatId, setChats }} />
+      <NewFolderModal isOpen={isNewFolderModalOpen} onClose={() => setIsNewFolderModalOpen(false)} appContext={{ addToast, chats, createFolder, folders }} />
       {peekChatId && (
         <ChatPeekPreview
           chat={chats.find((c) => c.id === peekChatId)!}
@@ -891,7 +939,7 @@ const styles = StyleSheet.create({
   // Footer Architecture markers
   encryptionFooterLock: { alignItems: 'center', gap: 6, marginTop: 32, opacity: 0.5 },
   encryptionFooterText: { fontSize: 10, fontWeight: '600', color: '#64748b', textAlign: 'center', textTransform: 'uppercase', letterSpacing: 1 },
-  floatingActionPen: { position: 'absolute', right: 20, bottom: 90, width: 56, height: 56, borderRadius: 18, backgroundColor: '#0057bd', justifyContent: 'center', alignItems: 'center', shadowColor: '#0057bd', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5 },
+  floatingActionPen: { position: 'absolute', right: 20, bottom: 90, width: 56, height: 56, borderRadius: 18, backgroundColor: '#0057bd', justifyContent: 'center', alignItems: 'center', elevation: 8 },
 
   // Skeleton UI components
   skeletonContainer: { gap: 8 },

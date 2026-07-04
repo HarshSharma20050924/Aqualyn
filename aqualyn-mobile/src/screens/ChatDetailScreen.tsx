@@ -25,26 +25,29 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  ArrowLeft,
-  Video,
-  Phone,
   MoreVertical,
-  Plus,
+  Phone,
+  Video,
+  Search,
+  ArrowLeft,
+  Lock,
   Smile,
   Mic,
-  CheckCheck,
-  Users,
   X,
-  Clock,
-  Lock,
-  Search,
-  Download,
-  Trash2,
-  Edit2,
+  CheckCheck,
   Share2,
   UserPlus,
-  User
+  User,
+  Droplet,
+  ChevronDown,
+  Users,
+  Trash2,
+  Clock,
+  Check,
+  Sparkles
 } from 'lucide-react-native';
+
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { useAppContext } from '../context/AppContext';
 import { useCall } from '../context/CallContext';
@@ -62,6 +65,7 @@ import GroupInfoScreen from './GroupInfoScreen';
 import SecretChatInfoScreen from './SecretChatInfoScreen';
 import ShareContactModal from '../components/chat/ShareContactModal';
 import BubbleLoader from '../components/ui/BubbleLoader';
+import LynPanel from '../components/ai/LynPanel';
 
 import { uploadFile } from '../utils/uploads';
 
@@ -85,6 +89,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
     addToast,
     setActiveChatId,
     setActiveContactId,
+    setOriginChatId,
     contacts,
     globalUsers,
     followUser,
@@ -115,6 +120,8 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isShareContactOpen, setIsShareContactOpen] = useState(false);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const isProgrammaticScroll = useRef(false);
 
   // Gallery and Modals
   const [galleryMedia, setGalleryMedia] = useState<{ id: string, url: string, type: 'image' | 'video' }[]>([]);
@@ -122,6 +129,127 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
   const [isGalleryOpen, setIsGalleryOpen] = useState(false);
   const [isGroupInfoOpen, setIsGroupInfoOpen] = useState(false);
   const [isSecretInfoOpen, setIsSecretInfoOpen] = useState(false);
+
+  // Lyn AI Settings
+  const [showLynPanel, setShowLynPanel] = useState(false);
+  const [aiEnabled, setAiEnabled] = useState(true);
+  const [aiSuggestionsEnabled, setAiSuggestionsEnabled] = useState(true);
+  const [lynPersonality, setLynPersonality] = useState('friendly');
+  const [lynCustomPersonality, setLynCustomPersonality] = useState('');
+  const [lynFriendMode, setLynFriendMode] = useState(false);
+  const [lynResponseRate, setLynResponseRate] = useState(50);
+
+  // Smart replies state
+  const [smartReplies, setSmartReplies] = useState<string[]>([]);
+  const [hideSmartReplies, setHideSmartReplies] = useState(false);
+
+  // AI Mention / Draft state
+  const [isAiMentionMenuOpen, setIsAiMentionMenuOpen] = useState(false);
+  const [isDraftConfirmOpen, setIsDraftConfirmOpen] = useState(false);
+  const [draftText, setDraftText] = useState('');
+  const [isDraftLoading, setIsDraftLoading] = useState(false);
+
+  // Load Lyn settings
+  useEffect(() => {
+    if (!activeChatId) return;
+    const loadSettings = async () => {
+      try {
+        const en = await AsyncStorage.getItem(`lyn_enabled_${activeChatId}`);
+        const sug = await AsyncStorage.getItem(`lyn_suggestions_${activeChatId}`);
+        const per = await AsyncStorage.getItem(`lyn_personality_${activeChatId}`);
+        const cus = await AsyncStorage.getItem(`lyn_customPersonality_${activeChatId}`);
+        const fm = await AsyncStorage.getItem(`lyn_friendMode_${activeChatId}`);
+        const rr = await AsyncStorage.getItem(`lyn_responseRate_${activeChatId}`);
+
+        if (en !== null) setAiEnabled(JSON.parse(en));
+        else setAiEnabled(true);
+        if (sug !== null) setAiSuggestionsEnabled(JSON.parse(sug));
+        else setAiSuggestionsEnabled(true);
+        if (per !== null) setLynPersonality(JSON.parse(per));
+        else setLynPersonality('friendly');
+        if (cus !== null) setLynCustomPersonality(JSON.parse(cus));
+        else setLynCustomPersonality('');
+        if (fm !== null) setLynFriendMode(JSON.parse(fm));
+        else setLynFriendMode(false);
+        if (rr !== null) setLynResponseRate(JSON.parse(rr));
+        else setLynResponseRate(50);
+      } catch (e) {
+        console.error('Failed to load Lyn settings', e);
+      }
+    };
+    loadSettings();
+  }, [activeChatId]);
+
+  // Fetch smart replies when chat or messages change
+  useEffect(() => {
+    if (!activeChatId || !aiEnabled || !aiSuggestionsEnabled) {
+      setSmartReplies([]);
+      return;
+    }
+    setHideSmartReplies(false);
+    let cancelled = false;
+    const fetchReplies = async () => {
+      try {
+        const res = await apiFetch(ENDPOINTS.AI_SMART_REPLY, {
+          method: 'POST',
+          body: JSON.stringify({ chatId: activeChatId })
+        });
+        if (!cancelled && res.ok) {
+          const data = await res.json();
+          const replies = data.replies || [];
+          if (Array.isArray(replies) && replies.length > 0) {
+            setSmartReplies(replies.slice(0, 4));
+          }
+        }
+      } catch {
+        // silently fail
+      }
+    };
+    fetchReplies();
+    return () => { cancelled = true; };
+  }, [activeChatId, aiEnabled, aiSuggestionsEnabled, (messages[activeChatId || ''] || []).length]);
+
+  const handleGenerateDraft = async () => {
+    setIsDraftLoading(true);
+    setDraftText('');
+    try {
+      const tone = lynCustomPersonality.trim() || lynPersonality;
+      const res = await apiFetch(ENDPOINTS.AI_DRAFT, {
+        method: 'POST',
+        body: JSON.stringify({ chatId: activeChatId, personality: tone })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setDraftText(data.draft || 'Could not generate draft.');
+      } else {
+        setDraftText('Unable to generate a draft. Please try again.');
+      }
+    } catch { 
+      setDraftText('Unable to generate a draft. Please try again.'); 
+    } finally { 
+      setIsDraftLoading(false); 
+    }
+  };
+
+  const handleLynSave = async (settings: { aiEnabled: boolean; aiSuggestionsEnabled: boolean; personality: string; customPersonality: string; friendMode: boolean; responseRate: number; }) => {
+    if (!activeChatId) return;
+    setAiEnabled(settings.aiEnabled);
+    setAiSuggestionsEnabled(settings.aiSuggestionsEnabled);
+    setLynPersonality(settings.personality);
+    setLynCustomPersonality(settings.customPersonality);
+    setLynFriendMode(settings.friendMode);
+    setLynResponseRate(settings.responseRate);
+    try {
+      await AsyncStorage.setItem(`lyn_enabled_${activeChatId}`, JSON.stringify(settings.aiEnabled));
+      await AsyncStorage.setItem(`lyn_suggestions_${activeChatId}`, JSON.stringify(settings.aiSuggestionsEnabled));
+      await AsyncStorage.setItem(`lyn_personality_${activeChatId}`, JSON.stringify(settings.personality));
+      await AsyncStorage.setItem(`lyn_customPersonality_${activeChatId}`, JSON.stringify(settings.customPersonality));
+      await AsyncStorage.setItem(`lyn_friendMode_${activeChatId}`, JSON.stringify(settings.friendMode));
+      await AsyncStorage.setItem(`lyn_responseRate_${activeChatId}`, JSON.stringify(settings.responseRate));
+    } catch (e) {
+      console.error('Failed to save Lyn settings', e);
+    }
+  };
 
   const chat = chats.find(c => c.id === activeChatId);
   const chatMessages = activeChatId ? (messages[activeChatId] || []) : [];
@@ -169,20 +297,49 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
 
   // Auto scroll to bottom
   const scrollToBottom = () => {
+    isProgrammaticScroll.current = true;
     setTimeout(() => {
       scrollRef.current?.scrollToEnd({ animated: true });
+      setShowScrollToBottom(false);
+      setTimeout(() => { isProgrammaticScroll.current = false; }, 500);
     }, 100);
   };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [chatMessages.length]);
 
   useEffect(() => {
     if (activeChatId) {
       markAsRead(activeChatId);
     }
   }, [activeChatId, chatMessages.length]);
+
+  // Initial scroll restoration
+  useEffect(() => {
+    if (!activeChatId || isLoadingMessages) return;
+    
+    const restoreScroll = async () => {
+      try {
+        const savedOffset = await AsyncStorage.getItem(`chatScroll_${activeChatId}`);
+        if (savedOffset) {
+          isProgrammaticScroll.current = true;
+          setTimeout(() => {
+            scrollRef.current?.scrollTo({ y: parseFloat(savedOffset), animated: false });
+            setShowScrollToBottom(true);
+            setTimeout(() => { isProgrammaticScroll.current = false; }, 500);
+          }, 100);
+        } else {
+          scrollToBottom();
+        }
+      } catch (err) {
+        scrollToBottom();
+      }
+    };
+    restoreScroll();
+  }, [activeChatId, isLoadingMessages]);
+
+  useEffect(() => {
+    if (chatMessages.length > 0 && !isLoadingMessages && !isProgrammaticScroll.current && !showScrollToBottom) {
+      scrollToBottom();
+    }
+  }, [chatMessages.length]);
 
   // Fetch messages from API when opening a chat
   useEffect(() => {
@@ -219,7 +376,18 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
   }, [activeChatId]);
 
   const handleScroll = async (e: any) => {
-    const { contentOffset } = e.nativeEvent;
+    if (isProgrammaticScroll.current) return;
+
+    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+    
+    // Check if user is scrolled up
+    const isAtBottom = contentSize.height - layoutMeasurement.height - contentOffset.y < 150;
+    setShowScrollToBottom(!isAtBottom);
+
+    if (activeChatId) {
+      AsyncStorage.setItem(`chatScroll_${activeChatId}`, contentOffset.y.toString());
+    }
+
     if (contentOffset.y < 100 && hasMore && !isFetchingMore && !isLoadingMessages) {
       setIsFetchingMore(true);
       try {
@@ -309,9 +477,6 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
             try {
               if (activeChatId) {
                 const url = await uploadFile({ uri: asset.uri, name: asset.name, type: asset.mimeType || 'application/octet-stream' });
-                // We send it as a message text or file? In the backend do we have documentUrl?
-                // For now just sending it as a message or if chat.message model supports it.
-                // Assuming imageUrl or text with URL link.
                 sendMessage(activeChatId, `Document: ${url}`, { replyToId: replyingTo?.id });
                 addToast('Document sent', 'success');
               }
@@ -371,7 +536,6 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
     setIsRecordingAudio(false);
     if (audioUrl && activeChatId) {
       try {
-        // Direct handling of local file path URI in React Native
         const url = await uploadFile({ uri: audioUrl, name: `voice-${Date.now()}.webm`, type: 'audio/webm' });
         sendMessage(activeChatId, '', { audioUrl: url, replyToId: replyingTo?.id });
         setReplyingTo(null);
@@ -427,10 +591,8 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
 
   const isSecret = chat.isSecret;
 
-
-
   return (
-    <Animated.View  style={[styles.container, isSecret ? styles.bgSecret : styles.bgNormal]}>
+    <Animated.View style={[styles.container, isSecret ? styles.bgSecret : styles.bgNormal]}>
 
       {/* Screenshot Flash Layer */}
       {screenshotAlert && (
@@ -457,6 +619,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
                 else if (chat.isSecret) setIsSecretInfoOpen(true);
                 else {
                   const id = targetUserId || chat.participantIds?.find(uid => uid !== currentUser?.id) || chat.id;
+                  setOriginChatId(activeChatId);
                   setActiveContactId(id);
                   onNavigate('contact-profile');
                 }
@@ -470,7 +633,6 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
               ) : (
                 <Image source={{ uri: chat.avatar }} style={styles.userAvatar} />
               )}
-              <View style={[styles.statusDot, isSecret ? styles.dotSecret : styles.dotNormal]} />
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -479,6 +641,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
                 else if (chat.isSecret) setIsSecretInfoOpen(true);
                 else {
                   const id = targetUserId || chat.participantIds?.find(uid => uid !== currentUser?.id) || chat.id;
+                  setOriginChatId(activeChatId);
                   setActiveContactId(id);
                   onNavigate('contact-profile');
                 }
@@ -489,7 +652,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
                 {isSecret && <Lock size={14} color="#60a5fa" />} {chat.name}
               </Text>
               <Text style={[styles.chatStatus, isSecret ? styles.statusSecret : styles.statusNormal]}>
-                {isSecret ? '🔒 Incognito Session' : 'online now'}
+                {isSecret ? '🔒 Incognito Session' : chat.isGroup ? `${chat.participantIds?.length || 0} members` : ''}
               </Text>
             </TouchableOpacity>
           </View>
@@ -509,7 +672,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
 
         {/* Search Field Dropdown */}
         {isSearchOpen && (
-          <Animated.View   style={styles.searchBarContainer}>
+          <View style={styles.searchBarContainer}>
             <Search size={16} color="#64748b" style={styles.searchIcon} />
             <TextInput
               style={styles.searchInput}
@@ -521,9 +684,27 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
             <TouchableOpacity onPress={() => { setIsSearchOpen(false); setSearchQuery(''); }}>
               <X size={16} color="#64748b" />
             </TouchableOpacity>
-          </Animated.View>
+          </View>
         )}
       </View>
+
+      {/* Lyn AI Settings Panel */}
+      {showLynPanel && (
+        <LynPanel
+          onClose={() => setShowLynPanel(false)}
+          aiEnabled={aiEnabled}
+          aiSuggestionsEnabled={aiSuggestionsEnabled}
+          personality={lynPersonality}
+          customPersonality={lynCustomPersonality}
+          friendMode={lynFriendMode}
+          responseRate={lynResponseRate}
+          onSave={handleLynSave}
+          onDiscoverChannels={() => {
+            AsyncStorage.setItem('exploreQuery', chat.name || '');
+            onNavigate?.('explore');
+          }}
+        />
+      )}
 
       {/* Main Messages Dynamic Stream */}
       <ScrollView
@@ -633,6 +814,11 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
               {chat.isGroup ? <Users size={16} color="#475569" /> : <User size={16} color="#475569" />}
               <Text style={styles.menuItemText}>{chat.isGroup ? 'Group Info' : 'View Profile'}</Text>
             </TouchableOpacity>
+            {!chat.isSecret && (
+              <TouchableOpacity style={styles.menuItem} onPress={() => { setShowLynPanel(true); setShowHeaderMenu(false); }}>
+                <Droplet size={16} color="#0057bd" /><Text style={[styles.menuItemText, { color: '#0057bd' }]}>Lyn AI Settings</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity style={styles.menuItem} onPress={() => { setIsSearchOpen(true); setShowHeaderMenu(false); }}>
               <Search size={16} color="#475569" /><Text style={styles.menuItemText}>Search</Text>
             </TouchableOpacity>
@@ -645,6 +831,17 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* Scroll to bottom button — right side, circular */}
+      {showScrollToBottom && (
+        <TouchableOpacity
+          style={[styles.scrollToBottomBtn, { bottom: insets.bottom + 100 }]}
+          onPress={scrollToBottom}
+          activeOpacity={0.85}
+        >
+          <ChevronDown size={20} color="#0057bd" />
+        </TouchableOpacity>
+      )}
 
       {/* Footer System Dock Container */}
       <KeyboardAvoidingView
@@ -674,24 +871,135 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
             <Text style={styles.restrictedTextSub}>Both participants must verify identity first.</Text>
           </View>
         ) : (
-          <View style={styles.inputContainerRow}>
-            {/* Context Reply/Edit bars */}
-            {editingMessage && (
-              <Animated.View  style={styles.contextBar}>
-                <View style={styles.contextLine} />
-                <View style={styles.contextInfo}>
-                  <Text style={styles.contextTitle}>Edit Message</Text>
-                  <Text numberOfLines={1} style={styles.contextText}>{editingMessage.text}</Text>
+          <View style={styles.footerInnerColumn}>
+            {/* @lyn mention popup */}
+            {isAiMentionMenuOpen && aiEnabled && (
+              <Animated.View style={styles.aiMentionMenu}>
+                <View style={styles.aiMentionMenuHeader}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Droplet size={14} color="#0057bd" />
+                    <Text style={styles.aiMentionMenuTitle}>AI Actions</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => setIsAiMentionMenuOpen(false)}>
+                    <X size={16} color="#64748b" />
+                  </TouchableOpacity>
                 </View>
-                <TouchableOpacity onPress={() => { setEditingMessage(null); setText(''); }}><X size={18} color="#64748b" /></TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.aiMentionMenuItem}
+                  onPress={() => {
+                    setText(t => t.replace(/@lyn/i, '').trim());
+                    setIsAiMentionMenuOpen(false);
+                    setIsDraftConfirmOpen(true);
+                  }}
+                >
+                  <Text style={styles.aiMentionItemTitle}>Draft Message</Text>
+                  <Text style={styles.aiMentionItemSub}>Write a context-aware reply in your tone</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.aiMentionMenuItem}
+                  onPress={() => {
+                    setText(t => t.replace(/@lyn/i, '').trim());
+                    setIsAiMentionMenuOpen(false);
+                    // navigate to explore with AI filter
+                  }}
+                >
+                  <Text style={styles.aiMentionItemTitle}>Discover People Like You</Text>
+                  <Text style={styles.aiMentionItemSub}>Find others discussing similar topics</Text>
+                </TouchableOpacity>
               </Animated.View>
             )}
+
+            {/* Draft confirm + textarea */}
+            {isDraftConfirmOpen && (
+              <Animated.View style={styles.draftConfirmContainer}>
+                <View style={styles.draftHeader}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <View style={styles.draftIconBg}>
+                      <Droplet size={14} color="#0057bd" />
+                    </View>
+                    <Text style={styles.draftTitle}>Draft Message</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => { setIsDraftConfirmOpen(false); setDraftText(''); }}>
+                    <X size={16} color="#64748b" />
+                  </TouchableOpacity>
+                </View>
+                
+                <View style={styles.draftToneRow}>
+                  <Text style={styles.draftToneLabel}>Tone:</Text>
+                  <Text style={styles.draftToneValue}>{lynCustomPersonality.trim() || lynPersonality}</Text>
+                  <TouchableOpacity onPress={() => { setIsDraftConfirmOpen(false); setDraftText(''); setShowLynPanel(true); }} style={{ marginLeft: 'auto' }}>
+                    <Text style={styles.draftToneChange}>Change</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {draftText ? (
+                  <TextInput
+                    style={styles.draftTextInput}
+                    value={draftText}
+                    onChangeText={setDraftText}
+                    multiline
+                    numberOfLines={4}
+                  />
+                ) : (
+                  <View style={styles.draftPlaceholder}>
+                    <Text style={styles.draftPlaceholderText}>{isDraftLoading ? 'Generating...' : 'Draft will appear here'}</Text>
+                  </View>
+                )}
+
+                <View style={styles.draftActions}>
+                  <TouchableOpacity style={styles.draftBtnGenerate} onPress={handleGenerateDraft} disabled={isDraftLoading}>
+                    <Text style={styles.draftBtnGenerateText}>{isDraftLoading ? 'Generating...' : draftText ? 'Retry' : 'Generate'}</Text>
+                  </TouchableOpacity>
+                  {!!draftText && (
+                    <TouchableOpacity style={styles.draftBtnUse} onPress={() => { setText(draftText); setIsDraftConfirmOpen(false); setDraftText(''); }}>
+                      <Text style={styles.draftBtnUseText}>Use Draft</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </Animated.View>
+            )}
+
+            {/* AI Smart Reply Bar */}
+            {smartReplies.length > 0 && chatMessages.length > 0 && !text && !hideSmartReplies && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.smartReplyBar} contentContainerStyle={styles.smartReplyContent}>
+                <View style={styles.smartReplyLynBadge}>
+                  <Droplet size={12} color="#0057bd" />
+                  <Text style={styles.smartReplyLynLabel}>Lyn</Text>
+                  <TouchableOpacity onPress={() => setHideSmartReplies(true)}>
+                    <X size={11} color="#0057bd" />
+                  </TouchableOpacity>
+                </View>
+                {smartReplies.map((reply, i) => (
+                  <TouchableOpacity
+                    key={i}
+                    onPress={() => { setText(reply); setHideSmartReplies(true); }}
+                    style={styles.smartReplyChip}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={styles.smartReplyChipText}>{reply}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+
+            <View style={styles.inputContainerRow}>
+              {/* Context Reply/Edit bars */}
+              {editingMessage && (
+                <Animated.View style={styles.contextBar}>
+                  <View style={styles.contextLine} />
+                  <View style={styles.contextInfo}>
+                    <Text style={styles.contextTitle}>Edit Message</Text>
+                    <Text numberOfLines={1} style={styles.contextText}>{editingMessage.text}</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => { setEditingMessage(null); setText(''); }}><X size={18} color="#64748b" /></TouchableOpacity>
+                </Animated.View>
+              )}
 
             <TouchableOpacity
               onPress={() => setIsAttachmentPickerOpen(!isAttachmentPickerOpen)}
               style={[styles.plusButton, isAttachmentPickerOpen ? styles.plusButtonActive : styles.plusButtonInactive]}
             >
-              <Plus size={24} color={isAttachmentPickerOpen ? "#fff" : "#475569"} style={{ transform: [{ rotate: isAttachmentPickerOpen ? '45deg' : '0deg' }] }} />
+              <Users size={24} color={isAttachmentPickerOpen ? "#fff" : "#475569"} style={{ transform: [{ rotate: isAttachmentPickerOpen ? '45deg' : '0deg' }] }} />
             </TouchableOpacity>
 
             <View style={[styles.inputWrapper, isSecret ? styles.inputSecret : styles.inputNormal]}>
@@ -700,7 +1008,14 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
                 placeholder={`Message...`}
                 placeholderTextColor={isSecret ? '#64748b' : '#94a3b8'}
                 value={text}
-                onChangeText={setText}
+                onChangeText={(val) => {
+                  setText(val);
+                  if (val.toLowerCase().includes('@lyn')) {
+                    setIsAiMentionMenuOpen(true);
+                  } else {
+                    setIsAiMentionMenuOpen(false);
+                  }
+                }}
                 multiline
                 onKeyPress={(e: any) => {
                   if (Platform.OS === 'web' && e.nativeEvent.key === 'Enter' && !e.nativeEvent.shiftKey) {
@@ -721,6 +1036,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
               {text.trim() ? <CheckCheck size={20} color="#fff" /> : <Mic size={20} color="#fff" />}
             </TouchableOpacity>
           </View>
+          </View>
         )}
       </KeyboardAvoidingView>
 
@@ -739,7 +1055,9 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
           <SecretChatInfoScreen chat={chat} onBack={() => setIsSecretInfoOpen(false)} />
         </View>
       )}
-      <ShareContactModal isOpen={isShareContactOpen} onClose={() => setIsShareContactOpen(false)} appContext={{ chats, currentUser }} onShare={(contactId) => {
+      <ShareContactModal isOpen={isShareContactOpen} onClose={() => setIsShareContactOpen(false)} appContext={{ chats, currentUser }} onShare={(contactIds) => {
+        const contactId = contactIds[0];
+        if (!contactId) return;
         const contact = contacts.find(c => c.id === contactId);
         if (contact && activeChatId) {
           sendMessage(activeChatId, '', { contact: { name: contact.name || 'User', phone: contact.phone || '+1 234', avatar: contact.avatar } });
@@ -747,20 +1065,20 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
         }
       }} />
 
-      <ShareContactModal isOpen={showForwardModal} onClose={() => { setShowForwardModal(false); setForwardMessage(null); }} appContext={{ chats, currentUser }} onShare={(targetChatId) => {
+      <ShareContactModal isOpen={showForwardModal} onClose={() => { setShowForwardModal(false); setForwardMessage(null); }} appContext={{ chats, currentUser }} onShare={(targetChatIds) => {
         if (forwardMessage) {
-          sendMessage(targetChatId, forwardMessage.text || '', {
-             imageUrl: forwardMessage.imageUrl,
-             videoUrl: forwardMessage.videoUrl,
-             fileUrl: forwardMessage.fileUrl,
-             audioUrl: forwardMessage.audioUrl,
-             document: forwardMessage.document,
-             location: forwardMessage.location,
-             contact: forwardMessage.contact,
-             payment: forwardMessage.payment,
-             isForwarded: true
+          targetChatIds.forEach((targetChatId: string) => {
+            sendMessage(targetChatId, forwardMessage.text || '', {
+               imageUrl: forwardMessage.imageUrl,
+               videoUrl: forwardMessage.videoUrl,
+               fileUrl: forwardMessage.fileUrl,
+               audioUrl: forwardMessage.audioUrl,
+               location: forwardMessage.location,
+               contact: forwardMessage.contact,
+               isForwarded: true
+            });
           });
-          addToast('Message forwarded', 'success');
+          addToast(`Message forwarded to ${targetChatIds.length} chat(s)`, 'success');
         }
       }} />
 
@@ -771,18 +1089,16 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   bgSecret: { backgroundColor: '#0a0f14' },
-  bgNormal: { backgroundColor: '#e0f2fe' }, // matching aqua-depth aesthetic
+  bgNormal: { backgroundColor: '#e0f2fe' },
   textLight: { color: '#f1f5f9' },
   textDark: { color: '#0f172a' },
 
-  // Flash system styles
   flashAlertContainer: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(220,38,38,0.4)', zIndex: 9999, justifyContent: 'center', alignItems: 'center' },
   flashAlertCard: { backgroundColor: '#000', padding: 24, borderRadius: 24, width: '80%', alignItems: 'center', borderWidth: 2, borderColor: '#ef4444' },
   flashEmoji: { fontSize: 36, marginBottom: 8 },
   flashTitle: { color: '#ef4444', fontWeight: '900', fontSize: 18, letterSpacing: 1.5 },
   flashSubtitle: { color: 'rgba(255,255,255,0.8)', textAlign: 'center', fontSize: 12, marginTop: 6 },
 
-  // Header styles
   header: { borderBottomWidth: 1, paddingHorizontal: 16, paddingBottom: 12 },
   headerSecret: { backgroundColor: 'rgba(10,15,20,0.95)', borderColor: '#1e293b' },
   headerNormal: { backgroundColor: 'rgba(248,250,252,0.8)', borderColor: 'rgba(255,255,255,0.2)' },
@@ -851,6 +1167,34 @@ const styles = StyleSheet.create({
 
   // System Dock System Styles
   footerWrapper: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: 16, backgroundColor: 'transparent' },
+  footerInnerColumn: { flexDirection: 'column', width: '100%' },
+  
+  // AI Mention Popup
+  aiMentionMenu: { backgroundColor: '#fff', borderRadius: 16, padding: 8, marginBottom: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 5, borderWidth: 1, borderColor: '#e2e8f0' },
+  aiMentionMenuHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 8, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#f1f5f9', marginBottom: 4 },
+  aiMentionMenuTitle: { fontSize: 10, fontWeight: '800', color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 },
+  aiMentionMenuItem: { padding: 10, borderRadius: 12 },
+  aiMentionItemTitle: { fontSize: 14, fontWeight: '700', color: '#0f172a' },
+  aiMentionItemSub: { fontSize: 12, color: '#64748b', marginTop: 2 },
+
+  // Draft Confirm Popup
+  draftConfirmContainer: { backgroundColor: '#fff', borderRadius: 16, padding: 12, marginBottom: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 5, borderWidth: 1, borderColor: '#e2e8f0', gap: 10 },
+  draftHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  draftIconBg: { width: 24, height: 24, borderRadius: 6, backgroundColor: 'rgba(0,87,189,0.1)', alignItems: 'center', justifyContent: 'center' },
+  draftTitle: { fontSize: 11, fontWeight: '800', color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 },
+  draftToneRow: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#f8fafc', padding: 8, borderRadius: 8, borderWidth: 1, borderColor: '#f1f5f9' },
+  draftToneLabel: { fontSize: 12, color: '#64748b' },
+  draftToneValue: { fontSize: 12, fontWeight: '700', color: '#0057bd', textTransform: 'capitalize' },
+  draftToneChange: { fontSize: 11, color: '#0057bd', textDecorationLine: 'underline' },
+  draftTextInput: { backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, padding: 12, minHeight: 80, fontSize: 14, color: '#0f172a', textAlignVertical: 'top' },
+  draftPlaceholder: { height: 80, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  draftPlaceholderText: { fontSize: 13, color: '#94a3b8', fontStyle: 'italic' },
+  draftActions: { flexDirection: 'row', gap: 8 },
+  draftBtnGenerate: { flex: 1, backgroundColor: '#0057bd', paddingVertical: 10, borderRadius: 10, alignItems: 'center' },
+  draftBtnGenerateText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  draftBtnUse: { flex: 1, backgroundColor: 'rgba(0,87,189,0.1)', borderWidth: 1, borderColor: 'rgba(0,87,189,0.2)', paddingVertical: 10, borderRadius: 10, alignItems: 'center' },
+  draftBtnUseText: { color: '#0057bd', fontSize: 13, fontWeight: '700' },
+
   inputContainerRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10, marginBottom: 4 },
   plusButton: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
   plusButtonActive: { backgroundColor: '#3b82f6' },
@@ -878,5 +1222,16 @@ const styles = StyleSheet.create({
   pendingButton: { backgroundColor: '#f1f5f9', width: '100%', height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 12 },
   pendingText: { color: '#64748b', fontWeight: '600' },
   restrictedTextTitle: { fontSize: 14, fontWeight: '600', color: '#0f172a', marginTop: 6 },
-  restrictedTextSub: { fontSize: 12, color: '#64748b', marginTop: 2 }
+  restrictedTextSub: { fontSize: 12, color: '#64748b', marginTop: 2 },
+
+  // Scroll to bottom — right-side floating circle
+  scrollToBottomBtn: { position: 'absolute', right: 16, width: 38, height: 38, borderRadius: 19, backgroundColor: '#fff', borderWidth: 1.5, borderColor: 'rgba(0,87,189,0.2)', justifyContent: 'center', alignItems: 'center', elevation: 4, zIndex: 50 },
+
+  // Smart reply suggestion bar
+  smartReplyBar: { marginBottom: 8 },
+  smartReplyContent: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 },
+  smartReplyLynBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(0,87,189,0.07)', borderWidth: 1, borderColor: 'rgba(0,87,189,0.15)', paddingHorizontal: 8, paddingVertical: 5, borderRadius: 99 },
+  smartReplyLynLabel: { fontSize: 10, fontWeight: '800', color: '#0057bd', textTransform: 'uppercase', letterSpacing: 0.5 },
+  smartReplyChip: { backgroundColor: 'rgba(255,255,255,0.95)', borderWidth: 1, borderColor: 'rgba(226,232,240,0.7)', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 99 },
+  smartReplyChipText: { fontSize: 13, fontWeight: '600', color: '#1e293b', whiteSpace: 'nowrap' } as any,
 });

@@ -26,6 +26,9 @@ export interface AppContextType {
   addReaction: (chatId: string, messageId: string, emoji: string) => void;
   activeChatId: string | null;
   setActiveChatId: (id: string | null) => void;
+  // ID of the chat that launched the contact profile, used for back navigation
+  originChatId: string | null;
+  setOriginChatId: (id: string | null) => void;
   activeContactId: string | null;
   setActiveContactId: (id: string | null) => void;
   typingUsers: Record<string, string[]>;
@@ -75,6 +78,8 @@ export interface AppContextType {
   deletePost: (postId: string) => Promise<void>;
   likePost: (postId: string) => void;
   commentPost: (postId: string, text: string) => void;
+  deleteComment: (postId: string, commentId: string) => Promise<void>;
+  pinComment: (postId: string, commentId: string) => Promise<void>;
   followUser: (userId: string) => void;
   unfollowUser: (userId: string) => void;
   acceptFollowRequest: (userId: string) => void;

@@ -12,15 +12,26 @@ import {
 } from 'react-native';
 import Animated, { FadeInUp } from 'react-native-reanimated';
 import { 
-  Play, Pause, FileText, Download, MapPin, CheckCheck, Check,
+  Play, Pause, FileText, Download, MapPin, CheckCheck, Check, Clock,
   Reply, Copy, Trash2, Timer, Edit2, Wallet, ArrowRight, ShieldAlert 
 } from 'lucide-react-native';
 
-// --- Monospace Text Node for Secret Chats ---
-const ScrambledText = ({ text, isSecret, isMe }: { text: string; isSecret?: boolean; isMe?: boolean }) => {
-  const [displayText, setDisplayText] = useState(text);
+// --- Monospace Text Node for Secret Chats & Typewriter for Lyn ---
+const DynamicMessageText = ({ text, isSecret, isMe, isLyn }: { text: string; isSecret?: boolean; isMe?: boolean; isLyn?: boolean }) => {
+  const [displayText, setDisplayText] = useState(isLyn ? '' : text);
 
   useEffect(() => {
+    if (isLyn) {
+      let index = 0;
+      setDisplayText('');
+      const interval = setInterval(() => {
+        index++;
+        setDisplayText(text.slice(0, index));
+        if (index >= text.length) clearInterval(interval);
+      }, 15);
+      return () => clearInterval(interval);
+    }
+
     if (!isSecret) {
       setDisplayText(text);
       return;
@@ -46,7 +57,7 @@ const ScrambledText = ({ text, isSecret, isMe }: { text: string; isSecret?: bool
     }, 50);
 
     return () => clearInterval(interval);
-  }, [text, isSecret]);
+  }, [text, isSecret, isLyn]);
 
   const textStyle = isSecret
     ? styles.secretScrambledMonospaceTypographyText
@@ -95,16 +106,19 @@ function MessageBubbleComponent({
   const pan = useRef(new RNAnimated.ValueXY()).current;
   const panResponder = useRef(
     PanResponder.create({
+      onMoveShouldSetPanResponderCapture: (evt, gestureState) => {
+        return Math.abs(gestureState.dx) > 20 && Math.abs(gestureState.dy) < 20;
+      },
       onMoveShouldSetPanResponder: (evt, gestureState) => {
         return Math.abs(gestureState.dx) > 20 && Math.abs(gestureState.dy) < 20;
       },
       onPanResponderMove: (evt, gestureState) => {
-        if (gestureState.dx < 0 && gestureState.dx > -80) {
+        if (Math.abs(gestureState.dx) < 80) {
           pan.setValue({ x: gestureState.dx, y: 0 });
         }
       },
       onPanResponderRelease: (evt, gestureState) => {
-        if (gestureState.dx < -50) {
+        if (Math.abs(gestureState.dx) > 50) {
           onReply(msg);
         }
         RNAnimated.spring(pan, {
@@ -113,6 +127,13 @@ function MessageBubbleComponent({
           bounciness: 10,
         }).start();
       },
+      onPanResponderTerminate: () => {
+        RNAnimated.spring(pan, {
+          toValue: { x: 0, y: 0 },
+          useNativeDriver: true,
+          bounciness: 10,
+        }).start();
+      }
     })
   ).current;
 
@@ -220,8 +241,8 @@ function MessageBubbleComponent({
             </View>
           )}
 
-          {/* Primary Message Typography Segment */}
-          {msg.text && <ScrambledText text={msg.text} isSecret={isSecret} isMe={isMe} />}
+          {/* Main Text Content (conditionally scrambled or typewriter) */}
+          {!!msg.text && <DynamicMessageText text={msg.text} isSecret={isSecret} isMe={isMe} isLyn={msg.senderId === 'lyn'} />}
         </View>
       </TouchableOpacity>
 
@@ -238,7 +259,9 @@ function MessageBubbleComponent({
         
         {isMe && (
           <View style={styles.checkmarkStatusDynamicFlexCluster}>
-            {msg.status === 'sent' ? (
+            {msg.status === 'pending' || msg.status === 'sending' ? (
+              <Clock size={12} color="#94a3b8" />
+            ) : msg.status === 'sent' ? (
               <Check size={13} color="#94a3b8" />
             ) : msg.status === 'delivered' ? (
               <CheckCheck size={13} color="#94a3b8" />

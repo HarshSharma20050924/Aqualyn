@@ -12,7 +12,7 @@ import {
   KeyboardAvoidingView,
 } from 'react-native';
 import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
-import { X, Heart, MessageCircle, Share2, MoreHorizontal, Send, Bookmark, Pin, Archive, FolderPlus, Link as LinkIcon } from 'lucide-react-native';
+import { X, Heart, MessageCircle, Share2, MoreHorizontal, Send, Bookmark, Pin, Archive, FolderPlus, Link as LinkIcon, Trash2 } from 'lucide-react-native';
 import { Post } from '../../types';
 import { useAppContext } from '../../context/AppContext';
 
@@ -23,11 +23,12 @@ interface PostViewerProps {
 }
 
 export default function PostViewer({ post, isOpen, onClose }: PostViewerProps) {
-  const { currentUser, likePost, commentPost, addToast, archivePost, pinPost, savePost, chats } = useAppContext();
+  const { currentUser, likePost, commentPost, deleteComment, addToast, archivePost, pinPost, savePost, chats } = useAppContext();
   const [isLiked, setIsLiked] = useState(post.likes.includes(currentUser?.id || ''));
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [showMenu, setShowMenu] = useState(false);
+  const [pressedCommentId, setPressedCommentId] = useState<string | null>(null);
   const [showChatPicker, setShowChatPicker] = useState(false);
 
   if (!isOpen) return null;
@@ -186,16 +187,30 @@ export default function PostViewer({ post, isOpen, onClose }: PostViewerProps) {
 
                 <ScrollView style={styles.commentsScrollableListingBodyStackContainer}>
                   {post.comments.map((comment) => (
-                    <View key={comment.id} style={styles.commentRowItemLayoutFlexibleCellBlock}>
+                    <TouchableOpacity
+                      key={comment.id}
+                      activeOpacity={0.85}
+                      onLongPress={() => setPressedCommentId(pressedCommentId === comment.id ? null : comment.id)}
+                      onPress={() => pressedCommentId === comment.id && setPressedCommentId(null)}
+                      style={styles.commentRowItemLayoutFlexibleCellBlock}
+                    >
                       <Image source={{ uri: comment.userAvatar }} style={styles.commentRowItemAvatarImageCircle} />
                       <View style={styles.commentRowItemTextContentFlexibleColumn}>
                         <View style={styles.commentRowItemAuthorMetadataLineGroup}>
                           <Text style={styles.commentRowAuthorUsernameLabelText}>{comment.userName}</Text>
                           <Text style={styles.commentRowTimeMetaLabelText}>{comment.timestamp}</Text>
+                          {pressedCommentId === comment.id && (comment.userId === currentUser?.id || post.userId === currentUser?.id) && (
+                            <TouchableOpacity
+                              onPress={() => { deleteComment(post.id, comment.id); setPressedCommentId(null); }}
+                              style={styles.commentDeleteActionButton}
+                            >
+                              <Trash2 size={14} color="#ef4444" />
+                            </TouchableOpacity>
+                          )}
                         </View>
                         <Text style={styles.commentRowBodyMessageParagraphTypography}>{comment.text}</Text>
                       </View>
-                    </View>
+                    </TouchableOpacity>
                   ))}
                 </ScrollView>
 
@@ -461,6 +476,12 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 16,
     alignItems: 'flex-start',
+  },
+  commentDeleteActionButton: {
+    marginLeft: 'auto',
+    padding: 4,
+    borderRadius: 8,
+    backgroundColor: 'rgba(239,68,68,0.1)',
   },
   commentRowItemAvatarImageCircle: {
     width: 32,

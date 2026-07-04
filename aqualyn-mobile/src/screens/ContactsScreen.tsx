@@ -325,7 +325,7 @@ const styles = StyleSheet.create({
 
   // Dual Quick Actions Grid
   actionsGridRow: { flexDirection: 'row', gap: 12, marginBottom: 24 },
-  actionCard: { flex: 1, padding: 16, borderRadius: 24, alignItems: 'center', borderWidth: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.02, shadowRadius: 4, elevation: 1 },
+  actionCard: { flex: 1, padding: 16, borderRadius: 24, alignItems: 'center', borderWidth: 1, elevation: 0 },
   actionCardSecondary: { backgroundColor: 'rgba(8,145,178,0.03)', borderColor: 'rgba(8,145,178,0.08)' },
   actionCardPrimary: { backgroundColor: 'rgba(0,87,189,0.03)', borderColor: 'rgba(0,87,189,0.08)' },
   actionIconBox: { width: 48, height: 48, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
@@ -336,7 +336,7 @@ const styles = StyleSheet.create({
   textPrimary: { color: '#0057bd' },
 
   // Search Engine container styles
-  searchBoxWrapper: { position: 'relative', flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 18, borderColor: '#e2e8f0', borderWidth: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.02, shadowRadius: 3, elevation: 1, marginBottom: 24 },
+  searchBoxWrapper: { position: 'relative', flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 18, borderColor: '#e2e8f0', borderWidth: 1, elevation: 0, marginBottom: 24 },
   searchIconLeft: { position: 'absolute', left: 16 },
   searchBarInputField: { flex: 1, height: 48, paddingLeft: 48, paddingRight: 44, fontSize: 14, color: '#0f172a' },
   searchClearBtn: { position: 'absolute', right: 14, padding: 4 },
@@ -351,8 +351,8 @@ const styles = StyleSheet.create({
 
   // Contact Grid Dynamic Components
   contactsListGroupColumn: { gap: 8 },
-  contactItemCardRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 20, padding: 14, borderWidth: 1, borderColor: '#f1f5f9', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.01, shadowRadius: 2, elevation: 1 },
-  contactAvatarFrameBox: { width: 56, height: 56, borderRadius: 28, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1 },
+  contactItemCardRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 20, padding: 14, borderWidth: 1, borderColor: '#f1f5f9', elevation: 0 },
+  contactAvatarFrameBox: { width: 56, height: 56, borderRadius: 28, overflow: 'hidden' },
   contactAvatarImage: { width: '100%', height: '100%', resizeMode: 'cover' },
   contactMetaInfoBlock: { flex: 1, marginLeft: 16, borderBottomWidth: 1, borderColor: '#f8fafc', paddingBottom: 4 },
   contactNameHeadlineText: { fontSize: 15, fontWeight: '700', color: '#1e293b' },

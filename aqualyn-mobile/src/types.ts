@@ -119,12 +119,14 @@ export interface Message {
   status?: 'sent' | 'delivered' | 'seen';
   deletedFor?: string[];
   sharedPostId?: string;
+  aiSettings?: any;
 }
 
 export interface Chat {
   id: string;
   name: string;
   isGroup?: boolean;
+  isChannel?: boolean;
   isSecret?: boolean;
   selfDestructTimer?: number;
   avatar?: string;

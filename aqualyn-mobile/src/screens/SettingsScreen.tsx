@@ -94,7 +94,7 @@ export default function SettingsScreen({ onBack, onNavigate }: SettingsScreenPro
         </View>
         <View style={styles.settingItemTextColumn}>
           <Text style={styles.settingItemLabelTypography}>{label}</Text>
-          {subtext && <Text style={styles.settingItemSubtextTypography}>{subtext}</Text>}
+          {!!subtext && <Text style={styles.settingItemSubtextTypography}>{subtext}</Text>}
         </View>
       </View>
       <ChevronRight size={18} color="#94a3b8" />
