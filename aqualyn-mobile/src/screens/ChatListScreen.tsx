@@ -445,9 +445,7 @@ export default function ChatListScreen({ onNavigate }: Props) {
        <View style={{ flex: 1, position: 'relative' }}>
          {refreshing && (
            <View style={{ position: 'absolute', top: headerHeight + 10, left: 0, right: 0, zIndex: 100, alignItems: 'center' }}>
-             <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: 4, elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 }}>
                <BubbleLoader size={30} />
-             </View>
            </View>
          )}
          <ScrollView 
