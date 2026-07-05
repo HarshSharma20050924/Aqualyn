@@ -698,8 +698,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior="padding"
-        keyboardVerticalOffset={headerHeight}
-        enabled={Platform.OS === 'ios'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
       >
 
       {/* Lyn AI Settings Panel */}
