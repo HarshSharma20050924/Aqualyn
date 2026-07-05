@@ -1,0 +1,39 @@
+name: OTA Update (EAS)
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'aqualyn-mobile/src/**'
+      - 'aqualyn-mobile/assets/**'
+      - 'aqualyn-mobile/App.tsx'
+      - 'aqualyn-mobile/package.json'
+  workflow_dispatch:
+
+jobs:
+  update:
+    name: Publish EAS Update
+    runs-on: ubuntu-22.04
+    steps:
+      - name: 📦 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 🚀 Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: 📥 Install dependencies
+        working-directory: aqualyn-mobile
+        run: npm ci
+
+      - name: ☁️ Publish EAS Update (Production)
+        working-directory: aqualyn-mobile
+        run: eas update --branch production --message "Automated OTA update from GitHub Actions (${{ github.sha }})" --non-interactive
