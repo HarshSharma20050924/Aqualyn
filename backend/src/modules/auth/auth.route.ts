@@ -2,17 +2,18 @@ import { Router } from 'express';
 import { verifyToken } from '../../middleware/auth';
 import { AuthService } from './auth.service';
 import { login, register, getProfile, sendOtp, verifyOtp, syncToken, googleSignin, generateQrToken, getQrStatus, linkDeviceQr, sync } from './auth.controller';
+import { authLimiter } from '../../core/middlewares/rateLimit.middleware';
 
 const router = Router();
 
-router.post('/login', verifyToken, login);
-router.post('/register', verifyToken, register);
+router.post('/login', authLimiter, verifyToken, login);
+router.post('/register', authLimiter, verifyToken, register);
 router.post('/sync', verifyToken, sync);
 router.post('/sync-token', verifyToken, syncToken);
 router.get('/profile', verifyToken, getProfile);
-router.post('/send-otp', sendOtp);
-router.post('/verify-otp', verifyOtp);
-router.post('/google-signin', googleSignin);
+router.post('/send-otp', authLimiter, sendOtp);
+router.post('/verify-otp', authLimiter, verifyOtp);
+router.post('/google-signin', authLimiter, googleSignin);
 
 router.post('/qr/generate', generateQrToken);
 router.get('/qr/status/:token', getQrStatus);

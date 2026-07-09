@@ -212,7 +212,7 @@ export default function ExploreScreen({ onBack, onNavigate }: { onBack: () => vo
       className="min-h-screen bg-surface pb-28 flex flex-col"
     >
       {/* ── Header ──────────────────────────────────────────────────────────── */}
-      <header className="fixed top-0 w-full z-50 bg-surface/90 backdrop-blur-xl border-b border-surface-container">
+      <header className="sticky top-0 w-full z-50 bg-surface/90 backdrop-blur-xl border-b border-surface-container">
         <div className="flex items-center gap-3 px-4 h-16 max-w-2xl mx-auto">
           <button onClick={onBack} className="p-2 rounded-full hover:bg-surface-container text-on-surface-variant transition-colors active:scale-90">
             <ArrowLeft className="w-5 h-5" />

@@ -12,7 +12,7 @@ import BubbleLoader from '../components/ui/BubbleLoader';
 
 import { apiFetch } from '../utils/fetcher';
 
-export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string) => void }) {
+export default function ChatListScreen({ onNavigate, compact = false, onExpand }: { onNavigate: (s: string) => void; compact?: boolean; onExpand?: () => void }) {
   const { currentUser, chats, setChats, setActiveChatId, messages, isLoading, isFetchingData, folders, archiveChat, pinChat, muteChat, deleteChat, clearHistory, markAsRead, addChatToFolder, addToast, archiveLockPin, theme, setTheme, globalUsers, setGlobalUsers, followUser, startChatWithContact, setActiveContactId } = useAppContext();
   const [activeTab, setActiveTab] = useState<string>('all');
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
@@ -173,8 +173,58 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
     </div>
   );
 
+  // ── COMPACT MODE (narrow sidebar) ───────────────────────────────────────
+  if (compact) {
+    const activeChats = chats.filter(c => !c.isArchived);
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="h-full flex flex-col bg-surface overflow-y-auto overflow-x-hidden py-3 gap-1 items-center custom-scrollbar"
+      >
+        {/* Search icon */}
+        <button
+          onClick={() => {
+            if (onExpand) onExpand();
+            onNavigate('explore');
+          }}
+          className="w-10 h-10 mb-2 flex items-center justify-center rounded-full text-on-surface-variant hover:bg-black/5 transition-colors"
+        >
+          <Search className="w-5 h-5" />
+        </button>
+
+        {activeChats.map(chat => (
+          <button
+            key={chat.id}
+            onClick={() => {
+              setActiveChatId(chat.id);
+              onNavigate('chat-detail');
+            }}
+            title={chat.name}
+            className="relative shrink-0 w-12 h-12 rounded-full overflow-hidden hover:ring-2 hover:ring-cyan-500/60 transition-all active:scale-90 my-0.5"
+          >
+            {chat.isGroup ? (
+              <div className="w-full h-full bg-surface-container-highest flex items-center justify-center text-primary">
+                <Users className="w-6 h-6" />
+              </div>
+            ) : (
+              <img src={chat.avatar} alt={chat.name} className="w-full h-full object-cover" />
+            )}
+            {/* Unread badge */}
+            {!!chat.unreadCount && (
+              <span className="absolute bottom-0 right-0 min-w-[18px] h-[18px] bg-cyan-500 text-white text-[10px] font-black rounded-full flex items-center justify-center px-[3px] leading-none shadow">
+                {chat.unreadCount > 99 ? '99' : chat.unreadCount}
+              </span>
+            )}
+          </button>
+        ))}
+      </motion.div>
+    );
+  }
+  // ── END COMPACT MODE ─────────────────────────────────────────────────────
+
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="min-h-screen bg-surface pb-28">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full flex flex-col bg-surface pb-28 overflow-y-auto">
       <header className="sticky top-0 w-full z-50 bg-slate-50/70 backdrop-blur-xl border-b border-white/15 shadow-[0_8px_32px_0_rgba(0,87,189,0.06)]">
         <div className="flex items-center justify-between px-6 h-16 w-full max-w-none">
           {isSelectionMode ? (
@@ -588,7 +638,7 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
           }
         }}
         title="Chat with Lyn AI"
-        className="fixed right-6 bottom-40 z-40 active:scale-95 transition-all"
+        className="absolute right-6 bottom-40 z-40 active:scale-95 transition-all"
       >
         <div className="relative w-12 h-12 group">
           <div className="absolute inset-0 bg-gradient-to-br from-secondary-fixed to-primary-container rounded-2xl rotate-12 opacity-40 group-hover:rotate-45 transition-transform duration-700" />
@@ -603,7 +653,7 @@ export default function ChatListScreen({ onNavigate }: { onNavigate: (s: string)
       {/* Compose FAB */}
       <button
         onClick={() => setIsNewChatModalOpen(true)}
-        className="fixed right-6 bottom-24 liquid-gradient w-14 h-14 rounded-2xl shadow-xl flex items-center justify-center text-white aqua-glow active:scale-95 transition-all z-40"
+        className="absolute right-6 bottom-24 liquid-gradient w-14 h-14 rounded-2xl shadow-xl flex items-center justify-center text-white aqua-glow active:scale-95 transition-all z-40"
       >
         <Pen className="w-6 h-6 fill-white" />
       </button>

@@ -107,8 +107,8 @@ export default function EditProfileScreen({ onBack }: { onBack: () => void }) {
   };
 
   return (
-    <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="bg-surface min-h-screen pb-32">
-      <header className="fixed top-0 w-full z-50 bg-slate-50/70 backdrop-blur-xl border-b border-white/15 h-16 flex items-center justify-between px-6">
+    <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="bg-surface h-full overflow-y-auto pb-32">
+      <header className="sticky top-0 w-full z-50 bg-slate-50/70 backdrop-blur-xl border-b border-white/15 h-16 flex items-center justify-between px-6">
         <div className="flex items-center gap-4">
           <button onClick={onBack} className="text-slate-500 hover:bg-white/20 p-2 rounded-full transition-colors active:scale-95 duration-200">
             <ArrowLeft className="w-6 h-6" />

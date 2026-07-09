@@ -21,7 +21,8 @@ import prisma from './config/prisma';
 import { createAdapter } from '@socket.io/redis-adapter';
 import { pubClient, subClient } from './config/redis';
 import { SocketService } from './services/SocketService';
-
+import './workers/MessageQueue'; // Initialize BullMQ Worker
+import { globalLimiter } from './core/middlewares/rateLimit.middleware';
 import pinoHttp from 'pino-http';
 import { logger } from './core/utils/logger';
 
@@ -92,6 +93,9 @@ app.use(cookieParser());
 app.use(cors(corsOptions));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// Apply global rate limiting to all API requests
+app.use('/api', globalLimiter);
 
 // Serve Static Files
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));

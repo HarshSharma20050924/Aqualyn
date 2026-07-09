@@ -1,0 +1,37 @@
+# Aqualyn Backend — Fly.io Config
+app = 'aqualyn-backend'
+primary_region = 'sin'  # Singapore — closest to India
+
+[build]
+  dockerfile = 'Dockerfile'
+
+[env]
+  NODE_ENV = 'production'
+  PORT = '5000'
+
+# Internal port your app listens on
+[[services]]
+  internal_port = 5000
+  protocol = 'tcp'
+
+  # HTTP + WebSocket traffic
+  [[services.ports]]
+    handlers = ['tls', 'http']
+    port = 443
+
+  [[services.ports]]
+    handlers = ['http']
+    port = 80
+
+  # Health check — keeps the machine warm (no cold start)
+  [services.http_checks]
+    interval = '10s'
+    timeout = '5s'
+    grace_period = '30s'
+    method = 'GET'
+    path = '/api/health'
+
+# Machine size — shared-cpu-1x is FREE tier
+[[vm]]
+  size = 'shared-cpu-1x'
+  memory = '256mb'

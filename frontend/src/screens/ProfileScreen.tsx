@@ -11,7 +11,7 @@ import UserListModal from '../components/social/UserListModal';
 import { apiFetch } from '../utils/fetcher';
 import { ENDPOINTS } from '../config/api';
 
-export default function ProfileScreen({ onNavigate }: { onNavigate: (s: string) => void }) {
+export default function ProfileScreen({ onNavigate, isSidebar = false }: { onNavigate: (s: string) => void; isSidebar?: boolean }) {
   const { currentUser, posts, stories, createCollection, setActiveContactId } = useAppContext();
   const [isCreatorOpen, setIsCreatorOpen] = useState(false);
   const [isPostCreatorOpen, setIsPostCreatorOpen] = useState(false);
@@ -62,54 +62,56 @@ export default function ProfileScreen({ onNavigate }: { onNavigate: (s: string) 
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="bg-surface min-h-screen pb-32 overflow-y-auto">
-      <header className="fixed top-0 w-full z-50 bg-slate-50/70 backdrop-blur-xl border-b border-white/15 shadow-[0_8px_32px_0_rgba(0,87,189,0.06)] h-16 flex items-center justify-between px-6">
-        <div className="flex items-center gap-3">
-          <span className="text-2xl font-black bg-gradient-to-br from-cyan-600 to-blue-500 bg-clip-text text-transparent font-headline tracking-tight">Aqualyn</span>
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="w-10 h-10 rounded-full border-2 border-secondary-fixed aqua-glow overflow-hidden">
-            <img src={currentUser.avatar} alt="Profile" className="w-full h-full object-cover" />
+      {!isSidebar && (
+        <header className="sticky top-0 w-full z-50 bg-slate-50/70 backdrop-blur-xl border-b border-white/15 shadow-[0_8px_32px_0_rgba(0,87,189,0.06)] h-16 flex items-center justify-between px-6">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl font-black bg-gradient-to-br from-cyan-600 to-blue-500 bg-clip-text text-transparent font-headline tracking-tight">Aqualyn</span>
           </div>
-        </div>
-      </header>
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 rounded-full border-2 border-secondary-fixed aqua-glow overflow-hidden">
+              <img src={currentUser.avatar} alt="Profile" className="w-full h-full object-cover" />
+            </div>
+          </div>
+        </header>
+      )}
 
-      <main className="pt-24 px-6 max-w-4xl mx-auto space-y-10">
-        <section className="relative flex flex-col md:flex-row items-center md:items-end gap-8">
+      <main className={`${isSidebar ? 'pt-6 px-4' : 'pt-24 px-6'} max-w-4xl mx-auto space-y-6`}>
+        <section className="relative flex flex-col items-center gap-4">
           <div className="relative group">
-            <div className="w-40 h-40 md:w-48 md:h-48 rounded-full border-[6px] border-white aqua-glow overflow-hidden bg-surface-container shadow-xl">
+            <div className={`${isSidebar ? 'w-24 h-24' : 'w-40 h-40 md:w-48 md:h-48'} rounded-full border-[6px] border-white aqua-glow overflow-hidden bg-surface-container shadow-xl`}>
               <img src={currentUser.largeAvatar} alt="Large Profile" className="w-full h-full object-cover" />
             </div>
-            <button onClick={() => onNavigate('edit-profile')} className="absolute bottom-2 right-2 bg-secondary text-on-secondary w-10 h-10 rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform active:scale-90">
-              <Pen className="w-5 h-5 fill-on-secondary" />
+            <button onClick={() => onNavigate('edit-profile')} className="absolute bottom-1 right-1 bg-secondary text-on-secondary w-8 h-8 rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform active:scale-90">
+              <Pen className="w-4 h-4 fill-on-secondary" />
             </button>
           </div>
-          <div className="flex-1 text-center md:text-left space-y-4">
-            <div className="space-y-1">
-              <h1 className="text-4xl font-extrabold font-headline tracking-tight text-on-surface">{currentUser.displayName || currentUser.name || currentUser.username}</h1>
-              <p className="text-on-surface-variant font-bold">@{currentUser.username}</p>
+          <div className="flex-1 text-center space-y-3 w-full">
+            <div className="space-y-0.5">
+              <h1 className={`${isSidebar ? 'text-2xl' : 'text-4xl'} font-extrabold font-headline tracking-tight text-on-surface`}>{currentUser.displayName || currentUser.name || currentUser.username}</h1>
+              <p className="text-on-surface-variant font-bold text-sm">@{currentUser.username}</p>
             </div>
-            <p className="text-on-surface/80 max-w-md leading-relaxed">{currentUser.bio}</p>
+            {currentUser.bio && <p className="text-on-surface/80 text-sm max-w-md leading-relaxed">{currentUser.bio}</p>}
             
-            <div className="flex items-center gap-8 py-2">
+            <div className="flex items-center justify-center gap-6 py-1">
               <div className="text-center cursor-pointer group">
-                <span className="block font-black text-xl text-on-surface group-hover:text-primary transition-colors">{myPosts.length}</span>
+                <span className="block font-black text-lg text-on-surface group-hover:text-primary transition-colors">{myPosts.length}</span>
                 <span className="text-[10px] uppercase font-bold text-on-surface-variant tracking-[0.15em] opacity-60">Posts</span>
               </div>
               <div className="text-center cursor-pointer" onClick={() => fetchSocialList('followers')}>
-              <span className="block font-black text-xl text-on-surface">{currentUser?._count?.followers || currentUser?.followers?.length || 0}</span>
+              <span className="block font-black text-lg text-on-surface">{currentUser?._count?.followers || currentUser?.followers?.length || 0}</span>
               <span className="text-xs font-bold text-on-surface-variant uppercase tracking-widest">Followers</span>
             </div>
             <div className="text-center cursor-pointer" onClick={() => fetchSocialList('following')}>
-              <span className="block font-black text-xl text-on-surface">{currentUser?._count?.following || currentUser?.following?.length || 0}</span>
+              <span className="block font-black text-lg text-on-surface">{currentUser?._count?.following || currentUser?.following?.length || 0}</span>
               <span className="text-xs font-bold text-on-surface-variant uppercase tracking-widest">Following</span>
             </div>
             </div>
 
-            <div className="flex flex-wrap justify-center md:justify-start gap-3 pt-2">
-              <button onClick={() => onNavigate('edit-profile')} className="px-8 py-3 rounded-full bg-gradient-to-br from-secondary to-primary-container text-on-primary-container font-bold text-sm shadow-lg hover:brightness-110 active:scale-95 transition-all border-t border-white/20">
+            <div className="flex flex-wrap justify-center gap-2 pt-1">
+              <button onClick={() => onNavigate('edit-profile')} className="px-6 py-2.5 rounded-full bg-gradient-to-br from-secondary to-primary-container text-on-primary-container font-bold text-sm shadow-lg hover:brightness-110 active:scale-95 transition-all border-t border-white/20">
                 Edit Profile
               </button>
-              <button className="px-6 py-3 rounded-full glass-panel border border-outline-variant/15 text-on-surface font-semibold text-sm hover:bg-white/40 transition-colors active:scale-95">
+              <button className="px-5 py-2.5 rounded-full glass-panel border border-outline-variant/15 text-on-surface font-semibold text-sm hover:bg-white/40 transition-colors active:scale-95">
                 Share Profile
               </button>
             </div>

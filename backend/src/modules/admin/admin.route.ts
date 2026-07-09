@@ -6,13 +6,12 @@ import {
     login,
     getStats,
     getAnalytics,
+    getObservability,
     getUsers,
     deleteUser,
     banUser,
     getChats,
-    getChatMessages,
     deleteChat,
-    deleteMessage,
     getPosts,
     deletePost,
     getReports,
@@ -29,16 +28,7 @@ const router = Router();
 router.post('/setup', setup);
 router.post('/login', login);
 
-// TEMPORARY: Wipes existing admins so you can start fresh. 
-// Remove this after you use it in production!
-router.post('/force-reset-admin', async (req: any, res: any) => {
-    try {
-        const deleted = await (prisma as any).user.deleteMany({ where: { role: 'admin' } });
-        res.json({ message: 'Previous admins deleted successfully', count: deleted.count, nextStep: 'Call /api/admin/setup to create your new JWT Admin' });
-    } catch (e: any) {
-        res.status(500).json({ error: e.message });
-    }
-});
+// NOTE: force-reset-admin removed — it was an unauthenticated destructive endpoint.
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // ADMIN MIDDLEWARE
@@ -67,6 +57,7 @@ router.use(isAdmin);
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 router.get('/stats', getStats);
 router.get('/analytics', getAnalytics);
+router.get('/observability', getObservability);
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // USERS MANAGEMENT
@@ -74,14 +65,15 @@ router.get('/analytics', getAnalytics);
 router.get('/users', getUsers);
 router.delete('/users/:userId', deleteUser);
 router.patch('/users/:userId/ban', banUser);
+// NOTE: /users/:userId/chats removed — E2E encrypted, admin must not browse per-user chats.
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// CHATS MANAGEMENT
+// CHATS MANAGEMENT (metadata only, no content)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 router.get('/chats', getChats);
-router.get('/chats/:chatId/messages', getChatMessages);
-router.delete('/chats/:chatId', deleteChat);
-router.delete('/messages/:messageId', deleteMessage);
+// NOTE: GET /chats/:chatId/messages removed — E2E encrypted, server must not expose message content.
+// NOTE: DELETE /messages/:messageId removed — individual message access violates E2E guarantees.
+router.delete('/chats/:chatId', deleteChat);  // Whole-chat delete for abuse/CSAM reports only.
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // POSTS MANAGEMENT

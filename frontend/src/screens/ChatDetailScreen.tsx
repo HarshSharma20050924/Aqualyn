@@ -526,7 +526,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: 20 }}
-      className={`h-screen flex flex-col transition-all duration-500 relative overflow-hidden ${chat.isSecret
+      className={`h-full flex flex-col transition-all duration-500 relative overflow-hidden ${chat.isSecret
         ? 'bg-[#0a0f14] text-slate-300 font-sans selection:bg-blue-500/30 selection:text-white'
         : 'bg-aqua-depth'
         }`}
@@ -561,7 +561,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
         )}
       </AnimatePresence>
 
-      <header className={`fixed top-0 w-full z-50 border-b shadow-[0_8px_32px_0_rgba(0,87,189,0.06)] flex flex-col px-6 max-w-none transition-all duration-300 ${chat.isSecret
+      <header className={`sticky top-0 w-full z-50 border-b shadow-[0_8px_32px_0_rgba(0,87,189,0.06)] flex flex-col px-6 max-w-none transition-all duration-300 ${chat.isSecret
         ? 'bg-[#0a0f14]/95 border-slate-800/80 backdrop-blur-2xl text-slate-300'
         : 'bg-slate-50/70 backdrop-blur-xl border-white/15'
         }`}>
@@ -733,7 +733,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
         </AnimatePresence>
       </header>
 
-      <main ref={scrollRef} onScroll={handleScroll} className={`flex-1 min-h-0 ${showLynPanel ? 'pt-52' : isSearchOpen ? 'pt-28' : 'pt-20'} pb-28 px-4 md:px-8 max-w-4xl mx-auto w-full flex flex-col overflow-y-auto`}>
+      <main ref={scrollRef} onScroll={handleScroll} className={`flex-1 min-h-0 ${showLynPanel ? 'pt-52' : isSearchOpen ? 'pt-28' : 'pt-20'} pb-4 px-4 md:px-8 w-full flex flex-col overflow-y-auto`}>
         <div className="flex-1 min-h-[20px]"></div>
         <div className="flex justify-center my-8">
           <span className="bg-surface-container-low px-4 py-1 rounded-full text-[11px] font-semibold text-on-surface-variant uppercase tracking-widest border border-white/40">Today, Oct 24</span>
@@ -840,7 +840,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
             onClick={() => {
               scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
             }}
-            className={`fixed bottom-[120px] right-6 p-3.5 rounded-full shadow-2xl hover:scale-110 active:scale-95 transition-all duration-200 z-50 flex items-center justify-center border ${
+            className={`absolute bottom-36 right-6 p-3.5 rounded-full shadow-2xl hover:scale-110 active:scale-95 transition-all duration-200 z-50 flex items-center justify-center border ${
               chat.isSecret
                 ? 'bg-slate-800 border-slate-700 text-blue-400 shadow-blue-500/20'
                 : 'bg-surface-container-highest border-white/30 text-secondary shadow-secondary/20 backdrop-blur-md'
@@ -851,11 +851,11 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
         )}
       </AnimatePresence>
 
-      <div className={`fixed bottom-0 left-0 w-full p-4 md:p-6 z-50 transition-colors duration-300 ${chat.isSecret
+      <div className={`shrink-0 w-full p-4 md:p-6 z-50 transition-colors duration-300 ${chat.isSecret
         ? 'bg-gradient-to-t from-black via-black/95 to-transparent'
         : 'bg-gradient-to-t from-background via-background/90 to-transparent'
         }`}>
-        <div className="max-w-4xl mx-auto w-full relative">
+        <div className="w-full relative">
           {isPrivateRestricted ? (
             <div className={`flex flex-col items-center gap-3 py-4 border rounded-[2rem] shadow-xl ${chat.isSecret
               ? 'bg-[#0a0f14] border-slate-800 text-slate-400'

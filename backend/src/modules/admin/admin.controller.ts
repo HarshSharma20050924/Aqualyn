@@ -28,6 +28,11 @@ export const getAnalytics = catchAsync(async (req: any, res: Response, next: Nex
     res.json(analytics);
 });
 
+export const getObservability = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const data = await AdminService.getObservability();
+    res.json(data);
+});
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // USERS
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -58,22 +63,17 @@ export const getChats = catchAsync(async (req: any, res: Response, next: NextFun
     res.json(result);
 });
 
-export const getChatMessages = catchAsync(async (req: any, res: Response, next: NextFunction) => {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 50;
-    const result = await AdminService.getChatMessages(req.params.chatId, page, limit);
-    res.json(result);
-});
+// getChatMessages intentionally removed — messages are E2E encrypted.
+// Admin can only see aggregate counts, never message content.
 
 export const deleteChat = catchAsync(async (req: any, res: Response, next: NextFunction) => {
     const result = await AdminService.deleteChat(req.params.chatId, req.body.hardDelete);
     res.json({ success: true, ...result });
 });
 
-export const deleteMessage = catchAsync(async (req: any, res: Response, next: NextFunction) => {
-    const result = await AdminService.deleteMessage(req.params.messageId);
-    res.json({ success: true, ...result });
-});
+// deleteMessage intentionally removed — individual message manipulation implies
+// server-side message access, which violates E2E encryption guarantees.
+// Admin may only delete an entire chat (e.g. for CSAM/abuse reports).
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // POSTS

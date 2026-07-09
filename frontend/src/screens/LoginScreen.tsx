@@ -24,6 +24,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
   const [dob, setDob] = useState('');
   const [showBirthday, setShowBirthday] = useState(true);
   const [isExistingUser, setIsExistingUser] = useState<boolean | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [qrToken, setQrToken] = useState<string | null>(null);
   const [qrExpired, setQrExpired] = useState(false);
   const [qrScanned, setQrScanned] = useState(false);
@@ -107,6 +108,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
 
   // ── Send OTP via Supabase ──
   const handleSendOtp = async () => {
+    setAuthError(null);
     if (!email) return;
     setIsLoading(true);
     try {
@@ -131,7 +133,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
       setCanResend(false);
       setOtp(['', '', '', '', '', '']);
     } catch (err: any) {
-      alert(err.message || 'Failed to send OTP');
+      setAuthError(err.message || 'Failed to send OTP');
     } finally {
       setIsLoading(false);
     }
@@ -164,6 +166,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
 
   // ── Verify OTP via Supabase then sync with backend ──
   const handleVerifyOtp = async () => {
+    setAuthError(null);
     setIsLoading(true);
     const code = otp.join('');
     try {
@@ -177,7 +180,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
       const supabaseAccessToken = data.session.access_token;
       await syncWithBackend(supabaseAccessToken);
     } catch (err: any) {
-      alert(err.message || 'Invalid code');
+      setAuthError(err.message || 'Invalid code');
     } finally {
       setIsLoading(false);
     }
@@ -217,13 +220,14 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
         else setStep('profile');
       }
     } catch (err: any) {
-      alert(err.message || 'Server error');
+      setAuthError(err.message || 'Server error');
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleCompleteSetup = async () => {
+    setAuthError(null);
     if (!displayName.trim() || !dob) return;
     setIsLoading(true);
     try {
@@ -252,7 +256,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
         onLogin();
       }
     } catch (err: any) {
-      alert(err.message || 'Server error');
+      setAuthError(err.message || 'Server error');
     } finally {
       setIsLoading(false);
     }
@@ -260,6 +264,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
 
   // ── Google sign-in (Firebase → our /api/auth/google-signin) ──
   const handleGoogleSignIn = useCallback(async () => {
+    setAuthError(null);
     if (isLoading || isGoogleLoading) return;
     setIsGoogleLoading(true);
     try {
@@ -275,7 +280,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
       await processGoogleUser(firebaseResult);
     } catch (err: any) {
       if (err.code === 'auth/popup-closed-by-user' || err.code === 'auth/cancelled-popup-request') return;
-      alert(err.message || 'Google sign-in failed');
+      setAuthError(err.message || 'Google sign-in failed');
     } finally {
       setIsGoogleLoading(false);
     }
@@ -339,6 +344,12 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
       <div className="absolute top-[40%] -right-[5%] w-[40%] h-[40%] rounded-full bg-primary-container/20 blur-[100px] pointer-events-none" />
 
       <div className="relative z-10 w-full max-w-[420px] flex flex-col items-center">
+        {authError && (
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} 
+            className="w-full mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 font-semibold text-sm text-center backdrop-blur-md">
+            {authError}
+          </motion.div>
+        )}
         <AnimatePresence mode="wait">
 
           {/* ── INTRO ── */}

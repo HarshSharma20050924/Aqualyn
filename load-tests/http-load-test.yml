@@ -1,0 +1,91 @@
+config:
+  target: "https://aqualyn.onrender.com"
+  phases:
+    # Warm up — 100 users over 30s
+    - duration: 30
+      arrivalRate: 10
+      rampTo: 100
+      name: "Warm up"
+
+    # Ramp to 1000 concurrent
+    - duration: 60
+      arrivalRate: 100
+      rampTo: 1000
+      name: "Ramp to 1K"
+
+    # Sustain 1000 for 2 min
+    - duration: 120
+      arrivalRate: 1000
+      name: "Sustain 1K"
+
+    # Ramp to 5000
+    - duration: 60
+      arrivalRate: 1000
+      rampTo: 5000
+      name: "Ramp to 5K"
+
+    # Sustain 5K for 1 min
+    - duration: 60
+      arrivalRate: 5000
+      name: "Sustain 5K"
+
+  plugins:
+    expect: {}
+
+  http:
+    timeout: 10
+
+  defaults:
+    headers:
+      Content-Type: "application/json"
+
+scenarios:
+  # ── Scenario 1: Health check (unauthenticated) ──────────────────────
+  - name: "Health Check"
+    weight: 10
+    flow:
+      - get:
+          url: "/api/health"
+          expect:
+            - statusCode: 200
+
+  # ── Scenario 2: Login flow ──────────────────────────────────────────
+  - name: "Auth Flow"
+    weight: 30
+    flow:
+      - post:
+          url: "/api/auth/login"
+          json:
+            phone: "{{ $randomString(10) }}"
+            password: "testpassword"
+          capture:
+            - json: "$.token"
+              as: "authToken"
+
+  # ── Scenario 3: Fetch chat list (authenticated) ─────────────────────
+  - name: "Chat List"
+    weight: 40
+    flow:
+      - post:
+          url: "/api/auth/login"
+          json:
+            phone: "9999999999"
+            password: "testpassword"
+          capture:
+            - json: "$.token"
+              as: "authToken"
+      - get:
+          url: "/api/chats"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: 200
+
+  # ── Scenario 4: Search users ─────────────────────────────────────────
+  - name: "User Search"
+    weight: 20
+    flow:
+      - get:
+          url: "/api/users/search?q=harsh"
+          expect:
+            - statusCode: 200

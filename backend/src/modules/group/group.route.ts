@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { verifyToken } from '../../middleware/auth';
+import { cacheResponse } from '../../core/middlewares/cache.middleware';
 import {
     createGroup,
     joinByToken,
@@ -31,7 +32,7 @@ router.patch('/:id/settings', updateSettings);
 router.post('/:id/member/:targetId/role', updateMemberRole);
 
 // 5. GET FULL GROUP INFO
-router.get('/:id/info', getGroupInfo);
+router.get('/:id/info', cacheResponse(60), getGroupInfo);
 
 // 6. LEAVE GROUP
 router.post('/:id/leave', leaveGroup);

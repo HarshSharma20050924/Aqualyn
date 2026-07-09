@@ -94,6 +94,9 @@ export const useAppActions = (
   };
 
   const clearHistory = (chatId: string) => {
+    if (socket) {
+        socket.emit('clear_history', { chatId, userId: currentUser?.id });
+    }
     setMessages(prev => ({ ...prev, [chatId]: [] }));
     addToast('History cleared', 'info');
   };

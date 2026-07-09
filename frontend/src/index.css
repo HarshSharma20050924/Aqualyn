@@ -79,15 +79,21 @@
 
 @layer utilities {
   .glass-card {
-    background: rgba(255, 255, 255, 0.4);
+    background: rgba(255, 255, 255, 0.85);
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
     box-shadow: 0 8px 32px 0 rgba(0, 87, 189, 0.08);
   }
+  .dark .glass-card {
+    background: rgba(20, 25, 30, 0.85);
+  }
   .glass-panel {
-    background: rgba(255, 255, 255, 0.7);
+    background: rgba(255, 255, 255, 0.92);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
+  }
+  .dark .glass-panel {
+    background: rgba(20, 25, 30, 0.92);
   }
   .liquid-gradient {
     background: linear-gradient(135deg, var(--color-secondary) 0%, var(--color-primary-container) 100%);
@@ -105,9 +111,13 @@
     background-attachment: fixed;
   }
   .glass-received {
-    background: rgba(255, 255, 255, 0.7);
+    background: rgba(255, 255, 255, 0.95);
     backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+  }
+  .dark .glass-received {
+    background: rgba(34, 39, 43, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.1);
   }
   .glass-sent {
     background: linear-gradient(135deg, var(--color-secondary) 0%, var(--color-primary-container) 100%);

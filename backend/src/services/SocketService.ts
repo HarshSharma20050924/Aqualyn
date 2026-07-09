@@ -6,6 +6,8 @@ import { subClient, pubClient } from '../config/redis';
 import { ActivityService } from './ActivityService';
 import { ContentService } from './ContentService';
 import { AIService } from '../modules/ai/ai.service';
+import crypto from 'crypto';
+import { messageQueue } from '../workers/MessageQueue';
 
 /**
  * SocketService handles the distributed real-time communication for Aqualyn.
@@ -208,6 +210,7 @@ export class SocketService {
         socket.on('delete_chat_for_me', (data: any) => this.handleDeleteChatForMe(socket, data));
         socket.on('delete_message_for_me', (data: any) => this.handleDeleteMessageForMe(socket, data));
         socket.on('delete_chat_for_everyone', (data: any) => this.handleDeleteChatForEveryone(socket, data));
+        socket.on('clear_history', (data: any) => this.handleClearHistory(socket, data));
         socket.on('invite_to_chat', (data: any) => this.handleInviteToChat(socket, data));
 
         // --- WebRTC Signaling with CallLog Persistence ---
@@ -314,32 +317,39 @@ export class SocketService {
                 }
             }
 
-            const message = await (prisma as any).message.create({
-                data: {
-                    senderId, chatId, text,
-                    imageUrl: data.imageUrl || null,
-                    videoUrl: data.videoUrl || null,
-                    fileUrl: data.fileUrl || null,
-                    audioUrl: data.audioUrl || null,
-                    gifUrl: data.gifUrl || null,
-                    sharedPostId: data.sharedPostId || null,
-                    sharedStoryId: data.sharedStoryId || null,
-                    isForwarded: data.isForwarded || false,
-                    isHD: data.isHD || false,
-                    fileName: data.fileName || null,
-                    fileSize: data.fileSize || null,
-                    mimeType: data.mimeType || null,
-                    document: data.document,
-                    location: data.location,
-                    contact: data.contact,
-                    payment: data.payment,
-                    schedule: data.schedule,
-                    wallet: data.wallet,
-                    replyToId: data.replyToId,
-                    status: 'sent',
-                    isRead: false
-                }
-            });
+            // 🚀 QUEUE ARCHITECTURE: Generate UUID instantly, don't wait for Postgres
+            const messageId = crypto.randomUUID();
+            
+            const messageData = {
+                id: messageId,
+                senderId, chatId, text,
+                imageUrl: data.imageUrl || null,
+                videoUrl: data.videoUrl || null,
+                fileUrl: data.fileUrl || null,
+                audioUrl: data.audioUrl || null,
+                gifUrl: data.gifUrl || null,
+                sharedPostId: data.sharedPostId || null,
+                sharedStoryId: data.sharedStoryId || null,
+                isForwarded: data.isForwarded || false,
+                isHD: data.isHD || false,
+                fileName: data.fileName || null,
+                fileSize: data.fileSize || null,
+                mimeType: data.mimeType || null,
+                document: data.document,
+                location: data.location,
+                contact: data.contact,
+                payment: data.payment,
+                schedule: data.schedule,
+                wallet: data.wallet,
+                replyToId: data.replyToId,
+                status: 'sent',
+                isRead: false
+            };
+
+            // Drop message into Redis Queue (Instant)
+            await messageQueue.add('save-message', messageData);
+            
+            const message = messageData as any; // Cast for downstream broadcast
 
             // 🟢 DISTRIBUTED MENTION LOGIC (Run in background)
             if (text) {
@@ -535,5 +545,17 @@ export class SocketService {
                 chatId, inviterId, inviterName: inviter?.displayName || inviter?.username || 'Someone' 
             });
         } catch (e) { console.error('Invite error:', e); }
+    }
+
+    private static async handleClearHistory(socket: Socket, data: any) {
+        const { chatId, userId } = data;
+        try {
+            const messages = await (prisma as any).message.findMany({ where: { chatId } });
+            for (const msg of messages) {
+                const deletedFor = [ ...(msg.deletedFor as any || []) ];
+                if (!deletedFor.includes(userId)) deletedFor.push(userId);
+                await (prisma as any).message.update({ where: { id: msg.id }, data: { deletedFor } });
+            }
+        } catch (e) { console.error('Clear history error:', e); }
     }
 }

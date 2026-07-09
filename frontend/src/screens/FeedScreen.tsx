@@ -329,7 +329,7 @@ export default function FeedScreen({ onNavigate }: { onNavigate: (s: string) => 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="min-h-screen bg-surface pb-28">
       {/* Header */}
-      <header className="fixed top-0 w-full z-50 bg-surface/80 backdrop-blur-xl border-b border-surface-container">
+      <header className="sticky top-0 w-full z-50 bg-surface/80 backdrop-blur-xl border-b border-surface-container">
         <div className="flex items-center justify-between px-4 h-16 w-full max-w-lg mx-auto">
           <h1 className="text-2xl font-black bg-gradient-to-br from-cyan-600 to-blue-500 bg-clip-text text-transparent font-headline tracking-tighter" style={{ fontFamily: 'var(--font-headline, "Outfit", sans-serif)' }}>
             Aqualyn

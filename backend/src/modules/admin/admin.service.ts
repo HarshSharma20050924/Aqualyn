@@ -15,21 +15,25 @@ export class AdminService {
             throw new AppError('Valid email and a password (min 6 chars) are required.', 400);
         }
 
-        const existingAdmin = await (prisma as any).user.findFirst({ where: { role: 'admin' } });
+        const existingAdminsCount = await (prisma as any).user.count({ where: { role: 'admin' } });
+        const existingAdmin = await (prisma as any).user.findFirst({ where: { role: 'admin', email } });
         const hashedPassword = await bcrypt.hash(password, 10);
         let adminUser;
 
         if (existingAdmin) {
-            // If admin exists but has no password (legacy Firebase admin), allow setting password if email matches
-            if (!existingAdmin.password && existingAdmin.email === email) {
+            // If admin exists but has no password (legacy Firebase admin), allow setting password
+            if (!existingAdmin.password) {
                 adminUser = await (prisma as any).user.update({
                     where: { id: existingAdmin.id },
                     data: { password: hashedPassword, displayName: name || existingAdmin.displayName }
                 });
             } else {
-                throw new AppError('Admin already exists and is secured. Please login.', 403);
+                throw new AppError('An admin with this email already exists. Please login.', 403);
             }
         } else {
+            if (existingAdminsCount >= 5) {
+                throw new AppError('Maximum limit of 5 admin accounts reached.', 403);
+            }
             adminUser = await (prisma as any).user.create({
                 data: {
                     email,
@@ -100,6 +104,96 @@ export class AdminService {
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // OBSERVABILITY
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    static async getObservability() {
+        const now = new Date();
+        // Build last 7 days labels + date ranges
+        const days: { label: string; start: Date; end: Date }[] = [];
+        for (let i = 6; i >= 0; i--) {
+            const start = new Date(now);
+            start.setDate(start.getDate() - i);
+            start.setHours(0, 0, 0, 0);
+            const end = new Date(start);
+            end.setHours(23, 59, 59, 999);
+            days.push({
+                label: start.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
+                start,
+                end,
+            });
+        }
+
+        // Parallel per-day queries
+        const [userSignups, messageCounts, postCounts] = await Promise.all([
+            Promise.all(
+                days.map(d =>
+                    (prisma as any).user.count({ where: { createdAt: { gte: d.start, lte: d.end } } })
+                )
+            ),
+            Promise.all(
+                days.map(d =>
+                    (prisma as any).message.count({ where: { createdAt: { gte: d.start, lte: d.end } } })
+                )
+            ),
+            Promise.all(
+                days.map(d =>
+                    (prisma as any).post.count({ where: { createdAt: { gte: d.start, lte: d.end } } })
+                )
+            ),
+        ]);
+
+        const growthSeries = days.map((d, i) => ({
+            label: d.label,
+            users: userSignups[i],
+            messages: messageCounts[i],
+            posts: postCounts[i],
+        }));
+
+        // Totals for quick display
+        const totalNewUsers = userSignups.reduce((a, b) => a + b, 0);
+        const totalMessages7d = messageCounts.reduce((a, b) => a + b, 0);
+        const totalPosts7d = postCounts.reduce((a, b) => a + b, 0);
+
+        // Peak day
+        let peakDay = growthSeries[0];
+        for (const day of growthSeries) {
+            if (day.messages > peakDay.messages) peakDay = day;
+        }
+
+        // Avg messages per day
+        const avgMessagesPerDay = totalMessages7d > 0
+            ? Math.round(totalMessages7d / 7)
+            : 0;
+
+        // Recent 5 users (as "recent activity" feed)
+        const recentUsers = await (prisma as any).user.findMany({
+            take: 5,
+            orderBy: { createdAt: 'desc' },
+            select: { id: true, displayName: true, email: true, createdAt: true, role: true }
+        });
+
+        // NOTE: E2E encrypted — message content is NOT accessible to admin.
+
+        return {
+            period: 'Last 7 days',
+            growthSeries,
+            summary: {
+                newUsers: totalNewUsers,
+                messages: totalMessages7d,
+                posts: totalPosts7d,
+                avgMessagesPerDay,
+                peakDay: peakDay.label,
+                peakMessages: peakDay.messages,
+            },
+            recentActivity: {
+                users: recentUsers,
+                // messages intentionally omitted — E2E encrypted, not accessible
+            },
+            generatedAt: now,
+        };
+    }
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     // USERS
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     static async getUsers(page: number, limit: number) {
@@ -150,7 +244,7 @@ export class AdminService {
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // CHATS
+    // CHATS (metadata only — E2E encrypted, no message content exposed)
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     static async getChats(page: number, limit: number) {
         const skip = (page - 1) * limit;
@@ -158,11 +252,14 @@ export class AdminService {
             (prisma as any).chat.findMany({
                 skip,
                 take: limit,
-                include: {
-                    participants: {
-                        select: { userId: true, user: { select: { displayName: true, email: true } } }
-                    },
-                    messages: { take: 1, orderBy: { createdAt: 'desc' } }
+                select: {
+                    id: true,
+                    name: true,
+                    isGroup: true,
+                    createdAt: true,
+                    updatedAt: true,
+                    // participant count only — no user PII, no message content
+                    _count: { select: { participants: true, messages: true } }
                 },
                 orderBy: { updatedAt: 'desc' }
             }),
@@ -172,21 +269,8 @@ export class AdminService {
         return { chats, pagination: { page, limit, total, pages: Math.ceil(total / limit) } };
     }
 
-    static async getChatMessages(chatId: string, page: number, limit: number) {
-        const skip = (page - 1) * limit;
-        const [messages, total] = await Promise.all([
-            (prisma as any).message.findMany({
-                where: { chatId },
-                skip,
-                take: limit,
-                include: { sender: { select: { id: true, displayName: true, email: true } } },
-                orderBy: { createdAt: 'desc' }
-            }),
-            (prisma as any).message.count({ where: { chatId } })
-        ]);
-
-        return { messages, pagination: { page, limit, total, pages: Math.ceil(total / limit) } };
-    }
+    // getChatMessages intentionally removed — messages are E2E encrypted and must
+    // never be readable by the server or admin.
 
     static async deleteChat(chatId: string, hardDelete: boolean) {
         if (hardDelete) {
@@ -208,10 +292,7 @@ export class AdminService {
         return { message: `Chat deleted (hardDelete: ${hardDelete})` };
     }
 
-    static async deleteMessage(messageId: string) {
-        await (prisma as any).message.delete({ where: { id: messageId } });
-        return { message: 'Message deleted' };
-    }
+    // deleteMessage intentionally removed — individual message access violates E2E guarantees.
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     // POSTS

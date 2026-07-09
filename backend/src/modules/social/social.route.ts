@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { verifyToken } from '../../middleware/auth';
+import { cacheResponse } from '../../core/middlewares/cache.middleware';
 import {
     globalSearch,
     getFeed,
@@ -35,12 +36,12 @@ router.use((req: any, res: any, next: any) => {
 /**
  * SOCIAL & FEED ENDPOINTS
  */
-router.get('/search', globalSearch);
-router.get('/feed', getFeed);
-router.get('/stories', getActiveStories);
-router.get('/user/:userId/posts', getUserPosts);
-router.get('/user/:userId/stories', getUserStories);
-router.get('/saved-posts', getSavedPosts);
+router.get('/search', cacheResponse(30, false), globalSearch); // Non-personalized global search caching
+router.get('/feed', cacheResponse(30), getFeed); // Cache personalized feed for 30s
+router.get('/stories', cacheResponse(60), getActiveStories);
+router.get('/user/:userId/posts', cacheResponse(60), getUserPosts);
+router.get('/user/:userId/stories', cacheResponse(60), getUserStories);
+router.get('/saved-posts', cacheResponse(60), getSavedPosts);
 
 /**
  * CREATION & MODIFICATION ENDPOINTS

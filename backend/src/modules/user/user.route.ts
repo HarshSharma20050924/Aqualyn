@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { verifyToken } from '../../middleware/auth';
+import { cacheResponse } from '../../core/middlewares/cache.middleware';
 import {
     getSettings,
     updateSettings,
@@ -40,30 +41,30 @@ router.use((req: any, res: any, next: any) => {
 });
 
 // 1. SETTINGS API
-router.get('/settings', getSettings);
+router.get('/settings', cacheResponse(60), getSettings);
 router.patch('/settings', updateSettings);
-router.get('/sessions', getSessions);
+router.get('/sessions', cacheResponse(60), getSessions);
 router.delete('/sessions/:id', revokeSession);
-router.get('/storage-usage', getStorageUsage);
+router.get('/storage-usage', cacheResponse(300), getStorageUsage);
 router.post('/export', exportData);
 
 // 2. SOCIAL API
 router.post('/follow', followUser);
 router.post('/unfollow', unfollowUser);
 router.post('/follow-request/handle', handleFollowRequest);
-router.get('/notifications', getNotifications);
+router.get('/notifications', cacheResponse(30), getNotifications);
 router.post('/notifications/read', markNotificationsRead);
 
 // 3. ACTIVITY FEED
-router.get('/activity', getActivityFeed);
+router.get('/activity', cacheResponse(60), getActivityFeed);
 router.post('/activity/read', markActivityRead);
 
 // 4. FOLLOWERS / FOLLOWING (before dynamic :userId routes)
-router.get('/:userId/followers', getFollowersList);
-router.get('/:userId/following', getFollowingList);
+router.get('/:userId/followers', cacheResponse(60), getFollowersList);
+router.get('/:userId/following', cacheResponse(60), getFollowingList);
 
 // 5. PROFILE API
-router.get('/profile/:userId', getProfile);
+router.get('/profile/:userId', cacheResponse(60), getProfile);
 router.patch('/profile', updateProfile);
 
 // 6. BLOCK / UNBLOCK

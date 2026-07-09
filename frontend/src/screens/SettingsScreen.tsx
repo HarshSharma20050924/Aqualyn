@@ -54,7 +54,7 @@ export default function SettingsScreen({ onBack, onNavigate }: { onBack: () => v
   );
 
   const SubViewHeader = ({ title }: { title: string }) => (
-    <header className="fixed top-0 w-full z-50 bg-slate-50/70 backdrop-blur-xl border-b border-white/15 shadow-sm h-16 flex items-center px-6">
+    <header className="sticky top-0 w-full z-50 bg-slate-50/70 backdrop-blur-xl border-b border-white/15 shadow-sm h-16 flex items-center px-6">
       <button onClick={() => setSubView(null)} className="text-slate-500 hover:bg-white/20 p-2 rounded-full transition-colors active:scale-95 duration-200 mr-4">
         <ArrowLeft className="w-6 h-6" />
       </button>
@@ -71,7 +71,7 @@ export default function SettingsScreen({ onBack, onNavigate }: { onBack: () => v
             initial={{ opacity: 0, x: 20 }} 
             animate={{ opacity: 1, x: 0 }} 
             exit={{ opacity: 0, x: -20 }} 
-            className="bg-surface min-h-screen pb-32 absolute inset-0 z-50 overflow-y-auto"
+            className="bg-surface h-full pb-32 absolute inset-0 z-50 overflow-y-auto"
           >
             <SubViewHeader title="Chat Folders" />
             <main className="pt-24 px-4 max-w-2xl mx-auto space-y-6">
@@ -137,7 +137,7 @@ export default function SettingsScreen({ onBack, onNavigate }: { onBack: () => v
             initial={{ opacity: 0, x: 20 }} 
             animate={{ opacity: 1, x: 0 }} 
             exit={{ opacity: 0, x: -20 }} 
-            className="bg-surface min-h-screen pb-32 absolute inset-0 z-50 overflow-y-auto"
+            className="bg-surface h-full pb-32 absolute inset-0 z-50 overflow-y-auto"
           >
             <SubViewHeader title="Appearance" />
             <main className="pt-24 px-4 max-w-2xl mx-auto space-y-8">
@@ -201,7 +201,7 @@ export default function SettingsScreen({ onBack, onNavigate }: { onBack: () => v
             initial={{ opacity: 0, x: 20 }} 
             animate={{ opacity: 1, x: 0 }} 
             exit={{ opacity: 0, x: -20 }} 
-            className="bg-surface min-h-screen pb-32 absolute inset-0 z-50 overflow-y-auto"
+            className="bg-surface h-full pb-32 absolute inset-0 z-50 overflow-y-auto"
           >
             <SubViewHeader title="Wallet" />
             <main className="pt-24 px-4 max-w-2xl mx-auto space-y-8">
@@ -246,7 +246,7 @@ export default function SettingsScreen({ onBack, onNavigate }: { onBack: () => v
             initial={{ opacity: 0, x: 20 }} 
             animate={{ opacity: 1, x: 0 }} 
             exit={{ opacity: 0, x: -20 }} 
-            className="bg-surface min-h-screen pb-32 absolute inset-0 z-50 overflow-y-auto"
+            className="bg-surface h-full pb-32 absolute inset-0 z-50 overflow-y-auto"
           >
             <SubViewHeader title="Data and Storage" />
             <main className="pt-24 px-4 max-w-2xl mx-auto space-y-8">
@@ -273,7 +273,7 @@ export default function SettingsScreen({ onBack, onNavigate }: { onBack: () => v
             initial={{ opacity: 0, x: 20 }} 
             animate={{ opacity: 1, x: 0 }} 
             exit={{ opacity: 0, x: -20 }} 
-            className="bg-surface min-h-screen pb-32 absolute inset-0 z-50 overflow-y-auto"
+            className="bg-surface h-full pb-32 absolute inset-0 z-50 overflow-y-auto"
           >
             <SubViewHeader title="Security" />
             <main className="pt-24 px-4 max-w-2xl mx-auto space-y-8">
@@ -288,7 +288,7 @@ export default function SettingsScreen({ onBack, onNavigate }: { onBack: () => v
             initial={{ opacity: 0, x: 20 }} 
             animate={{ opacity: 1, x: 0 }} 
             exit={{ opacity: 0, x: -20 }} 
-            className="bg-surface min-h-screen pb-32 absolute inset-0 z-50 overflow-y-auto"
+            className="bg-surface h-full pb-32 absolute inset-0 z-50 overflow-y-auto"
           >
             <SubViewHeader title="Notifications" />
             <main className="pt-24 px-4 max-w-2xl mx-auto space-y-8">
@@ -302,7 +302,7 @@ export default function SettingsScreen({ onBack, onNavigate }: { onBack: () => v
   };
 
   return (
-    <div className="relative overflow-y-auto min-h-screen">
+    <div className="relative overflow-y-auto h-full">
       <AnimatePresence mode="wait">
         {!subView ? (
           <motion.div 
@@ -310,9 +310,9 @@ export default function SettingsScreen({ onBack, onNavigate }: { onBack: () => v
             initial={{ opacity: 0, y: 20 }} 
             animate={{ opacity: 1, y: 0 }} 
             exit={{ opacity: 0, y: -20 }} 
-            className="bg-surface min-h-screen pb-32 overflow-y-auto"
+            className="bg-surface h-full pb-32 overflow-y-auto"
           >
-            <header className="fixed top-0 w-full z-50 bg-slate-50/70 backdrop-blur-xl border-b border-white/15 shadow-[0_8px_32px_0_rgba(0,87,189,0.06)] h-16 flex items-center px-6">
+            <header className="sticky top-0 w-full z-50 bg-slate-50/70 backdrop-blur-xl border-b border-white/15 shadow-[0_8px_32px_0_rgba(0,87,189,0.06)] h-16 flex items-center px-6">
               <button onClick={onBack} className="text-slate-500 hover:bg-white/20 p-2 rounded-full transition-colors active:scale-95 duration-200 mr-4">
                 <ArrowLeft className="w-6 h-6" />
               </button>

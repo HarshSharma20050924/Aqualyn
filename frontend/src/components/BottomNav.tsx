@@ -10,7 +10,7 @@ export default function BottomNav({ currentScreen, onNavigate }: { currentScreen
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 w-full h-20 bg-white/80 backdrop-blur-2xl flex justify-around items-center px-4 pb-2 border-t border-white/20 shadow-[0_-4px_24px_rgba(0,0,0,0.04)] rounded-t-[2rem] z-50">
+    <nav className="absolute bottom-0 left-0 w-full h-20 bg-white/80 backdrop-blur-2xl flex justify-around items-center px-4 pb-2 border-t border-white/20 shadow-[0_-4px_24px_rgba(0,0,0,0.04)] rounded-t-[2rem] z-50">
       {navItems.map((item) => {
         const isActive =
           currentScreen === item.id ||

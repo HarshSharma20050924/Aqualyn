@@ -1,0 +1,63 @@
+config:
+  target: "https://aqualyn.onrender.com"
+  phases:
+    # Warm up — 50 socket connections/s for 30s = 1500 total sockets
+    - duration: 30
+      arrivalRate: 50
+      name: "Warm up sockets"
+
+    # Ramp — go to 500/s over 60s = 30,000 concurrent sockets
+    - duration: 60
+      arrivalRate: 50
+      rampTo: 500
+      name: "Ramp sockets"
+
+    # Sustain — hold 500 new connections/s for 2 min
+    - duration: 120
+      arrivalRate: 500
+      name: "Sustain 500/s"
+
+  engines:
+    socketio: {}
+
+  socketio:
+    transports:
+      - websocket
+
+scenarios:
+  # ── Scenario 1: Connect & join room (most common user action) ────────
+  - name: "Connect and join room"
+    engine: socketio
+    weight: 60
+    flow:
+      - emit:
+          channel: "join_room"
+          data:
+            userId: "test-user-{{ $randomString(8) }}"
+      - think: 5
+      - emit:
+          channel: "typing"
+          data:
+            chatId: "chat-{{ $randomString(8) }}"
+            userId: "test-user-{{ $randomString(8) }}"
+      - think: 3
+
+  # ── Scenario 2: Send a message ────────────────────────────────────────
+  - name: "Send messages"
+    engine: socketio
+    weight: 40
+    flow:
+      - emit:
+          channel: "join_room"
+          data:
+            userId: "sender-{{ $randomString(8) }}"
+      - think: 2
+      - loop:
+          - emit:
+              channel: "send_message"
+              data:
+                chatId: "chat-{{ $randomString(6) }}"
+                text: "Load test message {{ $randomString(12) }}"
+                senderId: "sender-{{ $randomString(8) }}"
+          - think: 1
+        count: 5

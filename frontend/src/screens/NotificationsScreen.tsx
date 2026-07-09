@@ -40,7 +40,7 @@ export default function NotificationsScreen({ onBack }: { onBack: () => void }) 
 
   return (
     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="bg-surface min-h-screen pb-24">
-      <header className="fixed top-0 w-full z-50 bg-slate-50/70 backdrop-blur-xl border-b border-white/15 shadow-[0_8px_32px_0_rgba(0,87,189,0.06)] h-16 flex items-center px-4 gap-4">
+      <header className="sticky top-0 w-full z-50 bg-slate-50/70 backdrop-blur-xl border-b border-white/15 shadow-[0_8px_32px_0_rgba(0,87,189,0.06)] h-16 flex items-center px-4 gap-4">
         <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-white/40 transition-colors">
           <ArrowLeft className="w-6 h-6 text-on-surface" />
         </button>

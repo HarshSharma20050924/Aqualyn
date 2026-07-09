@@ -17,7 +17,7 @@ export const notificationWorker = new Worker('notification-queue', async (job: J
     return { success: true, timestamp: new Date() };
 
 }, { 
-    connection: redis.duplicate(), // Use a dedicated connection for the worker
+    connection: redis.duplicate() as any, // Use a dedicated connection for the worker
     concurrency: 5 // Process 5 notifications simultaneously per worker instance
 });
 

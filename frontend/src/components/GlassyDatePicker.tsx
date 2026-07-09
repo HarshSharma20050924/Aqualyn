@@ -138,6 +138,13 @@ export default function GlassyDatePicker({ value, onChange }: GlassyDatePickerPr
   const currentYear = new Date().getFullYear();
   const years = Array.from({ length: 100 }, (_, i) => currentYear - i);
 
+  const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 768);
+  useEffect(() => {
+    const handleResize = () => setIsDesktop(window.innerWidth >= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   // Parse the current value to find indices
   const parsedDate = value ? new Date(value + 'T00:00:00') : null;
 
@@ -176,6 +183,22 @@ export default function GlassyDatePicker({ value, onChange }: GlassyDatePickerPr
   const displayValue = parsedDate
     ? `${MONTHS[parsedDate.getMonth()]} ${parsedDate.getDate()}, ${parsedDate.getFullYear()}`
     : 'Select Date of Birth';
+
+  if (isDesktop) {
+    return (
+      <div className="relative w-full">
+        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none z-10">
+          <Calendar className="w-5 h-5" />
+        </div>
+        <input
+          type="date"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full h-14 bg-white/40 border-outline-variant/20 border rounded-2xl pl-12 pr-4 text-on-surface font-body shadow-inner transition-all hover:bg-white/50 focus:bg-white/60 focus:outline-none focus:ring-2 focus:ring-secondary/50 cursor-text [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="relative" ref={containerRef}>

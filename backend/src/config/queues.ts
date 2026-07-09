@@ -6,7 +6,7 @@ import { redis } from './redis';
  * All background work (Push Notifications, Media Resizing, Emails) must go through here.
  */
 export const notificationQueue = new Queue('notification-queue', { 
-    connection: redis.duplicate(), // Create a dedicated Redis connection for the Queue
+    connection: redis.duplicate() as any, // Create a dedicated Redis connection for the Queue
     defaultJobOptions: {
         attempts: 3, // Retry failed notifications 3 times automatically
         backoff: {

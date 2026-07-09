@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { verifyToken } from '../../middleware/auth';
+import { cacheResponse } from '../../core/middlewares/cache.middleware';
 import {
     getChats,
     createChat,
@@ -30,7 +31,7 @@ router.use((req: any, res: any, next: any) => {
 });
 
 // Folders (Specific routes first)
-router.get('/folders', getFolders);
+router.get('/folders', cacheResponse(60), getFolders);
 router.post('/folders', createFolder);
 router.put('/folders/:id', updateFolder);
 router.delete('/folders/:id', deleteFolder);
@@ -40,11 +41,11 @@ router.post('/secret/request', requestSecretChat);
 router.post('/secret/handle', handleSecretChat);
 
 // Chat list
-router.get('/', getChats);
+router.get('/', cacheResponse(15), getChats); // Short 15s cache because chats update frequently
 router.post('/', createChat);
 
 // Messages
-router.get('/:chatId/messages', getMessages);
+router.get('/:chatId/messages', cacheResponse(15), getMessages);
 router.post('/:chatId/messages', sendMessage);
 router.delete('/:chatId/messages/:messageId', deleteMessage);
 router.post('/:chatId/messages/:messageId/reactions', updateReactions);
