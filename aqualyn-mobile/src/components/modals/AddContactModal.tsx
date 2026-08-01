@@ -28,7 +28,7 @@ export default function AddContactModal({ isOpen, onClose, addContact }: AddCont
         newContactName, 
         newContactPhone, 
         `local_${Date.now()}`, 
-        `https://ui-avatars.com/api/?background=random&name=${encodeURIComponent(newContactName)}`
+        ''
       );
       setNewContactName('');
       setNewContactPhone('');

@@ -10,7 +10,8 @@ import {
   PanResponder,
   Animated as RNAnimated,
 } from 'react-native';
-import Animated, { FadeInUp } from 'react-native-reanimated';
+import Animated, { FadeInUp, useSharedValue, useAnimatedStyle, withSpring, runOnJS } from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { 
   Play, Pause, FileText, Download, MapPin, CheckCheck, Check, Clock,
   Reply, Copy, Trash2, Timer, Edit2, Wallet, ArrowRight, ShieldAlert 
@@ -102,40 +103,31 @@ function MessageBubbleComponent({
   const [isPlaying, setIsPlaying] = useState(false);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
 
-  // --- Slide to Reply Setup ---
-  const pan = useRef(new RNAnimated.ValueXY()).current;
-  const panResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponderCapture: (evt, gestureState) => {
-        return Math.abs(gestureState.dx) > 20 && Math.abs(gestureState.dy) < 20;
-      },
-      onMoveShouldSetPanResponder: (evt, gestureState) => {
-        return Math.abs(gestureState.dx) > 20 && Math.abs(gestureState.dy) < 20;
-      },
-      onPanResponderMove: (evt, gestureState) => {
-        if (Math.abs(gestureState.dx) < 80) {
-          pan.setValue({ x: gestureState.dx, y: 0 });
-        }
-      },
-      onPanResponderRelease: (evt, gestureState) => {
-        if (Math.abs(gestureState.dx) > 50) {
-          onReply(msg);
-        }
-        RNAnimated.spring(pan, {
-          toValue: { x: 0, y: 0 },
-          useNativeDriver: true,
-          bounciness: 10,
-        }).start();
-      },
-      onPanResponderTerminate: () => {
-        RNAnimated.spring(pan, {
-          toValue: { x: 0, y: 0 },
-          useNativeDriver: true,
-          bounciness: 10,
-        }).start();
+  // --- Slide to Reply Setup (Telegram Style) ---
+  const translateX = useSharedValue(0);
+
+  const panGesture = Gesture.Pan()
+    .activeOffsetX([-20, 20]) // Only activate on horizontal swipe
+    .onUpdate((event) => {
+      // Limit max swipe distance for the spring tension feel
+      if (Math.abs(event.translationX) < 100) {
+        translateX.value = event.translationX;
       }
     })
-  ).current;
+    .onEnd((event) => {
+      if (Math.abs(event.translationX) > 50) {
+        runOnJS(onReply)(msg);
+      }
+      translateX.value = withSpring(0, {
+        mass: 0.5,
+        stiffness: 250,
+        damping: 25,
+      });
+    });
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
 
   // Self-Destruct Counter Logic Mock
   useEffect(() => {
@@ -169,15 +161,15 @@ function MessageBubbleComponent({
 
   return (
     <View style={styles.bubbleContainerBaseLayer}>
-    <RNAnimated.View
-      {...panResponder.panHandlers}
-      style={[
-        styles.messageRowGroupAlignmentTrack, 
-        isMe ? styles.alignToRight : styles.alignToLeft,
-        { transform: [{ translateX: pan.x }] }
-      ]}
-    >
-      <TouchableOpacity
+    <GestureDetector gesture={panGesture}>
+      <Animated.View
+        style={[
+          styles.messageRowGroupAlignmentTrack, 
+          isMe ? styles.alignToRight : styles.alignToLeft,
+          animatedStyle
+        ]}
+      >
+        <TouchableOpacity
         onLongPress={() => setShowContextMenu(true)}
         onPress={() => msg.imageUrl && onMediaClick?.(msg)}
         style={[
@@ -273,7 +265,8 @@ function MessageBubbleComponent({
           </View>
         )}
       </View>
-    </RNAnimated.View>
+      </Animated.View>
+    </GestureDetector>
 
     <Modal visible={showContextMenu} transparent animationType="fade" onRequestClose={() => setShowContextMenu(false)}>
       <TouchableOpacity style={styles.contextMenuBackdrop} activeOpacity={1} onPress={() => setShowContextMenu(false)}>

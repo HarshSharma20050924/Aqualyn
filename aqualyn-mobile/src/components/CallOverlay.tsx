@@ -1,7 +1,8 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Image, Modal, StyleSheet, Platform, Dimensions } from 'react-native';
+import { View, Text, TouchableOpacity, Modal, StyleSheet, Platform, Dimensions } from 'react-native';
 import { Phone, PhoneOff, Video, VideoOff, Mic, MicOff, Volume2 } from 'lucide-react-native';
 import { useCall } from '../context/CallContext';
+import ContactAvatar from './ui/ContactAvatar';
 
 const { width: WINDOW_WIDTH, height: WINDOW_HEIGHT } = Dimensions.get('window');
 
@@ -21,13 +22,13 @@ export const CallOverlay: React.FC = () => {
 
   // Incoming Popup Banner layout context
   if (incomingCall && !isCalling) {
-    const fallbackAvatar = `https://ui-avatars.com/api/?background=random&name=${incomingCall.callerName}`;
     return (
       <View style={styles.incomingBanner}>
         <View style={styles.avatarWrapper}>
-          <Image 
-            source={{ uri: incomingCall.callerAvatar || fallbackAvatar }} 
-            style={styles.incomingAvatar} 
+          <ContactAvatar
+            src={incomingCall.callerAvatar}
+            name={incomingCall.callerName}
+            style={styles.incomingAvatar}
           />
         </View>
         
@@ -53,7 +54,6 @@ export const CallOverlay: React.FC = () => {
   // Active Full-Screen Overlay Modal Interface
   if (isCalling && currentCall) {
     const isVideo = currentCall.type === 'VIDEO';
-    const fallbackCurrentAvatar = `https://ui-avatars.com/api/?background=random&name=${currentCall.userName}`;
 
     return (
       <Modal visible transparent={false} animationType="fade">
@@ -77,8 +77,9 @@ export const CallOverlay: React.FC = () => {
               </View>
             ) : (
               <View style={styles.voiceBackgroundContainer}>
-                <Image 
-                  source={{ uri: currentCall.avatar || fallbackCurrentAvatar }} 
+                <ContactAvatar
+                  src={currentCall.avatar}
+                  name={currentCall.userName}
                   style={styles.backgroundImageBlur}
                   blurRadius={20}
                 />
@@ -89,12 +90,13 @@ export const CallOverlay: React.FC = () => {
           {/* User Details Header Panel */}
           <View style={styles.headerPanel}>
             <View style={styles.avatarContainer}>
-              <Image 
-                source={{ uri: currentCall.avatar || fallbackCurrentAvatar }} 
+              <ContactAvatar
+                src={currentCall.avatar}
+                name={currentCall.userName}
                 style={[
-                  styles.activeAvatar, 
+                  styles.activeAvatar,
                   isVideo ? styles.activeAvatarVideo : styles.activeAvatarVoice
-                ]} 
+                ]}
               />
             </View>
             <Text style={styles.activeCallerName}>{currentCall.userName}</Text>

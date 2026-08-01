@@ -6,6 +6,7 @@ import { useAppContext } from '../context/AppContext';
 import { ENDPOINTS } from '../config/api';
 import { apiFetch } from '../utils/fetcher';
 import { uploadFile } from '../utils/uploads';
+import ContactAvatar from '../components/ui/ContactAvatar';
 
 export default function EditProfileScreen({ onBack }: { onBack: () => void }) {
   const { currentUser, setCurrentUser, addToast, updatePrivacy } = useAppContext();
@@ -131,7 +132,7 @@ export default function EditProfileScreen({ onBack }: { onBack: () => void }) {
             className="w-32 h-32 rounded-full border-4 border-white shadow-lg overflow-hidden relative group cursor-pointer"
             onClick={() => fileInputRef.current?.click()}
           >
-            <img src={avatar} alt="Profile" className="w-full h-full object-cover" />
+            <ContactAvatar src={avatar} name={name || username} />
             <div className={`absolute inset-0 bg-black/40 flex flex-col items-center justify-center transition-opacity ${isUploadingAvatar ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
               {isUploadingAvatar ? (
                 <BubbleLoader width={24} height={24} />

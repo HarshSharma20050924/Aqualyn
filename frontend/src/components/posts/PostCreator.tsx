@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X, Image as ImageIcon, Video, Camera, Check, MapPin, Tag, Music } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { uploadFile } from '../../utils/uploads';
+import ContactAvatar from '../ui/ContactAvatar';
 
 interface PostCreatorProps {
   onClose: () => void;
@@ -86,7 +87,7 @@ export default function PostCreator({ onClose }: PostCreatorProps) {
 
         <div className="flex-1 overflow-y-auto p-6 space-y-8">
           <div className="flex gap-4">
-            <img src={currentUser?.avatar} alt="Me" className="w-12 h-12 rounded-full object-cover shadow-md" />
+            <ContactAvatar src={currentUser?.avatar} name={currentUser?.displayName || currentUser?.name || currentUser?.username || 'You'} className="w-12 h-12 rounded-full object-cover shadow-md" />
             <textarea
               value={caption}
               onChange={(e) => setCaption(e.target.value)}

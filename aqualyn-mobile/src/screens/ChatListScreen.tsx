@@ -15,13 +15,16 @@ import {
   RefreshControl,
   ActivityIndicator
 } from 'react-native';
+import * as Haptics from 'expo-haptics';
+import { BlurView } from 'expo-blur';
 import Animated, {
   FadeIn,
   FadeOut,
   SlideInDown,
   useSharedValue,
   useAnimatedStyle,
-  withTiming
+  withTiming,
+  LinearTransition
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -61,6 +64,7 @@ import DeleteChatDialog from '../components/chat/DeleteChatDialog';
 import { ENDPOINTS } from '../config/api';
 import { apiFetch } from '../utils/fetcher';
 import BubbleLoader from '../components/ui/BubbleLoader';
+import ContactAvatar from '../components/ui/ContactAvatar';
 
 const { width: WINDOW_WIDTH, height: WINDOW_HEIGHT } = Dimensions.get('window');
 
@@ -326,7 +330,9 @@ export default function ChatListScreen({ onNavigate }: Props) {
     <Animated.View  style={styles.screenContainer}>
       
       {/* Absolute Header Dock System */}
-      <View 
+      <BlurView 
+        intensity={80}
+        tint="light"
         onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
         style={[styles.headerContainer, { paddingTop: insets.top }]}
       >
@@ -384,7 +390,7 @@ export default function ChatListScreen({ onNavigate }: Props) {
             <>
               <View style={styles.brandRow}>
                 <TouchableOpacity onPress={() => onNavigate('profile')} style={styles.profileAvatarFrame}>
-                  <Image source={{ uri: currentUser?.avatar }} style={styles.avatarImage} />
+                  <ContactAvatar src={currentUser?.avatar} name={currentUser?.displayName || currentUser?.name || currentUser?.username || 'You'} style={styles.avatarImage} />
                 </TouchableOpacity>
                 <Text style={styles.brandTitleText}>Aqualyn</Text>
               </View>
@@ -417,7 +423,10 @@ export default function ChatListScreen({ onNavigate }: Props) {
                 return (
                   <TouchableOpacity
                     key={tab}
-                    onPress={() => tab === 'archived' ? handleOpenArchive() : setActiveTab(tab)}
+                    onPress={() => {
+                      Haptics.selectionAsync();
+                      tab === 'archived' ? handleOpenArchive() : setActiveTab(tab);
+                    }}
                     style={[styles.tabBadge, isTabActive ? styles.tabBadgeActive : styles.tabBadgeInactive]}
                   >
                     <Text style={[styles.tabBadgeText, isTabActive ? styles.textWhite : styles.textVariant]}>
@@ -439,7 +448,7 @@ export default function ChatListScreen({ onNavigate }: Props) {
             </ScrollView>
           </View>
         )}
-      </View>
+      </BlurView>
 
 {/* Main Messaging / Streams Center */}
        <View style={{ flex: 1, position: 'relative' }}>
@@ -448,7 +457,8 @@ export default function ChatListScreen({ onNavigate }: Props) {
                <BubbleLoader size={30} />
            </View>
          )}
-         <ScrollView 
+         <Animated.ScrollView 
+           layout={LinearTransition.springify().damping(16).stiffness(120)}
            contentContainerStyle={[styles.mainScroll, { paddingTop: headerHeight + 12, paddingBottom: insets.bottom + 100 }]}
            refreshControl={
              <RefreshControl
@@ -498,10 +508,10 @@ export default function ChatListScreen({ onNavigate }: Props) {
                       return (
                         <View key={user.id} style={styles.globalUserCard}>
                           <TouchableOpacity
-                            onPress={() => { setActiveContactId(user.id); onNavigate('contact-profile'); }}
+                            onPress={() => { Haptics.selectionAsync(); setActiveContactId(user.id); onNavigate('contact-profile'); }}
                             style={styles.globalUserAvatarWrapper}
                           >
-                            <Image source={{ uri: (user.avatar && user.avatar.trim() !== '') ? user.avatar : `https://ui-avatars.com/api/?background=random&format=png&name=${encodeURIComponent(user.displayName || user.name || 'User')}` }} style={styles.globalUserAvatar} />
+                            <ContactAvatar src={user.avatar} name={user.displayName || user.name || user.username || 'User'} style={styles.globalUserAvatar} />
                           </TouchableOpacity>
                           <View style={styles.globalUserMeta}>
                             <View style={styles.globalUserNameRow}>
@@ -551,10 +561,10 @@ export default function ChatListScreen({ onNavigate }: Props) {
                     return (
                       <TouchableOpacity
                         key={chat.id}
-                        onPress={() => handleChatClick(chat.id)}
-                        delayLongPress={500}
+                        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); handleChatClick(chat.id); }}
+                        delayLongPress={350}
                         onPressIn={handleTouchStart}
-                        onLongPress={() => handleLongPress(chat.id)}
+                        onLongPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); handleLongPress(chat.id); }}
                         style={[styles.chatCardItem, styles.chatCardPinned, isSelected && styles.chatCardSelected]}
                       >
                         <View style={styles.avatarContainer}>
@@ -564,7 +574,7 @@ export default function ChatListScreen({ onNavigate }: Props) {
                             </View>
                           ) : (
                             <View style={styles.avatarTouchArea}>
-                              <Image source={{ uri: (chat.avatar && chat.avatar.trim() !== '') ? chat.avatar : `https://ui-avatars.com/api/?background=random&format=png&name=${encodeURIComponent(chat.name || 'Chat')}` }} style={styles.chatListItemAvatar} />
+                              <ContactAvatar src={chat.avatar} name={chat.name || 'Chat'} style={styles.chatListItemAvatar} />
                               <View style={styles.aquaGlowDot} />
                             </View>
                           )}
@@ -588,8 +598,10 @@ export default function ChatListScreen({ onNavigate }: Props) {
                             <View style={styles.unreadCounterBadge}>
                               <Text style={styles.unreadCounterText}>{chat.unreadCount}</Text>
                             </View>
-                          ) : lastMsg?.status === 'seen' ? (
+                          ) : lastMsg?.senderId === currentUser?.id && lastMsg?.status === 'seen' ? (
                             <CheckCheck size={16} color="#0057bd" />
+                          ) : lastMsg?.senderId === currentUser?.id ? (
+                            <Check size={16} color="#94a3b8" />
                           ) : null}
                         </View>
                       </TouchableOpacity>
@@ -611,9 +623,10 @@ export default function ChatListScreen({ onNavigate }: Props) {
                     return (
                       <TouchableOpacity
                         key={chat.id}
-                        onPress={() => handleChatClick(chat.id)}
+                        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); handleChatClick(chat.id); }}
+                        delayLongPress={350}
                         onPressIn={handleTouchStart}
-                        onLongPress={() => handleLongPress(chat.id)}
+                        onLongPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); handleLongPress(chat.id); }}
                         style={[styles.chatCardItem, isSelected && styles.chatCardSelected]}
                       >
                         <View style={styles.avatarContainer}>
@@ -622,7 +635,7 @@ export default function ChatListScreen({ onNavigate }: Props) {
                               <UserPlus size={22} color="#0057bd" />
                             </View>
                           ) : (
-                            <Image source={{ uri: (chat.avatar && chat.avatar.trim() !== '') ? chat.avatar : `https://ui-avatars.com/api/?background=random&format=png&name=${encodeURIComponent(chat.name || 'Chat')}` }} style={styles.chatListItemAvatarRound} />
+                            <ContactAvatar src={chat.avatar} name={chat.name || 'Chat'} style={styles.chatListItemAvatarRound} />
                           )}
                           {isSelectionMode && (
                             <View style={[styles.selectionCheckCircle, isSelected ? styles.checkSelectedBg : styles.checkUnselectedBg]}>
@@ -644,11 +657,11 @@ export default function ChatListScreen({ onNavigate }: Props) {
                             <View style={styles.unreadCounterBadge}>
                               <Text style={styles.unreadCounterText}>{chat.unreadCount}</Text>
                             </View>
-                          ) : lastMsg?.status === 'seen' ? (
+                          ) : lastMsg?.senderId === currentUser?.id && lastMsg?.status === 'seen' ? (
                             <CheckCheck size={16} color="#0057bd" />
-                          ) : (
-                            <CheckCheck size={16} color="#94a3b8" />
-                          )}
+                          ) : lastMsg?.senderId === currentUser?.id ? (
+                            <Check size={16} color="#94a3b8" />
+                          ) : null}
                           {chat.isVoice && <Mic size={14} color="#64748b" style={{ marginTop: 4 }} />}
                         </View>
                       </TouchableOpacity>
@@ -666,7 +679,7 @@ export default function ChatListScreen({ onNavigate }: Props) {
             Messages are end-to-end encrypted.{"\n"}No one outside this chat can read them.
           </Text>
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
       </View>
 
       {/* Floating Action Pen System Dock */}
@@ -813,7 +826,7 @@ export default function ChatListScreen({ onNavigate }: Props) {
 
 const styles = StyleSheet.create({
   screenContainer: { flex: 1, backgroundColor: '#f8fafc' },
-  headerContainer: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 50, backgroundColor: 'rgba(248,250,252,0.85)', borderBottomWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },
+  headerContainer: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 50, backgroundColor: 'rgba(248,250,252,0.5)', borderBottomWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },
   headerToolbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', height: 64, paddingHorizontal: 16 },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   profileAvatarFrame: { width: 40, height: 40, borderRadius: 20, overflow: 'hidden', borderWidth: 1.5, borderColor: '#0891b2' },

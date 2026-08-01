@@ -17,7 +17,7 @@ import { getFirebaseAuth } from '../config/firebase';
 import { useAppContext } from '../context/AppContext';
 import { ENDPOINTS, API_BASE_URL } from '../config/api';
 import { apiFetch } from '../utils/fetcher';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Storage } from '../utils/storage';
 
 const { width: W } = Dimensions.get('window');
 
@@ -107,7 +107,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
       const { data, error } = await sb.auth.verifyOtp({ email, token: otp.join(''), type: 'email' });
       if (error || !data.session) throw new Error(error?.message || 'Invalid or expired OTP');
       const accessToken = data.session.access_token;
-      await AsyncStorage.setItem('auth_token', accessToken);
+      Storage.setItem('auth_token', accessToken);
       await syncWithBackend(accessToken);
     } catch (e: any) {
       alert(e.message || 'Invalid code');
@@ -126,7 +126,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
     if (res.status === 401) { setStep('email'); return; }
     if (!res.ok) throw new Error(resData.error || 'Sync failed');
     if (resData.token) {
-      await AsyncStorage.setItem('auth_token', resData.token);
+      Storage.setItem('auth_token', resData.token);
     }
     if (resData.status === 'needs_profile') {
       if (resData.user?.displayName) setDisplayName(resData.user.displayName);
@@ -148,7 +148,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
     try {
       const sb = getSupabase();
       const { data: { session } } = await sb.auth.getSession().catch(() => ({ data: { session: null } }));
-      const token = session?.access_token || await AsyncStorage.getItem('auth_token');
+      const token = session?.access_token || Storage.getItem('auth_token');
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (token) headers['Authorization'] = `Bearer ${token}`;
       const res = await apiFetch(ENDPOINTS.AUTH_SYNC, {
@@ -157,7 +157,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
       const resData = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(resData.error || 'Setup failed');
       if (resData.token) {
-        await AsyncStorage.setItem('auth_token', resData.token);
+        Storage.setItem('auth_token', resData.token);
       }
       if (resData.user) {
         setCurrentUser({ ...resData.user,

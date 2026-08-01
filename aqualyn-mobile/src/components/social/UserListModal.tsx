@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { X, UserPlus, Search } from 'lucide-react-native';
 import { User } from '../../types';
+import ContactAvatar from '../../components/ui/ContactAvatar';
 
 const { width: WINDOW_WIDTH } = Dimensions.get('window');
 
@@ -91,11 +92,7 @@ export default function UserListModal({ isOpen, onClose, title, users, isLoading
                   >
                     <View style={styles.userInfo}>
                        <View style={styles.avatarContainer}>
-                          {u.avatar ? (
-                            <Image source={{ uri: u.avatar }} style={styles.avatarImage as any} />
-                          ) : (
-                            <Text style={styles.avatarPlaceholderText}>{(u.displayName || u.username).charAt(0).toUpperCase()}</Text>
-                          )}
+                          <ContactAvatar name={u.displayName || u.username} src={u.avatar} style={styles.avatarImage as any} />
                        </View>
                        <View style={styles.userDetails}>
                           <Text style={styles.userName} numberOfLines={1}>{u.displayName || u.username}</Text>

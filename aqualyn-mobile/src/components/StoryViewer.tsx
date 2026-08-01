@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { X, Send, Heart, Share2, MoreHorizontal, Star, Trash2, VolumeX } from 'lucide-react-native';
 import { useAppContext, Story } from '../context/AppContext';
+import ContactAvatar from './ui/ContactAvatar';
 
 interface StoryViewerProps {
   stories: Story[];
@@ -172,7 +173,7 @@ export default function StoryViewer({ stories, initialIndex, onClose }: StoryVie
         <View style={styles.floatingHeaderPanel}>
           <View style={styles.headerLeft}>
             <View style={styles.avatarRing}>
-              <Image source={{ uri: currentStory.userAvatar }} style={styles.avatarImage} />
+              <ContactAvatar name={currentStory.userName} src={currentStory.userAvatar} style={styles.avatarImage} />
             </View>
             <View style={styles.headerTextContainer}>
               <Text style={styles.userNameText}>{currentStory.userName}</Text>
@@ -295,7 +296,7 @@ export default function StoryViewer({ stories, initialIndex, onClose }: StoryVie
                     onPress={() => handleSendToChat(chat.id)}
                     style={styles.chatSelectItem}
                   >
-                    <Image source={{ uri: chat.avatar }} style={styles.chatSelectAvatar} />
+                    <ContactAvatar name={chat.name} src={chat.avatar} style={styles.chatSelectAvatar} />
                     <Text style={styles.chatSelectName}>{chat.name}</Text>
                   </TouchableOpacity>
                 ))}

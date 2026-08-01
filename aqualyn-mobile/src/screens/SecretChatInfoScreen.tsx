@@ -36,6 +36,7 @@ import { Chat } from '../types';
 import { useAppContext } from '../context/AppContext';
 import { apiFetch } from '../utils/fetcher';
 import { ENDPOINTS } from '../config/api';
+import ContactAvatar from '../components/ui/ContactAvatar';
 
 interface SecretChatInfoScreenProps {
   chat: Chat;
@@ -170,7 +171,7 @@ export default function SecretChatInfoScreen({ chat, onBack }: SecretChatInfoScr
         <View style={styles.profileMetaOverviewBlock}>
           <View style={styles.avatarBadgeAbsolutePositionWrapper}>
             <View style={styles.avatarCircularBadgeBorderCard}>
-              <Image source={{ uri: chat.avatar }} style={styles.chatProfileAvatarImg} />
+              <ContactAvatar name={chat.name} src={chat.avatar} style={styles.chatProfileAvatarImg} />
             </View>
             <View style={styles.absoluteLockIconBadgeIndicator}>
               <Lock size={14} color="#ffffff" />

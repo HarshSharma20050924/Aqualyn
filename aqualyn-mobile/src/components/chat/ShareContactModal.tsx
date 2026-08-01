@@ -6,12 +6,12 @@ import {
   TouchableOpacity,
   TextInput,
   ScrollView,
-  Image,
   Modal,
   Platform,
 } from 'react-native';
 import Animated, { FadeIn, FadeOut, ZoomIn, ZoomOut } from 'react-native-reanimated';
 import { X, Search, Check } from 'lucide-react-native';
+import ContactAvatar from '../ui/ContactAvatar';
 
 interface ShareContactModalProps {
   isOpen: boolean;
@@ -94,7 +94,7 @@ export default function ShareContactModal({ isOpen, onClose, onShare, appContext
                   ]}
                   activeOpacity={0.7}
                 >
-                  <Image source={{ uri: contact.avatar }} style={styles.contactCellProfileAvatarGraphic} />
+                  <ContactAvatar name={contact.name} src={contact.avatar} style={styles.contactCellProfileAvatarGraphic} />
                   <View style={styles.contactLabelStackFlexColumn}>
                     <Text style={styles.contactLabelItemTextPrimaryName}>{contact.name}</Text>
                     <Text style={styles.contactLabelItemTextMicroSubtextMessage} numberOfLines={1}>

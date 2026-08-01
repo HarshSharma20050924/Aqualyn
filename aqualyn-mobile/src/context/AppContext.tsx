@@ -1,5 +1,5 @@
 import React, { useState, ReactNode, useEffect, useRef } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Storage } from '../utils/storage';
 import { useRouter } from 'expo-router';
 import { User, Chat, Message, Folder, ThemeSettings, Post, Story, Notification } from '../types';
 import { io, Socket } from 'socket.io-client';
@@ -66,6 +66,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setActiveChatId, activeChatId
   );
 
+  // Normalize post object coming from API or socket events.
+  const mapPost = (p: any): Post => ({
+    ...p,
+    userId: p.authorId || p.userId,
+    userName: p.author?.displayName || p.author?.username || p.userName || 'User',
+    userAvatar: p.author?.avatar || p.userAvatar,
+    caption: p.content || p.caption || '',
+    likes: p.likes?.map((l: any) => l.userId).filter(Boolean) || [],
+    comments: p.comments?.map((c: any) => ({
+      id: c.id, userId: c.userId,
+      userName: c.user?.displayName || c.user?.username || c.userName || 'User',
+      userAvatar: c.user?.avatar || c.userAvatar, text: c.content || c.text || '',
+      timestamp: c.createdAt ? new Date(c.createdAt).toLocaleString() : 'Just now'
+    })) || [],
+    timestamp: p.createdAt ? new Date(p.createdAt).toLocaleString() : 'Just now',
+    mediaUrl: p.mediaUrl || p.imageUrl || p.videoUrl,
+    imageUrl: p.mediaUrl || p.imageUrl,
+    videoUrl: p.videoUrl,
+  });
+
   const fetchInitialData = async () => {
     setIsFetchingData(true);
     try {
@@ -95,9 +115,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
             if (!map.has(u.id)) map.set(u.id, {
               id: u.id, name: u.displayName || u.username || 'Aqualyn User',
               displayName: u.displayName, username: u.username,
-              avatar: u.avatar || `https://ui-avatars.com/api/?background=random&name=${u.username || 'U'}`,
+              avatar: u.avatar || undefined,
               role: 'Aqualyn User', email: '', bio: u.bio || 'Hey there! I am using Aqualyn.',
-              largeAvatar: u.largeAvatar || u.avatar
+              largeAvatar: u.largeAvatar || u.avatar || undefined
             });
           });
           return Array.from(map.values());
@@ -174,9 +194,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const bootstrap = async () => {
       try {
         // Check if user explicitly logged out — skip auto-login
-        const explicitLogout = await AsyncStorage.getItem('explicit_logout').catch(() => null);
+        const explicitLogout = Storage.getItem('explicit_logout');
         if (explicitLogout === '1') {
-          await AsyncStorage.removeItem('explicit_logout').catch(() => {});
+          Storage.removeItem('explicit_logout');
           console.log('[Auth] Explicit logout detected — skipping bootstrap sync.');
           if (isMounted) setIsLoading(false);
           return;
@@ -191,7 +211,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (res.ok && isMounted) {
           const data = await res.json();
           if (data.token) {
-            await AsyncStorage.setItem('auth_token', data.token);
+            Storage.setItem('auth_token', data.token);
           }
           const syncedUser = data.user;
           if (!syncedUser || data.status === 'needs_profile') {
@@ -210,7 +230,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           // Stale JWT — clear local token and cookie via logout
           console.log("[Auth] Session invalid (401) — clearing stale session...");
           await apiFetch(`${API_BASE_URL}/api/auth/logout`, { method: 'POST' }).catch(() => {});
-          await AsyncStorage.removeItem('auth_token').catch(() => {});
+          Storage.removeItem('auth_token');
           setCurrentUser(null);
         }
       } catch (e) {
@@ -264,7 +284,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             const newChat: Chat = {
               id: msg.chatId,
               name: chatData?.name || sender?.displayName || sender?.username || 'User',
-              avatar: chatData?.avatar || sender?.avatar || `https://ui-avatars.com/api/?background=random&name=${msg.senderId}`,
+              avatar: chatData?.avatar || sender?.avatar || undefined,
               lastMessage: msg.text, lastMessageTime: msg.timestamp || 'Just now', unreadCount: 1,
               isGroup: chatData?.isGroup || false,
               isSecret: chatData?.isSecret || false,
@@ -324,7 +344,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
       newSocket.on('new_notification', (notif: Notification) => {
         setNotifications(prev => [notif, ...prev]);
-        addToast(notif.text || 'New activity in your profile', 'info');
+        // Skip toast for direct_message — already handled with rich avatar toast in receive_message
+        if ((notif as any).type !== 'direct_message') {
+          addToast(notif.text || 'New activity in your profile', 'info');
+        }
       });
       newSocket.on('message_edited', ({ chatId, messageId, newText }) => {
         setMessages(prev => ({ ...prev, [chatId]: (prev[chatId] || []).map(m => m.id === messageId ? { ...m, text: newText, isEdited: true } : m) }));
@@ -362,7 +385,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         addToast(`${data.inviterName} invited you to join a chat!`, 'info');
         setNotifications(prev => [{
           id: `inv-${Date.now()}`, userId: currentUser.id, actorId: data.inviterId, sourceUserId: data.inviterId,
-          sourceUserName: data.inviterName, sourceUserAvatar: `https://ui-avatars.com/api/?background=random&name=${data.inviterName}`,
+          sourceUserName: data.inviterName, sourceUserAvatar: undefined,
           type: 'chat_invitation', targetId: data.chatId, text: `${data.inviterName} invited you to a chat. Join to create a temporary group.`,
           isRead: false, read: false, createdAt: new Date().toISOString()
         }, ...prev]);

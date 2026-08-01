@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D Glossy Alphabet Avatar Generator</title>
+  <style>
+    :root {
+      /* Integrated Color Palette */
+      --primary-dark: #10457d;
+      --primary-base: #0557ad;
+      --primary-mid: #2985cc;
+      --primary-light: #459fd9;
+      --primary-soft: #6dbce1;
+      --primary-muted: #4984a8;
+      --primary-bg: #eef7fc;
+      
+      --card-bg: #ffffff;
+      --text-color: #10457d;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: var(--primary-bg);
+      color: var(--text-color);
+      margin: 0;
+      padding: 40px 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    h1 {
+      margin-bottom: 8px;
+      font-weight: 700;
+    }
+
+    p {
+      color: var(--primary-muted);
+      margin-bottom: 24px;
+    }
+
+    .controls {
+      margin-bottom: 30px;
+      display: flex;
+      gap: 12px;
+    }
+
+    button {
+      background: var(--primary-base);
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      font-size: 15px;
+      font-weight: 600;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 12px rgba(5, 87, 173, 0.3);
+    }
+
+    button:hover {
+      background: var(--primary-dark);
+      transform: translateY(-1px);
+    }
+
+    .avatar-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      gap: 20px;
+      width: 100%;
+      max-width: 1000px;
+    }
+
+    .avatar-card {
+      background: var(--card-bg);
+      border-radius: 16px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      box-shadow: 0 4px 20px rgba(16, 69, 125, 0.08);
+      transition: transform 0.2s;
+    }
+
+    .avatar-card:hover {
+      transform: translateY(-4px);
+    }
+
+    canvas {
+      width: 100px;
+      height: 100px;
+      border-radius: 20px;
+    }
+
+    .download-link {
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--primary-base);
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .download-link:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>3D Glossy Avatar Generator</h1>
+  <p>Generates 3D glossy liquid avatars using your custom color palette.</p>
+
+  <div class="controls">
+    <button onclick="downloadAll()">Download All Alphabets (PNGs)</button>
+  </div>
+
+  <div class="avatar-grid" id="avatarGrid"></div>
+
+  <script>
+    const alphabets = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+    const grid = document.getElementById("avatarGrid");
+
+    function createAvatarCanvas(letter, size = 256) {
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d");
+
+      const center = size / 2;
+      const radius = size * 0.38;
+
+      // --- 1. Soft Ambient Floor Shadow (using #10457d) ---
+      const shadowGradient = ctx.createRadialGradient(
+        center, size * 0.88, 5,
+        center, size * 0.88, radius * 0.9
+      );
+      shadowGradient.addColorStop(0, "rgba(16, 69, 125, 0.35)");
+      shadowGradient.addColorStop(1, "rgba(16, 69, 125, 0)");
+
+      ctx.fillStyle = shadowGradient;
+      ctx.beginPath();
+      ctx.ellipse(center, size * 0.88, radius * 0.8, size * 0.08, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // --- 2. Main 3D Glossy Base Circle (using your palette gradients) ---
+      const baseGradient = ctx.createLinearGradient(0, size * 0.1, size, size * 0.9);
+      baseGradient.addColorStop(0.0, "#6dbce1"); // Light Soft Blue
+      baseGradient.addColorStop(0.25, "#459fd9"); // Vibrant Sky Blue
+      baseGradient.addColorStop(0.55, "#2985cc"); // Mid Blue
+      baseGradient.addColorStop(0.8, "#0557ad");  // Primary Dark Blue
+      baseGradient.addColorStop(1.0, "#10457d");  // Deep Base Shadow
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(center, center - 10, radius, 0, Math.PI * 2);
+      ctx.fillStyle = baseGradient;
+      
+      // Outer Glow
+      ctx.shadowColor = "rgba(5, 87, 173, 0.4)";
+      ctx.shadowBlur = 20;
+      ctx.shadowOffsetY = 8;
+      ctx.fill();
+      ctx.restore();
+
+      // Clip to circular area for internal highlights
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(center, center - 10, radius, 0, Math.PI * 2);
+      ctx.clip();
+
+      // --- 3. Top Glossy Curved Reflection (Soft Tint using #eef7fc) ---
+      const glossGradient = ctx.createLinearGradient(0, center - radius, 0, center);
+      glossGradient.addColorStop(0, "rgba(238, 247, 252, 0.85)");
+      glossGradient.addColorStop(0.6, "rgba(238, 247, 252, 0.25)");
+      glossGradient.addColorStop(1, "rgba(238, 247, 252, 0)");
+
+      ctx.fillStyle = glossGradient;
+      ctx.beginPath();
+      ctx.ellipse(center, center - radius * 0.4, radius * 0.85, radius * 0.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // --- 4. Render Letter with 3D Depth ---
+      ctx.font = `900 ${size * 0.44}px 'Segoe UI', 'Fredoka', 'Arial Rounded MT Bold', sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+
+      // Letter Drop Shadow (#10457d)
+      ctx.fillStyle = "rgba(16, 69, 125, 0.45)";
+      ctx.fillText(letter, center, center - 6);
+
+      // Letter Gradient (Pure White to #eef7fc)
+      const textGradient = ctx.createLinearGradient(0, center - radius, 0, center + radius);
+      textGradient.addColorStop(0, "#ffffff");
+      textGradient.addColorStop(1, "#eef7fc");
+
+      ctx.fillStyle = textGradient;
+      ctx.fillText(letter, center, center - 10);
+
+      // --- 5. Inner Bottom Edge Rim Reflection (#6dbce1) ---
+      const bottomGlow = ctx.createRadialGradient(
+        center, center + radius - 15, 5,
+        center, center + radius - 15, radius * 0.7
+      );
+      bottomGlow.addColorStop(0, "rgba(109, 188, 225, 0.6)");
+      bottomGlow.addColorStop(1, "rgba(109, 188, 225, 0)");
+
+      ctx.fillStyle = bottomGlow;
+      ctx.fillRect(0, 0, size, size);
+
+      ctx.restore();
+
+      return canvas;
+    }
+
+    // Render grid A-Z
+    alphabets.forEach((letter) => {
+      const card = document.createElement("div");
+      card.className = "avatar-card";
+
+      const canvas = createAvatarCanvas(letter, 256);
+      card.appendChild(canvas);
+
+      const downloadBtn = document.createElement("a");
+      downloadBtn.className = "download-link";
+      downloadBtn.innerText = `Download ${letter}.png`;
+      downloadBtn.href = canvas.toDataURL("image/png");
+      downloadBtn.download = `avatar_${letter}.png`;
+
+      card.appendChild(downloadBtn);
+      grid.appendChild(card);
+    });
+
+    // Sequential batch downloader
+    function downloadAll() {
+      const links = document.querySelectorAll(".download-link");
+      links.forEach((link, index) => {
+        setTimeout(() => {
+          link.click();
+        }, index * 120);
+      });
+    }
+  </script>
+</body>
+</html>

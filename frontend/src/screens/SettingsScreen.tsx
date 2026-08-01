@@ -7,6 +7,7 @@ import NotificationsSettings from '../components/settings/NotificationsSettings'
 import SecuritySettings from '../components/settings/SecuritySettings';
 import StorageSettings from '../components/settings/StorageSettings';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
+import ContactAvatar from '../components/ui/ContactAvatar';
 
 export default function SettingsScreen({ onBack, onNavigate }: { onBack: () => void, onNavigate?: (s: string) => void }) {
   const { currentUser, addToast, folders, setFolders, createFolder, deleteFolder, theme, setTheme, logout } = useAppContext();
@@ -323,7 +324,7 @@ export default function SettingsScreen({ onBack, onNavigate }: { onBack: () => v
               <div className="glass-card p-4 sm:p-6 rounded-[2rem] flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-6 border border-white/40 shadow-sm relative overflow-hidden text-center sm:text-left">
                 <div className="absolute -right-10 -top-10 w-40 h-40 bg-secondary-fixed/30 rounded-full blur-3xl pointer-events-none"></div>
                 <div className="w-20 h-20 shrink-0 rounded-full border-4 border-white shadow-md overflow-hidden z-10">
-                  <img src={currentUser.avatar} alt="Profile" className="w-full h-full object-cover" />
+                  <ContactAvatar src={currentUser.avatar} name={currentUser.displayName || currentUser.name || currentUser.username} />
                 </div>
                 <div className="flex-1 z-10 w-full min-w-0">
                   <h2 className="text-xl sm:text-2xl font-bold font-headline text-on-surface truncate">{currentUser.name}</h2>

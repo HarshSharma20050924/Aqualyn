@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Phone, PhoneOff, Mic, MicOff, Video, VideoOff, Volume2, VolumeX } from 'lucide-react';
+import ContactAvatar from '../ui/ContactAvatar';
 
 interface CallScreenProps {
   callerName: string;
@@ -54,7 +55,7 @@ export default function CallScreen({ callerName, callerAvatar, isVideo, isIncomi
       >
         {/* Background Blur */}
         <div className="absolute inset-0 -z-10 overflow-hidden">
-          <img src={callerAvatar} alt="Background" className="w-full h-full object-cover opacity-20 blur-3xl scale-110" />
+          <ContactAvatar src={callerAvatar} name={callerName} className="w-full h-full object-cover opacity-20 blur-3xl scale-110" />
           <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/80 to-transparent" />
         </div>
 
@@ -65,7 +66,7 @@ export default function CallScreen({ callerName, callerAvatar, isVideo, isIncomi
             transition={{ repeat: Infinity, duration: 2 }}
             className="relative"
           >
-            <img src={callerAvatar} alt={callerName} className="w-32 h-32 rounded-full border-4 border-white/20 shadow-2xl" />
+            <ContactAvatar src={callerAvatar} name={callerName} className="w-32 h-32 rounded-full border-4 border-white/20 shadow-2xl object-cover" />
             {callState === 'active' && isVideoEnabled && (
               <div className="absolute inset-0 rounded-full border-2 border-green-500 animate-pulse" />
             )}

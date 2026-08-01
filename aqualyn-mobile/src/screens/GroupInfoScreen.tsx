@@ -12,7 +12,9 @@ import {
   Modal,
   Platform
 } from 'react-native';
-import Animated, { SlideInRight, SlideOutRight } from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
+import { BlurView } from 'expo-blur';
+import Animated, { SlideInRight, SlideOutRight, LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ArrowLeft,
@@ -38,6 +40,7 @@ import { Chat } from '../types';
 import { useAppContext } from '../context/AppContext';
 import { ENDPOINTS } from '../config/api';
 import { apiFetch } from '../utils/fetcher';
+import ContactAvatar from '../components/ui/ContactAvatar';
 
 interface GroupInfoScreenProps {
   chat: Chat;
@@ -142,14 +145,14 @@ export default function GroupInfoScreen({ chat, onBack, onNavigate }: GroupInfoS
         </View>
       </View>
 
-      <ScrollView 
+      <Animated.ScrollView layout={LinearTransition.springify().damping(16).stiffness(120)} 
         contentContainerStyle={[styles.mainScrollContent, { paddingBottom: insets.bottom + 40 }]}
         showsVerticalScrollIndicator={false}
       >
         {/* Profile Large Avatar Hero Block */}
         <View style={styles.avatarHeroCenterBlock}>
           <View style={styles.avatarMainFrame}>
-            <Image source={{ uri: chat.avatar }} style={styles.avatarImageContent} />
+            <ContactAvatar name={chat.name} src={chat.avatar} style={styles.avatarImageContent} />
             <TouchableOpacity style={styles.avatarPickerBadgeBtn}>
               <ImageIcon size={18} color="#fff" />
             </TouchableOpacity>
@@ -212,7 +215,7 @@ export default function GroupInfoScreen({ chat, onBack, onNavigate }: GroupInfoS
             </View>
           </TouchableOpacity>
           
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.mediaHorizontalScrollTrackContent}>
+          <Animated.ScrollView layout={LinearTransition.springify().damping(16).stiffness(120)} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.mediaHorizontalScrollTrackContent}>
             {[1, 2, 3, 4].map((i) => (
               <Image 
                 key={i}
@@ -220,7 +223,7 @@ export default function GroupInfoScreen({ chat, onBack, onNavigate }: GroupInfoS
                 style={styles.mediaThumbCardThumbnailSquareImage}
               />
             ))}
-          </ScrollView>
+          </Animated.ScrollView>
         </View>
 
         {/* Dynamic Participants Streaming Directory Card */}
@@ -256,7 +259,7 @@ export default function GroupInfoScreen({ chat, onBack, onNavigate }: GroupInfoS
                 }}
               >
                 <View style={styles.participantLeftLayoutBlock}>
-                  <Image source={{ uri: p.avatar }} style={styles.participantRowAvatarCircleThumbnail} />
+                  <ContactAvatar name={p.name} src={p.avatar} style={styles.participantRowAvatarCircleThumbnail} />
                   <View>
                     <Text style={styles.participantMainDisplayNameLabelText}>{p.name}</Text>
                     <Text style={styles.participantSubStatusTaglineLabelText} numberOfLines={1}>
@@ -470,7 +473,7 @@ export default function GroupInfoScreen({ chat, onBack, onNavigate }: GroupInfoS
             <Text style={styles.dangerZoneTypographyLabelActionText}>Leave Group</Text>
           </TouchableOpacity>
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
 
       {/* Cross-Platform Picker Selection Modal Layer */}
       <Modal visible={activePicker !== null} transparent animationType="slide">

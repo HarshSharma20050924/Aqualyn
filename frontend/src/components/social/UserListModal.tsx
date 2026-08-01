@@ -3,6 +3,7 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { X, UserPlus, Search } from 'lucide-react';
 import { User } from '../../types';
+import ContactAvatar from '../ui/ContactAvatar';
 
 interface UserListModalProps {
   isOpen: boolean;
@@ -81,7 +82,7 @@ export default function UserListModal({ isOpen, onClose, title, users, isLoading
                 >
                   <div className="flex items-center gap-4">
                      <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-white shadow-sm font-bold text-white bg-gradient-to-br from-primary to-secondary flex items-center justify-center shrink-0">
-                        {u.avatar ? <img src={u.avatar} className="w-full h-full object-cover" /> : u.displayName?.charAt(0).toUpperCase()}
+                        <ContactAvatar src={u.avatar} name={u.displayName || u.username} />
                      </div>
                      <div className="min-w-0">
                         <p className="font-bold text-on-surface truncate">{u.displayName || u.username}</p>

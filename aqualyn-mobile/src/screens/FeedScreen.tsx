@@ -9,11 +9,13 @@ import {
   Dimensions,
   TextInput,
   ActivityIndicator,
-  FlatList,
   Platform,
   RefreshControl
 } from 'react-native';
-import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import { FlashList } from '@shopify/flash-list';
+import * as Haptics from 'expo-haptics';
+import { BlurView } from 'expo-blur';
+import Animated, { FadeIn, FadeOut, LinearTransition, withSpring, useSharedValue, useAnimatedStyle, withSequence } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Heart,
@@ -30,6 +32,7 @@ import BubbleLoader from '../components/ui/BubbleLoader';
 import { Post, User, Story } from '../types';
 import StoryViewer from '../components/StoryViewer';
 import StoryCreator from '../components/stories/StoryCreator';
+import ContactAvatar from '../components/ui/ContactAvatar';
 
 const { width: WINDOW_WIDTH } = Dimensions.get('window');
 
@@ -55,18 +58,45 @@ const PostCard = ({ post }: { post: Post }) => {
   
   // Custom Double-Tap Multi-Platform Mechanics Engine Tracking
   let lastTapRef = useRef<number | null>(null);
+  
+  const heartScale = useSharedValue(0);
+  const heartAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: heartScale.value }]
+  }));
+
   const handleImageTap = () => {
     const now = Date.now();
     const DOUBLE_TAP_DELAY = 300;
     if (lastTapRef.current && (now - lastTapRef.current < DOUBLE_TAP_DELAY)) {
       setShowHeartAnimation(true);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      
+      heartScale.value = withSequence(
+        withSpring(1.2, { damping: 12, stiffness: 150 }),
+        withSpring(1, { damping: 15, stiffness: 200 })
+      );
+      
       if (!isLiked) {
         likePost(post.id);
       }
-      setTimeout(() => setShowHeartAnimation(false), 1000);
+      setTimeout(() => {
+        setShowHeartAnimation(false);
+        heartScale.value = 0;
+      }, 1000);
     } else {
       lastTapRef.current = now;
     }
+  };
+  
+  const handleLikeToggle = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    likePost(post.id);
+  };
+
+  const handleSaveToggle = () => {
+    Haptics.selectionAsync();
+    savePost(post.id);
+    addToast(isSaved ? 'Removed from saved' : 'Saved to collection', 'success');
   };
 
   const handleAddComment = () => {
@@ -87,12 +117,12 @@ const PostCard = ({ post }: { post: Post }) => {
   };
 
   return (
-    <View style={styles.postCardFrameContainer}>
+    <Animated.View layout={LinearTransition.springify().damping(16).stiffness(120)} style={styles.postCardFrameContainer}>
       {/* Post Header Element Structure */}
       <View style={styles.postHeaderRow}>
         <View style={styles.postHeaderProfileLeft}>
           <View style={styles.postCardAvatarOuterCircle}>
-            <Image source={{ uri: user?.avatar }} style={styles.postAvatarImgFluid} />
+            <ContactAvatar src={user?.avatar} name={user?.username || user?.name} style={styles.postAvatarImgFluid} />
           </View>
           <Text style={styles.postHeaderUsernameHeadlineText}>
             {user?.username || user?.name || 'anonymous'}
@@ -132,7 +162,7 @@ const PostCard = ({ post }: { post: Post }) => {
         )}
 
         {showHeartAnimation && (
-          <Animated.View   style={styles.absoluteDoubleTapHeartBadgeCenter}>
+          <Animated.View style={[styles.absoluteDoubleTapHeartBadgeCenter, heartAnimatedStyle]}>
             <Heart size={80} color="#fff" fill="#fff" style={styles.doubleTapHeartDropShadow} />
           </Animated.View>
         )}
@@ -142,7 +172,7 @@ const PostCard = ({ post }: { post: Post }) => {
       <View style={styles.postContentPaddingBox}>
         <View style={styles.actionToolbarRow}>
           <View style={styles.actionToolbarLeftGroup}>
-            <TouchableOpacity onPress={() => likePost(post.id)} style={styles.toolbarIconInteractionBtn}>
+            <TouchableOpacity onPress={handleLikeToggle} style={styles.toolbarIconInteractionBtn}>
               <Heart size={24} color={isLiked ? '#ef4444' : '#1e293b'} fill={isLiked ? '#ef4444' : 'transparent'} />
             </TouchableOpacity>
             <TouchableOpacity style={styles.toolbarIconInteractionBtn}>
@@ -153,10 +183,7 @@ const PostCard = ({ post }: { post: Post }) => {
             </TouchableOpacity>
           </View>
           <TouchableOpacity
-            onPress={() => {
-              savePost(post.id);
-              addToast(isSaved ? 'Removed from saved' : 'Saved to collection', 'success');
-            }}
+            onPress={handleSaveToggle}
             style={styles.toolbarIconInteractionBtn}
           >
             <Bookmark size={24} color="#1e293b" fill={isSaved ? '#1e293b' : 'transparent'} />
@@ -208,7 +235,7 @@ const PostCard = ({ post }: { post: Post }) => {
           {new Date(post.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
         </Text>
       </View>
-    </View>
+    </Animated.View>
   );
 };
 
@@ -269,7 +296,7 @@ export default function FeedScreen({ onNavigate }: Props) {
         id: first.userId,
         name: first.userName || 'User',
         username: first.userName || 'user',
-        avatar: first.userAvatar || `https://ui-avatars.com/api/?background=random&name=${first.userId}`
+        avatar: first.userAvatar
       } as any as User;
     });
   }, [storiesByUser]);
@@ -299,19 +326,19 @@ export default function FeedScreen({ onNavigate }: Props) {
   return (
     <Animated.View  style={styles.screenViewContainer}>
       {/* Absolute Sticky Floating Navigation Deck Layer Top */}
-      <View style={[styles.headerFloatingStickyNavbarBox, { paddingTop: insets.top }]}>
+      <BlurView intensity={80} tint="light" style={[styles.headerFloatingStickyNavbarBox, { paddingTop: insets.top }]}>
         <View style={styles.headerToolbarInteriorFlexRow}>
           <Text style={styles.headerAqualynBrandTypographyText}>Aqualyn</Text>
           <View style={styles.headerRightActionButtonsGroupRow}>
-            <TouchableOpacity onPress={() => onNavigate('notifications')} style={styles.headerCircleActionInteractiveBtn}>
+            <TouchableOpacity onPress={() => { Haptics.selectionAsync(); onNavigate('notifications'); }} style={styles.headerCircleActionInteractiveBtn}>
               <Heart size={22} color="#0f172a" />
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => onNavigate('chats')} style={styles.headerCircleActionInteractiveBtn}>
+            <TouchableOpacity onPress={() => { Haptics.selectionAsync(); onNavigate('chats'); }} style={styles.headerCircleActionInteractiveBtn}>
               <MessageCircle size={22} color="#0f172a" />
             </TouchableOpacity>
           </View>
         </View>
-      </View>
+      </BlurView>
 
       {/* Main Core Viewport Content Deck Pipeline Rendering List */}
       <View style={{ flex: 1, position: 'relative' }}>
@@ -320,9 +347,10 @@ export default function FeedScreen({ onNavigate }: Props) {
             <BubbleLoader size={30} />
           </View>
         )}
-        <FlatList
+        <FlashList
           data={isFetchingData ? [] : feedPosts}
           keyExtractor={(item) => item.id}
+          estimatedItemSize={450}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -334,7 +362,7 @@ export default function FeedScreen({ onNavigate }: Props) {
             />
           }
         renderItem={({ item }) => <PostCard post={item} />}
-        contentContainerStyle={[styles.mainScrollableContentTrack, { paddingBottom: insets.bottom + 120 }]}
+        contentContainerStyle={[styles.mainScrollableContentTrack, { paddingBottom: insets.bottom + 120, paddingTop: insets.top + 60 }]}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
           /* Content Core Stream Layer Segment Header: Stories Tray Slider Assembly Component */
@@ -354,7 +382,7 @@ export default function FeedScreen({ onNavigate }: Props) {
             >
               <View style={[styles.storyAvatarOuterGradientRingFrame, { backgroundColor: '#e2e8f0' }]}>
                 <View style={styles.storyAvatarInnerWhiteGapShield}>
-                  <Image source={{ uri: currentUser?.avatar }} style={styles.storyAvatarContentImgFluid} />
+                  <ContactAvatar src={currentUser?.avatar} name={currentUser?.displayName || currentUser?.name || currentUser?.username || 'You'} style={styles.storyAvatarContentImgFluid} />
                 </View>
                 {!hasMyStory && (
                   <View style={styles.addStoryPlusFloatingBadgeBtn}>
@@ -380,7 +408,7 @@ export default function FeedScreen({ onNavigate }: Props) {
                 >
                   <View style={styles.storyAvatarOuterGradientRingFrameActive}>
                     <View style={styles.storyAvatarInnerWhiteGapShield}>
-                      <Image source={{ uri: user.avatar }} style={styles.storyAvatarContentImgFluid} />
+                      <ContactAvatar src={user.avatar} name={user.name || user.username} style={styles.storyAvatarContentImgFluid} />
                     </View>
                   </View>
                   <Text numberOfLines={1} style={styles.storyUserHandleTypographyLabelTextActive}>
@@ -429,9 +457,13 @@ const styles = StyleSheet.create({
   
   // Header Sticky Assembly Configuration Metrics
   headerFloatingStickyNavbarBox: {
-    backgroundColor: 'rgba(255,255,255,0.92)',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(255,255,255,0.6)',
     borderBottomWidth: 1,
-    borderColor: '#f1f5f9',
+    borderColor: 'rgba(241, 245, 249, 0.6)',
     zIndex: 200
   },
   headerToolbarInteriorFlexRow: {

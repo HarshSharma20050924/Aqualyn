@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, FolderPlus, Check, ArrowLeft, Search, Plus } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
+import ContactAvatar from '../ui/ContactAvatar';
 
 interface NewFolderModalProps {
   isOpen: boolean;
@@ -142,7 +143,7 @@ export default function NewFolderModal({ isOpen, onClose }: NewFolderModalProps)
                     >
                       <div className="relative">
                         <div className="w-12 h-12 rounded-full overflow-hidden">
-                          <img src={chat.avatar} alt={chat.name} className="w-full h-full object-cover" />
+                          <ContactAvatar src={chat.avatar} name={chat.name} />
                         </div>
                         {selectedChats.includes(chat.id) && (
                           <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-secondary rounded-full border-2 border-surface flex items-center justify-center">

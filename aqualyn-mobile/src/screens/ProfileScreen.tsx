@@ -13,7 +13,9 @@ import {
   Platform,
   RefreshControl
 } from 'react-native';
-import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
+import { BlurView } from 'expo-blur';
+import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Pen, Plus, Heart, MessageCircle, Grid, Bookmark, Folder, Archive } from 'lucide-react-native';
 import { Post, Collection, User } from '../types';
@@ -26,6 +28,7 @@ import PostCreator from '../components/posts/PostCreator';
 import PostViewer from '../components/posts/PostViewer';
 import UserListModal from '../components/social/UserListModal';
 import BubbleLoader from '../components/ui/BubbleLoader';
+import ContactAvatar from '../components/ui/ContactAvatar';
 
 import { apiFetch } from '../utils/fetcher';
 import { ENDPOINTS } from '../config/api';
@@ -96,14 +99,14 @@ export default function ProfileScreen({ onNavigate }: ProfileScreenProps) {
   return (
     <Animated.View   style={styles.viewportBaseFrame}>
       {/* Fixed Sticky Header Panel */}
-      <View style={[styles.stickyHeaderPanel, { paddingTop: insets.top, height: 64 + insets.top }]}>
+      <BlurView intensity={80} tint="light" style={[styles.stickyHeaderPanel, { paddingTop: insets.top, height: 64 + insets.top }]}>
         <View style={styles.headerContentWrapper}>
           <Text style={styles.brandingLogoTextHeadline}>Aqualyn</Text>
           <View style={styles.headerAvatarCircularBadgeBorder}>
-            <Image source={{ uri: currentUser.avatar }} style={styles.headerMiniAvatarImg} />
+            <ContactAvatar src={currentUser.avatar} name={currentUser.displayName || currentUser.name || currentUser.username} style={styles.headerMiniAvatarImg} />
           </View>
         </View>
-      </View>
+      </BlurView>
       <View style={{ flex: 1, position: 'relative' }}>
         {refreshing && (
           <View style={{ position: 'absolute', top: 10, left: 0, right: 0, zIndex: 100, alignItems: 'center' }}>
@@ -128,7 +131,7 @@ export default function ProfileScreen({ onNavigate }: ProfileScreenProps) {
         <View style={styles.profileMetaHeroSection}>
           <View style={styles.largeAvatarCompositeLayoutFrame}>
             <View style={styles.largeAvatarCircularBorderCard}>
-              <Image source={{ uri: currentUser.largeAvatar || currentUser.avatar }} style={styles.largeProfileAvatarImg} />
+              <ContactAvatar src={currentUser.largeAvatar || currentUser.avatar} name={currentUser.displayName || currentUser.name || currentUser.username} style={styles.largeProfileAvatarImg} />
             </View>
             <TouchableOpacity 
               onPress={() => onNavigate('edit-profile')} 
@@ -228,7 +231,7 @@ export default function ProfileScreen({ onNavigate }: ProfileScreenProps) {
         {/* Secondary Modular Tab Segment Engine Switches */}
         <View style={styles.tabBarControlSelectionRowTrack}>
           <TouchableOpacity 
-            onPress={() => setActiveTab('posts')} 
+            onPress={() => { Haptics.selectionAsync(); setActiveTab('posts'); }} 
             style={[styles.tabBarInteractiveSegmentLink, activeTab === 'posts' && styles.activeTabBarInteractiveSegmentLinkBorder]}
           >
             <Grid size={18} color={activeTab === 'posts' ? '#0057bd' : '#64748b'} />
@@ -236,7 +239,7 @@ export default function ProfileScreen({ onNavigate }: ProfileScreenProps) {
           </TouchableOpacity>
 
           <TouchableOpacity 
-            onPress={() => setActiveTab('saved')} 
+            onPress={() => { Haptics.selectionAsync(); setActiveTab('saved'); }} 
             style={[styles.tabBarInteractiveSegmentLink, activeTab === 'saved' && styles.activeTabBarInteractiveSegmentLinkBorder]}
           >
             <Bookmark size={18} color={activeTab === 'saved' ? '#0057bd' : '#64748b'} />
@@ -244,7 +247,7 @@ export default function ProfileScreen({ onNavigate }: ProfileScreenProps) {
           </TouchableOpacity>
 
           <TouchableOpacity 
-            onPress={() => setActiveTab('collections')} 
+            onPress={() => { Haptics.selectionAsync(); setActiveTab('collections'); }} 
             style={[styles.tabBarInteractiveSegmentLink, activeTab === 'collections' && styles.activeTabBarInteractiveSegmentLinkBorder]}
           >
             <Folder size={18} color={activeTab === 'collections' ? '#0057bd' : '#64748b'} />
@@ -252,7 +255,7 @@ export default function ProfileScreen({ onNavigate }: ProfileScreenProps) {
           </TouchableOpacity>
 
           <TouchableOpacity 
-            onPress={() => setActiveTab('archived')} 
+            onPress={() => { Haptics.selectionAsync(); setActiveTab('archived'); }} 
             style={[styles.tabBarInteractiveSegmentLink, activeTab === 'archived' && styles.activeTabBarInteractiveSegmentLinkBorder]}
           >
             <Archive size={18} color={activeTab === 'archived' ? '#0057bd' : '#64748b'} />
@@ -261,7 +264,7 @@ export default function ProfileScreen({ onNavigate }: ProfileScreenProps) {
         </View>
 
         {/* Tab Context Viewport Render Switchboard Grid */}
-        <View style={styles.tabContentBlockViewGridContainer}>
+        <Animated.View layout={LinearTransition.springify().damping(16).stiffness(120)} style={styles.tabContentBlockViewGridContainer}>
           {activeTab === 'posts' && (
             <View style={styles.masonryThreeColumnWrapGrid}>
               
@@ -358,7 +361,7 @@ export default function ProfileScreen({ onNavigate }: ProfileScreenProps) {
               )}
             </View>
           )}
-        </View>
+        </Animated.View>
       </ScrollView>
       </View>
 
@@ -444,13 +447,13 @@ export default function ProfileScreen({ onNavigate }: ProfileScreenProps) {
 
 const styles = StyleSheet.create({
   viewportBaseFrame: { flex: 1, backgroundColor: '#ffffff' },
-  stickyHeaderPanel: { width: '100%', backgroundColor: 'rgba(248, 250, 252, 0.85)', borderBottomWidth: 1, borderColor: 'rgba(15, 23, 42, 0.06)', justifyContent: 'flex-end', zIndex: 99 },
+  stickyHeaderPanel: { position: 'absolute', top: 0, left: 0, right: 0, width: '100%', backgroundColor: 'rgba(255, 255, 255, 0.5)', borderBottomWidth: 1, borderColor: 'rgba(15, 23, 42, 0.06)', justifyContent: 'flex-end', zIndex: 99 },
   headerContentWrapper: { height: 64, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24 },
   brandingLogoTextHeadline: { fontSize: 24, fontWeight: '900', color: '#0057bd', letterSpacing: -1 },
   headerAvatarCircularBadgeBorder: { width: 38, height: 38, borderRadius: 19, borderWidth: 1.5, borderColor: '#cbd5e1', overflow: 'hidden' },
   headerMiniAvatarImg: { width: '100%', height: '100%', resizeMode: 'cover' },
   
-  mainScrollStackContainer: { flexGrow: 1, paddingTop: 16 },
+  mainScrollStackContainer: { flexGrow: 1, paddingTop: 100 },
 
   // Profile Specific Identity Metadata Section Properties Layout Block
   profileMetaHeroSection: { alignItems: 'center', paddingHorizontal: 24, marginBottom: 32 },

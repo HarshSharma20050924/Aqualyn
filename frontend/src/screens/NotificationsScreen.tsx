@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { Heart, MessageCircle, UserPlus, ArrowLeft, Check, X, Bell } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
+import ContactAvatar from '../components/ui/ContactAvatar';
 
 export default function NotificationsScreen({ onBack }: { onBack: () => void }) {
   const { notifications, acceptFollowRequest, rejectFollowRequest } = useAppContext();
@@ -57,7 +58,7 @@ export default function NotificationsScreen({ onBack }: { onBack: () => void }) 
           notifications.map((notification) => (
             <div key={notification.id} className={`flex items-start gap-4 p-4 rounded-2xl transition-colors ${notification.isRead ? 'bg-transparent' : 'bg-primary-container/30'}`}>
               <div className="relative">
-                <img src={notification.actor?.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${notification.actor?.displayName}`} alt={notification.actor?.displayName} className="w-12 h-12 rounded-full object-cover" />
+                <ContactAvatar src={notification.actor?.avatar} name={notification.actor?.displayName} className="w-12 h-12 rounded-full object-cover" />
                 <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-surface rounded-full flex items-center justify-center shadow-sm">
                   {getIcon(notification.type)}
                 </div>

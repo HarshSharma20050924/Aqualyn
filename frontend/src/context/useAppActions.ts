@@ -210,8 +210,9 @@ export const useAppActions = (
       responseRate: getStoredSetting('responseRate', 50)
     };
 
+    const tempId = `temp-${Date.now()}`;
     const newMessage: Message = {
-      id: `temp-${Date.now()}`,
+      id: tempId,
       chatId,
       senderId: currentUser?.id as string,
       text,
@@ -237,6 +238,7 @@ export const useAppActions = (
            senderId: currentUser?.id,
            receiverId: chat?.participantIds?.find(id => id !== currentUser?.id) || chatId,
            text,
+           tempId,
             imageUrl: options?.imageUrl,
             videoUrl: options?.videoUrl,
             fileUrl: options?.fileUrl,

@@ -8,14 +8,14 @@ import {
   Platform,
 } from 'react-native';
 import Animated, { 
-  SlideInUp, 
-  SlideOutUp, 
+  FadeIn,
   FadeOut,
   LinearTransition 
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react-native';
 import { useAppContext } from '../../context/AppContext';
+import ContactAvatar from './ContactAvatar';
 
 export default function ToastContainer() {
   const insets = useSafeAreaInsets();
@@ -50,8 +50,8 @@ export default function ToastContainer() {
         return (
           <Animated.View
             key={toast.id}
-            
-            
+            entering={FadeIn.duration(250)}
+            exiting={FadeOut.duration(200)}
             layout={LinearTransition.springify().damping(20)}
             style={[
               styles.toastNotificationCardTrack,
@@ -59,7 +59,7 @@ export default function ToastContainer() {
             ]}
           >
             {toast.avatar ? (
-              <Image source={{ uri: toast.avatar }} style={styles.toastAvatarIconCircularMedia} />
+              <ContactAvatar name={toast.title} src={toast.avatar} style={styles.toastAvatarIconCircularMedia} />
             ) : (
               <View style={styles.toastDecorativeStaticIconBadge}>
                 {isSuccess && <CheckCircle2 size={18} color={themeColor} />}

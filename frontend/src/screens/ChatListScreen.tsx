@@ -9,6 +9,7 @@ import { ENDPOINTS } from '../config/api';
 import { ChatPeekPreview } from '../components/chat/ChatPeekPreview';
 import DeleteChatDialog from '../components/chat/DeleteChatDialog';
 import BubbleLoader from '../components/ui/BubbleLoader';
+import ContactAvatar from '../components/ui/ContactAvatar';
 
 import { apiFetch } from '../utils/fetcher';
 
@@ -161,14 +162,69 @@ export default function ChatListScreen({ onNavigate, compact = false, onExpand }
   };
 
   const SkeletonChat = () => (
-    <div className="p-4 rounded-2xl flex items-center gap-4 animate-pulse glass-card border border-black/5 dark:border-white/5">
-      <div className="w-14 h-14 rounded-full bg-black/10 dark:bg-white/10 shrink-0"></div>
-      <div className="flex-1 min-w-0 space-y-2">
-        <div className="flex justify-between">
-          <div className="h-4 bg-black/10 dark:bg-white/10 rounded-full w-1/3"></div>
-          <div className="h-3 bg-black/10 dark:bg-white/10 rounded-full w-8"></div>
+    <div
+      className="relative overflow-hidden rounded-2xl flex items-center gap-4 p-4 border border-white/20 dark:border-white/10"
+      style={{
+        background: 'rgba(255,255,255,0.45)',
+        backdropFilter: 'blur(16px)',
+        WebkitBackdropFilter: 'blur(16px)',
+        boxShadow: '0 4px 24px rgba(8,145,178,0.06), inset 0 1px 0 rgba(255,255,255,0.6)',
+      }}
+    >
+      {/* shimmer sweep */}
+      <div
+        className="absolute inset-0 -translate-x-full"
+        style={{
+          background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.55) 50%, transparent 100%)',
+          animation: 'skeletonShimmer 1.6s infinite ease-in-out',
+        }}
+      />
+
+      {/* Avatar circle with ring */}
+      <div className="relative shrink-0">
+        <div
+          className="w-14 h-14 rounded-full"
+          style={{ background: 'linear-gradient(135deg, rgba(8,145,178,0.15) 0%, rgba(139,92,246,0.12) 100%)' }}
+        />
+        <div className="absolute inset-0 rounded-full ring-2 ring-white/40 dark:ring-white/10" />
+      </div>
+
+      {/* Text lines */}
+      <div className="flex-1 min-w-0 space-y-2.5">
+        <div className="flex justify-between items-center gap-3">
+          {/* Name bar */}
+          <div
+            className="h-3.5 rounded-full"
+            style={{
+              width: '42%',
+              background: 'linear-gradient(90deg, rgba(8,145,178,0.18) 0%, rgba(139,92,246,0.12) 100%)',
+            }}
+          />
+          {/* Time chip */}
+          <div
+            className="h-2.5 rounded-full shrink-0"
+            style={{
+              width: '14%',
+              background: 'rgba(8,145,178,0.12)',
+            }}
+          />
         </div>
-        <div className="h-3 bg-black/10 dark:bg-white/10 rounded-full w-2/3"></div>
+        {/* Preview bar */}
+        <div
+          className="h-2.5 rounded-full"
+          style={{
+            width: '68%',
+            background: 'rgba(100,116,139,0.13)',
+          }}
+        />
+        {/* Second shorter preview bar */}
+        <div
+          className="h-2 rounded-full"
+          style={{
+            width: '38%',
+            background: 'rgba(100,116,139,0.08)',
+          }}
+        />
       </div>
     </div>
   );
@@ -208,7 +264,7 @@ export default function ChatListScreen({ onNavigate, compact = false, onExpand }
                 <Users className="w-6 h-6" />
               </div>
             ) : (
-              <img src={chat.avatar} alt={chat.name} className="w-full h-full object-cover" />
+              <ContactAvatar src={chat.avatar} name={chat.name} />
             )}
             {/* Unread badge */}
             {!!chat.unreadCount && (
@@ -292,7 +348,7 @@ export default function ChatListScreen({ onNavigate, compact = false, onExpand }
             <>
               <div className="flex items-center gap-3">
                 <div onClick={() => onNavigate('profile')} className="w-10 h-10 rounded-full border-2 border-secondary-fixed flex items-center justify-center overflow-hidden active:scale-95 duration-200 cursor-pointer">
-                  <img src={currentUser?.avatar} alt="Profile" className="w-full h-full object-cover" />
+                  <ContactAvatar src={currentUser?.avatar} name={currentUser?.displayName || currentUser?.name || currentUser?.username || 'You'} />
                 </div>
                 <h1 className="text-2xl font-black bg-gradient-to-br from-cyan-600 to-blue-500 bg-clip-text text-transparent font-headline tracking-tight">Aqualyn</h1>
               </div>
@@ -470,7 +526,7 @@ export default function ChatListScreen({ onNavigate, compact = false, onExpand }
                                 }}
                                 onTouchEnd={() => { if (peekTimer.current) clearTimeout(peekTimer.current); }}
                               >
-                                <img src={chat.avatar} alt={chat.name} className="w-full h-full object-cover" />
+                                <ContactAvatar src={chat.avatar} name={chat.name} />
                                 {isSelectionMode && (
                                   <div className={`absolute inset-0 flex items-center justify-center transition-all duration-150 ${selectedChats.has(chat.id) ? 'bg-secondary/80' : 'bg-black/20'}`}>
                                     {selectedChats.has(chat.id) && <Check className="w-6 h-6 text-white" strokeWidth={3} />}
@@ -496,11 +552,11 @@ export default function ChatListScreen({ onNavigate, compact = false, onExpand }
                             <div className="liquid-gradient w-5 h-5 rounded-full flex items-center justify-center text-[10px] text-white font-bold">
                               {chat.unreadCount > 9 ? '9+' : chat.unreadCount}
                             </div>
-                          ) : lastMsg?.status === 'seen' ? (
+                          ) : lastMsg?.senderId === currentUser?.id && lastMsg?.status === 'seen' ? (
                             <CheckCheck className="text-secondary w-4 h-4" />
-                          ) : lastMsg?.status === 'delivered' ? (
+                          ) : lastMsg?.senderId === currentUser?.id && lastMsg?.status === 'delivered' ? (
                             <CheckCheck className="text-on-surface-variant/40 w-4 h-4" />
-                          ) : lastMsg?.status === 'sent' || (!lastMsg?.status && !lastMsg?.isRead && lastMsg?.senderId === currentUser?.id) ? (
+                          ) : lastMsg?.senderId === currentUser?.id && (lastMsg?.status === 'sent' || (!lastMsg?.status && !lastMsg?.isRead)) ? (
                             <Check className="text-on-surface-variant/40 w-4 h-4" />
                           ) : null}
                         </div>
@@ -565,7 +621,7 @@ export default function ChatListScreen({ onNavigate, compact = false, onExpand }
                             }}
                             onTouchEnd={() => { if (peekTimer.current) clearTimeout(peekTimer.current); }}
                           >
-                            <img src={chat.avatar} alt={chat.name} className="w-full h-full object-cover" />
+                            <ContactAvatar src={chat.avatar} name={chat.name} />
                             {isSelectionMode && (
                               <div className={`absolute inset-0 flex items-center justify-center transition-all duration-150 ${selectedChats.has(chat.id) ? 'bg-secondary/80' : 'bg-black/20'}`}>
                                 {selectedChats.has(chat.id) && <Check className="w-6 h-6 text-white" strokeWidth={3} />}
@@ -588,11 +644,11 @@ export default function ChatListScreen({ onNavigate, compact = false, onExpand }
                             <div className="liquid-gradient w-5 h-5 rounded-full flex items-center justify-center text-[10px] text-white font-bold">
                               {chat.unreadCount > 9 ? '9+' : chat.unreadCount}
                             </div>
-                          ) : lastMsg?.status === 'seen' ? (
+                          ) : lastMsg?.senderId === currentUser?.id && lastMsg?.status === 'seen' ? (
                             <CheckCheck className="text-secondary w-4 h-4" />
-                          ) : lastMsg?.status === 'delivered' ? (
+                          ) : lastMsg?.senderId === currentUser?.id && lastMsg?.status === 'delivered' ? (
                             <CheckCheck className="text-on-surface-variant/40 w-4 h-4" />
-                          ) : lastMsg?.status === 'sent' || (!lastMsg?.status && !lastMsg?.isRead && lastMsg?.senderId === currentUser?.id) ? (
+                          ) : lastMsg?.senderId === currentUser?.id && (lastMsg?.status === 'sent' || (!lastMsg?.status && !lastMsg?.isRead)) ? (
                             <Check className="text-on-surface-variant/40 w-4 h-4" />
                           ) : null}
                           {chat.isVoice && <Mic className="text-on-surface-variant w-4 h-4" />}

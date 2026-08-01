@@ -10,6 +10,7 @@ import {
   Modal,
   Platform,
 } from 'react-native';
+import ContactAvatar from '../ui/ContactAvatar';
 import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import { X, Search, Users, ArrowRight, Camera, Check, ArrowLeft, Shield, Clock, UserPlus, Radio, Globe, Lock } from 'lucide-react-native';
 import { ENDPOINTS } from '../../config/api';
@@ -84,7 +85,7 @@ export default function NewChatModal({ isOpen, onClose, onNavigate, appContext }
         users.push({
           id: u.id,
           name: u.displayName || u.username || 'Aqualyn User',
-          avatar: u.avatar || `https://ui-avatars.com/api/?background=random&name=${u.username || 'U'}`,
+          avatar: u.avatar,
           role: 'Connection',
           isContact: true
         });
@@ -109,7 +110,7 @@ export default function NewChatModal({ isOpen, onClose, onNavigate, appContext }
         users.push({
           id: u.id,
           name: u.displayName || u.username || 'Aqualyn User',
-          avatar: u.avatar || `https://ui-avatars.com/api/?background=random&name=${u.username || 'U'}`,
+          avatar: u.avatar,
           role: u.bio || 'Aqualyn User',
           isContact: false
         });
@@ -263,7 +264,7 @@ export default function NewChatModal({ isOpen, onClose, onNavigate, appContext }
                   return (
                     <View key={id} style={styles.selectedAvatarWrapperBubbleItemNode}>
                       <View style={styles.avatarCircularShellFrameSquare}>
-                        <Image source={{ uri: c.avatar }} style={styles.targetImageAvatarSquareNodeFill} />
+                        <ContactAvatar src={c.avatar} name={c.name} style={styles.targetImageAvatarSquareNodeFill} />
                         <TouchableOpacity 
                           onPress={() => toggleContact(id)}
                           style={styles.avatarItemMicroAbsoluteDismissBadgeCircle}
@@ -327,7 +328,7 @@ export default function NewChatModal({ isOpen, onClose, onNavigate, appContext }
                       style={styles.contactItemFlexRowCellContainerNode}
                     >
                       <View style={styles.avatarShellWrapperFrameAnchorSquare}>
-                        <Image source={{ uri: contact.avatar }} style={styles.contactAvatarImageNodeContentElement} />
+                      <ContactAvatar src={contact.avatar} name={contact.name} style={styles.contactAvatarImageNodeContentElement} />
                         {mode === 'group-select' && selectedContacts.includes(contact.id) && (
                           <View style={styles.contactSelectionAbsoluteCheckmarkPillIndicator}>
                             <Check size={10} color="#ffffff" strokeWidth={3} />

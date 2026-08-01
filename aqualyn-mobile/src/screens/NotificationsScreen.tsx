@@ -12,6 +12,7 @@ import Animated, { SlideInRight, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Heart, MessageCircle, UserPlus, ArrowLeft, Bell } from 'lucide-react-native';
 import { useAppContext } from '../context/AppContext';
+import ContactAvatar from '../components/ui/ContactAvatar';
 
 interface NotificationsScreenProps {
   onBack: () => void;
@@ -64,16 +65,16 @@ export default function NotificationsScreen({ onBack }: NotificationsScreenProps
 
   const renderNotificationItem = ({ item: notification }: { item: any }) => {
     const isRead = notification.isRead;
-    const avatarUrl = notification.actor?.avatar || `https://ui-avatars.com/api/?background=random&name=${notification.actor?.displayName}`;
 
     return (
       <View style={[styles.notificationCard, isRead ? styles.bgTransparent : styles.bgUnreadTint]}>
         {/* Avatar badge configuration */}
         <View style={styles.avatarContainer}>
-          <Image 
-              source={{ uri: avatarUrl }} 
-              style={[styles.actorAvatarImage, { resizeMode: 'cover' }]} 
-            />
+          <ContactAvatar
+            src={notification.actor?.avatar}
+            name={notification.actor?.displayName || notification.actor?.username || 'Someone'}
+            style={styles.actorAvatarImage}
+          />
           <View style={styles.iconBadgeAbsolutePosition}>
             {getIcon(notification.type)}
           </View>

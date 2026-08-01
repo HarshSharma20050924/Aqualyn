@@ -21,6 +21,7 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { useAppContext } from '../../context/AppContext';
 import { uploadFile } from '../../utils/uploads';
+import ContactAvatar from '../ui/ContactAvatar';
 
 const { width: WINDOW_WIDTH, height: WINDOW_HEIGHT } = Dimensions.get('window');
 
@@ -330,7 +331,7 @@ export default function StoryCreator({ onClose }: { onClose: () => void }) {
                     return (
                       <View key={user.id} style={styles.userItem}>
                         <View style={styles.userInfo}>
-                          <Image source={{ uri: user.avatar }} style={styles.userAvatar as any} />
+                          <ContactAvatar name={user.name || user.displayName} src={user.avatar} style={styles.userAvatar as any} />
                           <View>
                             <Text style={styles.userName}>{user.name || user.displayName || 'User'}</Text>
                             <Text style={styles.userUsername}>@{user.username}</Text>

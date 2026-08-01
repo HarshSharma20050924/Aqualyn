@@ -10,6 +10,7 @@ import { apiFetch } from '../utils/fetcher';
 import { User } from '../types';
 import UserListModal from '../components/social/UserListModal';
 import PostViewer from '../components/posts/PostViewer';
+import ContactAvatar from '../components/ui/ContactAvatar';
 
 export default function ContactProfileScreen({ onBack, onNavigate }: { onBack: () => void, onNavigate: (s: string) => void }) {
   const { contacts, activeContactId, setActiveContactId, setActiveChatId, originChatId, setOriginChatId, startChatWithContact, addToast, chats, setChats, currentUser, blockContact, reportContact, muteChat, followUser, unfollowUser, posts, globalUsers, setGlobalUsers, requestSecretChat, createGroupChat } = useAppContext();
@@ -186,13 +187,7 @@ export default function ContactProfileScreen({ onBack, onNavigate }: { onBack: (
       <main className="pt-24 px-4 max-w-2xl mx-auto space-y-6">
         <div className="flex flex-col items-center text-center space-y-4">
           <div className="w-32 h-32 rounded-full border-4 border-white shadow-xl overflow-hidden relative">
-            {avatarUrl ? (
-              <img src={avatarUrl} alt={displayName} className="w-full h-full object-cover" />
-            ) : (
-              <div className="w-full h-full bg-gradient-to-br from-secondary to-primary flex items-center justify-center text-white text-4xl font-bold">
-                {displayName.charAt(0).toUpperCase()}
-              </div>
-            )}
+            <ContactAvatar src={avatarUrl} name={displayName} />
             {contact.isPrivate && (
               <div className="absolute bottom-0 right-0 bg-white p-1.5 rounded-full shadow-md">
                 <Lock className="w-4 h-4 text-on-surface-variant" />

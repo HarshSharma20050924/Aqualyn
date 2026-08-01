@@ -5,7 +5,7 @@ import { Socket } from 'socket.io-client';
 import { ToastType, Toast } from './AppContextType';
 import { useRouter } from 'expo-router';
 import { Platform } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Storage } from '../utils/storage';
 
 import * as Contacts from 'expo-contacts';
 
@@ -36,7 +36,7 @@ export const useAppActions = (
     // Step 1: Get the token BEFORE clearing it so we can send it for revocation
     let token: string | null = null;
     try {
-      token = await AsyncStorage.getItem('auth_token');
+      token = Storage.getItem('auth_token') ?? null;
     } catch (e) {}
 
     // Step 2: Call the backend to revoke the session & clear the httpOnly cookie
@@ -51,7 +51,7 @@ export const useAppActions = (
 
     // Step 3: Aggressively wipe ALL local storage — every key
     try {
-      await AsyncStorage.multiRemove([
+      Storage.multiRemove([
         'auth_token',
         'aqualyn_user',
         'aqualyn_theme',
@@ -59,7 +59,7 @@ export const useAppActions = (
         'aqualyn_archive_pin',
       ]);
       // Mark explicit logout so bootstrap skips auto-login
-      await AsyncStorage.setItem('explicit_logout', '1');
+      Storage.setItem('explicit_logout', '1');
     } catch (e) {
       console.error('[Logout] Failed to clear AsyncStorage:', e);
     }
@@ -691,8 +691,8 @@ export const useAppActions = (
       phone,
       email: '',
       bio: 'Hey there! I am using Aqualyn.',
-      avatar: avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${name}`,
-      largeAvatar: avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${name}`
+      avatar: avatar || undefined,
+      largeAvatar: avatar || undefined
     };
     setContacts(prev => [...prev, newContact]);
     addToast('Added to contacts!', 'success');
@@ -741,7 +741,7 @@ export const useAppActions = (
         const newChat: Chat = {
           id: group.id,
           name: group.name,
-          avatar: group.avatar || `https://ui-avatars.com/api/?background=random&name=${group.name}`,
+          avatar: group.avatar || undefined,
           lastMessage: 'Group created',
           lastMessageTime: 'Just now',
           unreadCount: 0,

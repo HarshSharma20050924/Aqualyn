@@ -21,6 +21,7 @@ import { useAppContext } from '../context/AppContext';
 import { ENDPOINTS } from '../config/api';
 import { apiFetch } from '../utils/fetcher';
 import { uploadFile } from '../utils/uploads';
+import ContactAvatar from '../components/ui/ContactAvatar';
 
 interface Props {
   onBack: () => void;
@@ -153,15 +154,7 @@ export default function EditProfileScreen({ onBack }: Props) {
         {/* Avatar Setup Section */}
         <View style={styles.avatarSetupCenterDeck}>
           <View style={styles.avatarMainFrame}>
-            {avatar ? (
-              <Image source={{ uri: avatar }} style={styles.avatarImageContent} />
-            ) : (
-              <View style={styles.avatarFallbackBox}>
-                <Text style={styles.avatarInitialsText}>
-                  {name ? name.charAt(0).toUpperCase() : 'U'}
-                </Text>
-              </View>
-            )}
+            <ContactAvatar name={name} src={avatar} style={styles.avatarImageContent} />
             {isUploadingAvatar && (
               <View style={styles.avatarLoadingOverlay}>
                 <BubbleLoader size={24} />

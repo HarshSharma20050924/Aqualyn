@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Search, Check } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
+import ContactAvatar from '../ui/ContactAvatar';
 
 interface ShareContactModalProps {
   isOpen: boolean;
@@ -68,7 +69,7 @@ export default function ShareContactModal({ isOpen, onClose, onShare }: ShareCon
                     selectedContact === contact.id ? 'bg-secondary/20 border border-secondary/50' : 'hover:bg-white/5 border border-transparent'
                   }`}
                 >
-                  <img src={contact.avatar} alt={contact.name} className="w-10 h-10 rounded-full object-cover" />
+                  <ContactAvatar src={contact.avatar} name={contact.name} className="w-10 h-10 rounded-full object-cover" />
                   <div className="flex-1 text-left">
                     <p className="font-semibold text-on-surface">{contact.name}</p>
                     <p className="text-xs text-on-surface-variant truncate">{contact.lastMessage}</p>

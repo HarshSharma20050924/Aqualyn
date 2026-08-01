@@ -8,6 +8,7 @@ import {
 import { useAppContext } from '../../context/AppContext';
 import { uploadFile } from '../../utils/uploads';
 import { dataURLtoFile } from '../../utils/media';
+import ContactAvatar from '../ui/ContactAvatar';
 
 interface Sticker {
   id: string;
@@ -362,7 +363,7 @@ export default function StoryCreator({ onClose }: { onClose: () => void }) {
                     return (
                       <div key={user.id} className="flex items-center justify-between p-3 rounded-2xl bg-surface-container-low">
                         <div className="flex items-center gap-3">
-                          <img src={user.avatar} alt={user.name} className="w-10 h-10 rounded-full" />
+                          <ContactAvatar src={user.avatar} name={user.name || user.username} className="w-10 h-10 rounded-full" />
                           <div>
                             <p className="font-bold text-on-surface text-sm">{user.name}</p>
                             <p className="text-xs text-on-surface-variant">@{user.username}</p>

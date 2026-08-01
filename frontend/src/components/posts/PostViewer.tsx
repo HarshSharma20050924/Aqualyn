@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X, Heart, MessageCircle, Share2, MoreHorizontal, Send, Bookmark, Pin, Archive, Link as LinkIcon, FolderPlus, CheckCheck } from 'lucide-react';
 import { Post } from '../../types';
 import { useAppContext } from '../../context/AppContext';
+import ContactAvatar from '../ui/ContactAvatar';
 
 interface PostViewerProps {
   post: Post;
@@ -59,7 +60,9 @@ export default function PostViewer({ post, onClose }: PostViewerProps) {
             <X className="w-6 h-6" />
           </button>
           <div className="flex items-center gap-2">
-            <img src={post.userAvatar || `https://ui-avatars.com/api/?name=${post.userName}&background=random`} alt={post.userName} className="w-8 h-8 rounded-full" />
+            <div className="w-8 h-8 rounded-full overflow-hidden">
+              <ContactAvatar src={post.userAvatar} name={post.userName} />
+            </div>
             <span className="text-white font-semibold">{post.userName}</span>
           </div>
         </div>
@@ -191,7 +194,9 @@ export default function PostViewer({ post, onClose }: PostViewerProps) {
                     onClick={() => handleShareToChat(c.id)}
                     className="w-full p-4 rounded-2xl bg-surface-variant/50 hover:bg-surface-variant text-left font-semibold text-on-surface transition-colors flex items-center gap-4"
                   >
-                    <img src={c.avatar || `https://ui-avatars.com/api/?name=${c.name}`} className="w-10 h-10 rounded-full" />
+                    <div className="w-10 h-10 rounded-full overflow-hidden shrink-0">
+                      <ContactAvatar src={c.avatar} name={c.name} />
+                    </div>
                     <span className="truncate">{c.name}</span>
                     {c.isGroup && <span className="ml-auto text-[10px] bg-secondary/10 text-secondary px-2 py-1 rounded-full uppercase font-bold tracking-widest whitespace-nowrap">Group</span>}
                   </button>
@@ -221,7 +226,9 @@ export default function PostViewer({ post, onClose }: PostViewerProps) {
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {post.comments.map((comment: any) => (
                 <div key={comment.id} className="flex gap-3 group relative">
-                  <img src={comment.userAvatar || `https://ui-avatars.com/api/?name=${comment.userName}&background=random`} alt={comment.userName} className="w-8 h-8 rounded-full" />
+                  <div className="w-8 h-8 rounded-full overflow-hidden shrink-0">
+                    <ContactAvatar src={comment.userAvatar} name={comment.userName} />
+                  </div>
                   <div className="flex-1">
                     <div className="flex items-baseline gap-2">
                       <span className="font-bold text-sm text-on-surface">{comment.userName}</span>

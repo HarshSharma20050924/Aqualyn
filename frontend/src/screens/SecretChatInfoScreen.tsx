@@ -6,6 +6,7 @@ import { Chat } from '../types';
 import { useAppContext } from '../context/AppContext';
 import { apiFetch } from '../utils/fetcher';
 import { ENDPOINTS } from '../config/api';
+import ContactAvatar from '../components/ui/ContactAvatar';
 
 export default function SecretChatInfoScreen({ chat, onBack }: { chat: Chat, onBack: () => void }) {
   const { addToast } = useAppContext();
@@ -76,7 +77,7 @@ export default function SecretChatInfoScreen({ chat, onBack }: { chat: Chat, onB
         <div className="flex flex-col items-center text-center mt-6 mb-10">
           <div className="relative mb-6">
              <div className="w-28 h-28 rounded-full overflow-hidden border border-white/10 shadow-2xl">
-               <img src={chat.avatar} alt={chat.name} className="w-full h-full object-cover" />
+               <ContactAvatar src={chat.avatar} name={chat.name} />
              </div>
              <div className="absolute -bottom-2 -right-2 w-10 h-10 bg-secondary rounded-full flex items-center justify-center shadow-lg border-4 border-surface">
                <Lock className="w-4 h-4 text-surface" />

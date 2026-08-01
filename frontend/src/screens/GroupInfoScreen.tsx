@@ -5,6 +5,7 @@ import { Chat } from '../types';
 import { useAppContext } from '../context/AppContext';
 import { ENDPOINTS } from '../config/api';
 import { apiFetch } from '../utils/fetcher';
+import ContactAvatar from '../components/ui/ContactAvatar';
 
 interface GroupInfoScreenProps {
   chat: Chat;
@@ -102,7 +103,7 @@ export default function GroupInfoScreen({ chat, onBack, onNavigate }: GroupInfoS
 
       <div className="flex flex-col items-center py-8 px-4 border-b border-surface-container">
         <div className="relative mb-4">
-          <img src={chat.avatar} alt={chat.name} className="w-32 h-32 rounded-full object-cover border-4 border-surface-container-low shadow-lg" />
+          <ContactAvatar src={chat.avatar} name={chat.name} className="w-32 h-32 rounded-full object-cover border-4 border-surface-container-low shadow-lg" />
           <button className="absolute bottom-0 right-0 p-2 bg-primary rounded-full text-white shadow-md hover:scale-105 transition-transform">
             <ImageIcon className="w-5 h-5" />
           </button>
@@ -207,7 +208,7 @@ export default function GroupInfoScreen({ chat, onBack, onNavigate }: GroupInfoS
                 }}
               >
                 <div className="flex items-center gap-3">
-                  <img src={p.avatar} alt={p.name} className="w-10 h-10 rounded-full object-cover" />
+                  <ContactAvatar src={p.avatar} name={p.name} className="w-10 h-10 rounded-full object-cover" />
                   <div>
                     <p className="font-medium text-on-surface">{p.name}</p>
                     <p className="text-xs text-on-surface-variant">{p.role === 'Admin' ? 'Group Admin' : 'Hey there! I am using this app.'}</p>

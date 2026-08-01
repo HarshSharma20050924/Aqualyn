@@ -5,6 +5,7 @@ import { useAppContext } from '../context/AppContext';
 import { apiFetch } from '../utils/fetcher';
 import { ENDPOINTS } from '../config/api';
 import PostViewer from '../components/posts/PostViewer';
+import ContactAvatar from '../components/ui/ContactAvatar';
 
 const CATEGORIES = ['All', 'Creative', 'Tech', 'Lifestyle', 'Design', 'Health'];
 
@@ -224,7 +225,7 @@ export default function ExploreScreen({ onBack, onNavigate }: { onBack: () => vo
               type="text"
               value={query}
               onChange={e => setQuery(e.target.value)}
-              onFocus={() => setIsInputFocused(true)}
+              onFocus={() => { setIsInputFocused(true); setActiveTab('people'); }}
               onBlur={() => setTimeout(() => setIsInputFocused(false), 150)}
               onKeyDown={e => { if (e.key === 'Enter' && query.trim()) saveToHistory(query.trim()); }}
               placeholder={activeTab === 'people' ? 'Search by name, username, or ID...' : 'Search posts, channels...'}
@@ -332,9 +333,7 @@ export default function ExploreScreen({ onBack, onNavigate }: { onBack: () => vo
                     )}
                     <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col items-center justify-center gap-2">
                       <div className="w-8 h-8 rounded-full overflow-hidden border-2 border-white">
-                        {post.userAvatar
-                          ? <img src={post.userAvatar} alt="" className="w-full h-full object-cover" />
-                          : <div className="w-full h-full bg-secondary flex items-center justify-center text-white text-xs font-bold">{(post.userName || 'U')[0]}</div>}
+                        <ContactAvatar src={post.userAvatar} name={post.userName} />
                       </div>
                       <span className="text-white text-xs font-bold">{post.userName}</span>
                     </div>
@@ -510,13 +509,7 @@ export default function ExploreScreen({ onBack, onNavigate }: { onBack: () => vo
                         className="w-12 h-12 rounded-full overflow-hidden shrink-0 border border-surface-container cursor-pointer"
                         onClick={() => { setActiveContactId(user.id); onNavigate('contact-profile'); }}
                       >
-                        {user.avatar ? (
-                          <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full bg-secondary/10 flex items-center justify-center text-secondary font-bold text-lg">
-                            {(user.displayName || user.name || 'U')[0]}
-                          </div>
-                        )}
+                        <ContactAvatar src={user.avatar} name={user.displayName || user.name || user.username} />
                       </div>
                       <div
                         className="flex-1 min-w-0 cursor-pointer"

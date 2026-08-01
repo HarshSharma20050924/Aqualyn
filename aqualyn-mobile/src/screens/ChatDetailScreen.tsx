@@ -13,12 +13,14 @@ import {
   Modal,
   Alert
 } from 'react-native';
+import * as Haptics from 'expo-haptics';
+import { BlurView } from 'expo-blur';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import Animated, {
   FadeIn,
   FadeOut,
-  useAnimatedStyle,
+  useAnimatedStyle, LinearTransition,
   useSharedValue,
   withSequence,
   withTiming
@@ -45,15 +47,18 @@ import {
   Clock,
   Check,
   Sparkles,
-  Plus
+  Plus,
+  Reply,
+  Edit2
 } from 'lucide-react-native';
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Storage } from '../utils/storage';
 
 import { useAppContext } from '../context/AppContext';
 import { useCall } from '../context/CallContext';
 import { Message } from '../types';
 import { ENDPOINTS } from '../config/api';
+import ContactAvatar from '../components/ui/ContactAvatar';
 import { apiFetch } from '../utils/fetcher';
 
 // Mobile Equivalent Sub-Components
@@ -107,7 +112,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
   const [forwardMessage, setForwardMessage] = useState<Message | null>(null);
   const [showForwardModal, setShowForwardModal] = useState(false);
 
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<Animated.ScrollView>(null);
 
   // UI Control states
   const [isAttachmentPickerOpen, setIsAttachmentPickerOpen] = useState(false);
@@ -141,6 +146,13 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
   const [lynCustomPersonality, setLynCustomPersonality] = useState('');
   const [lynFriendMode, setLynFriendMode] = useState(false);
   const [lynResponseRate, setLynResponseRate] = useState(50);
+  
+  // Auto-focus input when swipe-to-reply is triggered
+  useEffect(() => {
+    if (replyingTo && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [replyingTo]);
 
   // Smart replies state
   const [smartReplies, setSmartReplies] = useState<string[]>([]);
@@ -157,12 +169,12 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
     if (!activeChatId) return;
     const loadSettings = async () => {
       try {
-        const en = await AsyncStorage.getItem(`lyn_enabled_${activeChatId}`);
-        const sug = await AsyncStorage.getItem(`lyn_suggestions_${activeChatId}`);
-        const per = await AsyncStorage.getItem(`lyn_personality_${activeChatId}`);
-        const cus = await AsyncStorage.getItem(`lyn_customPersonality_${activeChatId}`);
-        const fm = await AsyncStorage.getItem(`lyn_friendMode_${activeChatId}`);
-        const rr = await AsyncStorage.getItem(`lyn_responseRate_${activeChatId}`);
+        const en = Storage.getItem(`lyn_enabled_${activeChatId}`);
+        const sug = Storage.getItem(`lyn_suggestions_${activeChatId}`);
+        const per = Storage.getItem(`lyn_personality_${activeChatId}`);
+        const cus = Storage.getItem(`lyn_customPersonality_${activeChatId}`);
+        const fm = Storage.getItem(`lyn_friendMode_${activeChatId}`);
+        const rr = Storage.getItem(`lyn_responseRate_${activeChatId}`);
 
         if (en !== null) setAiEnabled(JSON.parse(en));
         else setAiEnabled(true);
@@ -247,12 +259,12 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
     setLynFriendMode(settings.friendMode);
     setLynResponseRate(settings.responseRate);
     try {
-      await AsyncStorage.setItem(`lyn_enabled_${activeChatId}`, JSON.stringify(settings.aiEnabled));
-      await AsyncStorage.setItem(`lyn_suggestions_${activeChatId}`, JSON.stringify(settings.aiSuggestionsEnabled));
-      await AsyncStorage.setItem(`lyn_personality_${activeChatId}`, JSON.stringify(settings.personality));
-      await AsyncStorage.setItem(`lyn_customPersonality_${activeChatId}`, JSON.stringify(settings.customPersonality));
-      await AsyncStorage.setItem(`lyn_friendMode_${activeChatId}`, JSON.stringify(settings.friendMode));
-      await AsyncStorage.setItem(`lyn_responseRate_${activeChatId}`, JSON.stringify(settings.responseRate));
+      Storage.setItem(`lyn_enabled_${activeChatId}`, JSON.stringify(settings.aiEnabled));
+      Storage.setItem(`lyn_suggestions_${activeChatId}`, JSON.stringify(settings.aiSuggestionsEnabled));
+      Storage.setItem(`lyn_personality_${activeChatId}`, JSON.stringify(settings.personality));
+      Storage.setItem(`lyn_customPersonality_${activeChatId}`, JSON.stringify(settings.customPersonality));
+      Storage.setItem(`lyn_friendMode_${activeChatId}`, JSON.stringify(settings.friendMode));
+      Storage.setItem(`lyn_responseRate_${activeChatId}`, JSON.stringify(settings.responseRate));
     } catch (e) {
       console.error('Failed to save Lyn settings', e);
     }
@@ -324,7 +336,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
     
     const restoreScroll = async () => {
       try {
-        const savedOffset = await AsyncStorage.getItem(`chatScroll_${activeChatId}`);
+        const savedOffset = Storage.getItem(`chatScroll_${activeChatId}`);
         if (savedOffset) {
           isProgrammaticScroll.current = true;
           setTimeout(() => {
@@ -392,7 +404,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
     setShowScrollToBottom(!isAtBottom);
 
     if (activeChatId) {
-      AsyncStorage.setItem(`chatScroll_${activeChatId}`, contentOffset.y.toString());
+      Storage.setItem(`chatScroll_${activeChatId}`, contentOffset.y.toString());
     }
 
     if (contentOffset.y < 100 && hasMore && !isFetchingMore && !isLoadingMessages) {
@@ -638,30 +650,12 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
                   <Users size={20} color={isSecret ? '#60a5fa' : '#0057bd'} />
                 </View>
               ) : (
-                <Image source={{ uri: chat.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(chat.name || 'U')}&background=0057bd&color=fff&size=80` }} style={styles.userAvatar} />
+                <ContactAvatar src={chat.avatar} name={chat.name} style={styles.userAvatar} />
               )}
             </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => {
-                if (chat.isGroup) setIsGroupInfoOpen(true);
-                else if (chat.isSecret) setIsSecretInfoOpen(true);
-                else {
-                  const id = targetUserId || chat.participantIds?.find(uid => uid !== currentUser?.id) || chat.id;
-                  setOriginChatId(activeChatId);
-                  setActiveContactId(id);
-                  onNavigate('contact-profile');
-                }
-              }}
-              style={styles.headerInfoText}
-            >
-              <Text style={[styles.chatName, isSecret ? styles.textLight : styles.textDark]}>
-                {isSecret && <Lock size={14} color="#60a5fa" />} {chat.name}
-              </Text>
-              <Text style={[styles.chatStatus, isSecret ? styles.statusSecret : styles.statusNormal]}>
-                {isSecret ? '🔒 Incognito Session' : chat.isGroup ? `${chat.participantIds?.length || 0} members` : ''}
-              </Text>
-            </TouchableOpacity>
+            <Text style={[styles.chatStatus, isSecret ? styles.statusSecret : styles.statusNormal]}>
+              {isSecret ? '🔒 Incognito Session' : chat.isGroup ? `${chat.participantIds?.length || 0} members` : ''}
+            </Text>
           </View>
 
           <View style={styles.headerRightContainer}>
@@ -713,14 +707,14 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
           responseRate={lynResponseRate}
           onSave={handleLynSave}
           onDiscoverChannels={() => {
-            AsyncStorage.setItem('exploreQuery', chat.name || '');
+            Storage.setItem('exploreQuery', chat.name || '');
             onNavigate?.('explore');
           }}
         />
       )}
 
       {/* Main Messages Dynamic Stream */}
-      <ScrollView
+      <Animated.ScrollView layout={LinearTransition.springify().damping(16).stiffness(120)}
         ref={scrollRef}
         onScroll={handleScroll}
         scrollEventThrottle={16}
@@ -818,7 +812,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
 
           </React.Fragment>
         )}
-      </ScrollView>
+      </Animated.ScrollView>
 
       {/* Floating Action / Dropdown Header Menu Context */}
       <Modal visible={showHeaderMenu} transparent animationType="fade">
@@ -971,7 +965,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
 
             {/* AI Smart Reply Bar */}
             {smartReplies.length > 0 && chatMessages.length > 0 && !text && !hideSmartReplies && (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.smartReplyBar} contentContainerStyle={styles.smartReplyContent}>
+              <Animated.ScrollView layout={LinearTransition.springify().damping(16).stiffness(120)} horizontal showsHorizontalScrollIndicator={false} style={styles.smartReplyBar} contentContainerStyle={styles.smartReplyContent}>
                 <View style={styles.smartReplyLynBadge}>
                   <Droplet size={12} color="#0057bd" />
                   <Text style={styles.smartReplyLynLabel}>Lyn</Text>
@@ -989,21 +983,35 @@ export default function ChatDetailScreen({ onBack, onNavigate }: Props) {
                     <Text style={styles.smartReplyChipText}>{reply}</Text>
                   </TouchableOpacity>
                 ))}
-              </ScrollView>
+              </Animated.ScrollView>
+            )}
+
+            {/* Context Reply/Edit bars - Positioned cleanly above input row */}
+            {editingMessage && (
+              <Animated.View layout={LinearTransition.springify()} style={styles.contextBarCompact}>
+                <View style={styles.contextIconWrap}><Edit2 size={20} color="#0057bd" /></View>
+                <View style={styles.contextInfo}>
+                  <Text style={styles.contextTitle}>Edit Message</Text>
+                  <Text numberOfLines={1} style={styles.contextText}>{editingMessage.text}</Text>
+                </View>
+                <TouchableOpacity style={styles.contextClose} onPress={() => { setEditingMessage(null); setText(''); }}><X size={18} color="#64748b" /></TouchableOpacity>
+              </Animated.View>
+            )}
+            
+            {replyingTo && !editingMessage && (
+              <Animated.View layout={LinearTransition.springify()} style={styles.contextBarCompact}>
+                <View style={styles.contextIconWrap}><Reply size={20} color="#0057bd" /></View>
+                <View style={styles.contextInfo}>
+                  <Text style={styles.contextTitle}>
+                    Reply to {replyingTo.senderId === currentUser?.id ? 'Yourself' : chats.find(c => c.id === activeChatId)?.participantIds?.length ? 'User' : 'Someone'}
+                  </Text>
+                  <Text numberOfLines={1} style={styles.contextText}>{replyingTo.text || 'Attachment'}</Text>
+                </View>
+                <TouchableOpacity style={styles.contextClose} onPress={() => setReplyingTo(null)}><X size={18} color="#64748b" /></TouchableOpacity>
+              </Animated.View>
             )}
 
             <View style={styles.inputContainerRow}>
-              {/* Context Reply/Edit bars */}
-              {editingMessage && (
-                <Animated.View style={styles.contextBar}>
-                  <View style={styles.contextLine} />
-                  <View style={styles.contextInfo}>
-                    <Text style={styles.contextTitle}>Edit Message</Text>
-                    <Text numberOfLines={1} style={styles.contextText}>{editingMessage.text}</Text>
-                  </View>
-                  <TouchableOpacity onPress={() => { setEditingMessage(null); setText(''); }}><X size={18} color="#64748b" /></TouchableOpacity>
-                </Animated.View>
-              )}
 
             <TouchableOpacity
               onPress={() => setIsAttachmentPickerOpen(!isAttachmentPickerOpen)}
@@ -1221,12 +1229,13 @@ const styles = StyleSheet.create({
   smileButton: { position: 'absolute', right: 12, bottom: 11 },
   sendButtonCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#3b82f6', justifyContent: 'center', alignItems: 'center', shadowColor: '#3b82f6', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
 
-  // Reply contextual banner
-  contextBar: { position: 'absolute', bottom: 60, left: 0, right: 0, backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: 16, padding: 12, flexDirection: 'row', alignItems: 'center', borderLeftWidth: 4, borderColor: '#0057bd' },
-  contextLine: { width: 4, height: '100%', borderRadius: 2 },
-  contextInfo: { flex: 1, marginLeft: 8 },
-  contextTitle: { fontSize: 12, fontWeight: '700', color: '#0057bd' },
-  contextText: { fontSize: 13, color: '#475569' },
+  // Reply contextual banner - Compact Telegram Style
+  contextBarCompact: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4, paddingVertical: 8, marginLeft: 50, marginRight: 50, borderLeftWidth: 2, borderLeftColor: '#0057bd', backgroundColor: 'transparent', marginBottom: 4 },
+  contextIconWrap: { paddingHorizontal: 8, justifyContent: 'center', alignItems: 'center' },
+  contextInfo: { flex: 1, paddingLeft: 4, justifyContent: 'center' },
+  contextTitle: { fontSize: 13, fontWeight: '700', color: '#0057bd', marginBottom: 2 },
+  contextText: { fontSize: 13, color: '#64748b' },
+  contextClose: { padding: 4, justifyContent: 'center', alignItems: 'center' },
 
   // Restrictions States Styles
   restrictedContainer: { backgroundColor: '#fff', borderRadius: 24, padding: 16, alignItems: 'center', borderWidth: 1, borderColor: '#e2e8f0' },

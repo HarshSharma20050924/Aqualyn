@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { Message, Chat } from '../../types';
 import { CheckCheck, Lock, Pin, BellOff, Trash2, Archive, Maximize2, X } from 'lucide-react';
+import ContactAvatar from '../ui/ContactAvatar';
 
 interface ChatPeekPreviewProps {
   chat: Chat;
@@ -49,7 +50,7 @@ export const ChatPeekPreview: React.FC<ChatPeekPreviewProps> = ({
         <div className="p-4 border-b border-white/10 flex items-center justify-between bg-white/5">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl overflow-hidden shadow-md">
-              <img src={chat.avatar} alt={chat.name} className="w-full h-full object-cover" />
+              <ContactAvatar src={chat.avatar} name={chat.name} />
             </div>
             <div>
               <h3 className="font-headline font-bold text-on-surface flex items-center gap-1">

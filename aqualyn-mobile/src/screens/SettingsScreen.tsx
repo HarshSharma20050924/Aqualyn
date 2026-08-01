@@ -10,7 +10,9 @@ import {
   Dimensions,
   Platform
 } from 'react-native';
-import Animated, { FadeIn, FadeOut, SlideInRight, SlideOutLeft } from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
+import { BlurView } from 'expo-blur';
+import Animated, { FadeIn, FadeOut, SlideInRight, SlideOutLeft, LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { 
   ArrowLeft, 
@@ -24,8 +26,10 @@ import {
   Wallet, 
   CreditCard, 
   Bell, 
-  Shield 
+  Shield,
+  RefreshCw
 } from 'lucide-react-native';
+import * as Updates from 'expo-updates';
 import Slider from '@react-native-community/slider';
 import { useAppContext } from '../context/AppContext';
 
@@ -35,6 +39,7 @@ import NotificationsSettings from '../components/settings/NotificationsSettings'
 import SecuritySettings from '../components/settings/SecuritySettings';
 import StorageSettings from '../components/settings/StorageSettings';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
+import ContactAvatar from '../components/ui/ContactAvatar';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -68,6 +73,25 @@ export default function SettingsScreen({ onBack, onNavigate }: SettingsScreenPro
     if (logout) await logout();
     addToast?.('Logged out successfully', 'success');
     if (onNavigate) onNavigate('login');
+  };
+
+  const handleCheckForUpdates = async () => {
+    try {
+      addToast?.('Checking for updates...', 'info');
+      const update = await Updates.checkForUpdateAsync();
+      if (update.isAvailable) {
+        addToast?.('Update found! Downloading...', 'success');
+        await Updates.fetchUpdateAsync();
+        addToast?.('Update downloaded! Restarting...', 'success');
+        setTimeout(() => {
+          Updates.reloadAsync();
+        }, 1500);
+      } else {
+        addToast?.('You are on the latest version.', 'info');
+      }
+    } catch (e: any) {
+      addToast?.('Error checking for updates: ' + e.message, 'error');
+    }
   };
 
   const handleExportAll = () => {
@@ -126,7 +150,7 @@ export default function SettingsScreen({ onBack, onNavigate }: SettingsScreenPro
             style={styles.subviewAbsoluteOverlayDeckContainer}
           >
             <SubViewHeader title="Chat Folders" />
-            <ScrollView 
+            <Animated.ScrollView layout={LinearTransition.springify().damping(16).stiffness(120)} 
               contentContainerStyle={[styles.subviewScrollStackContent, { paddingBottom: insets.bottom + 40 }]}
               showsVerticalScrollIndicator={false}
             >
@@ -187,7 +211,7 @@ export default function SettingsScreen({ onBack, onNavigate }: SettingsScreenPro
                   </View>
                 ))}
               </View>
-            </ScrollView>
+            </Animated.ScrollView>
           </Animated.View>
         );
       case 'appearance':
@@ -198,7 +222,7 @@ export default function SettingsScreen({ onBack, onNavigate }: SettingsScreenPro
             style={styles.subviewAbsoluteOverlayDeckContainer}
           >
             <SubViewHeader title="Appearance" />
-            <ScrollView 
+            <Animated.ScrollView layout={LinearTransition.springify().damping(16).stiffness(120)} 
               contentContainerStyle={[styles.subviewScrollStackContent, { paddingBottom: insets.bottom + 40 }]}
               showsVerticalScrollIndicator={false}
             >
@@ -270,7 +294,7 @@ export default function SettingsScreen({ onBack, onNavigate }: SettingsScreenPro
                   </View>
                 </View>
               </View>
-            </ScrollView>
+            </Animated.ScrollView>
           </Animated.View>
         );
       case 'wallet':
@@ -281,7 +305,7 @@ export default function SettingsScreen({ onBack, onNavigate }: SettingsScreenPro
             style={styles.subviewAbsoluteOverlayDeckContainer}
           >
             <SubViewHeader title="Wallet" />
-            <ScrollView 
+            <Animated.ScrollView layout={LinearTransition.springify().damping(16).stiffness(120)} 
               contentContainerStyle={[styles.subviewScrollStackContent, { paddingBottom: insets.bottom + 40 }]}
               showsVerticalScrollIndicator={false}
             >
@@ -321,14 +345,14 @@ export default function SettingsScreen({ onBack, onNavigate }: SettingsScreenPro
                   </TouchableOpacity>
                 </View>
               </View>
-            </ScrollView>
+            </Animated.ScrollView>
           </Animated.View>
         );
       case 'storage':
         return (
           <Animated.View   style={styles.subviewAbsoluteOverlayDeckContainer}>
             <SubViewHeader title="Data and Storage" />
-            <ScrollView contentContainerStyle={[styles.subviewScrollStackContent, { paddingBottom: insets.bottom + 40 }]} showsVerticalScrollIndicator={false}>
+            <Animated.ScrollView layout={LinearTransition.springify().damping(16).stiffness(120)} contentContainerStyle={[styles.subviewScrollStackContent, { paddingBottom: insets.bottom + 40 }]} showsVerticalScrollIndicator={false}>
               <StorageSettings />
               <View style={styles.sectionGroupVerticalSpacingGap}>
                 <Text style={styles.sectionCapsMetaTrackingHeaderLabel}>Export</Text>
@@ -346,25 +370,25 @@ export default function SettingsScreen({ onBack, onNavigate }: SettingsScreenPro
                   </TouchableOpacity>
                 </View>
               </View>
-            </ScrollView>
+            </Animated.ScrollView>
           </Animated.View>
         );
       case 'security':
         return (
           <Animated.View   style={styles.subviewAbsoluteOverlayDeckContainer}>
             <SubViewHeader title="Security" />
-            <ScrollView contentContainerStyle={[styles.subviewScrollStackContent, { paddingBottom: insets.bottom + 40 }]} showsVerticalScrollIndicator={false}>
+            <Animated.ScrollView layout={LinearTransition.springify().damping(16).stiffness(120)} contentContainerStyle={[styles.subviewScrollStackContent, { paddingBottom: insets.bottom + 40 }]} showsVerticalScrollIndicator={false}>
               <SecuritySettings />
-            </ScrollView>
+            </Animated.ScrollView>
           </Animated.View>
         );
       case 'notifications':
         return (
           <Animated.View   style={styles.subviewAbsoluteOverlayDeckContainer}>
             <SubViewHeader title="Notifications" />
-            <ScrollView contentContainerStyle={[styles.subviewScrollStackContent, { paddingBottom: insets.bottom + 40 }]} showsVerticalScrollIndicator={false}>
+            <Animated.ScrollView layout={LinearTransition.springify().damping(16).stiffness(120)} contentContainerStyle={[styles.subviewScrollStackContent, { paddingBottom: insets.bottom + 40 }]} showsVerticalScrollIndicator={false}>
               <NotificationsSettings />
-            </ScrollView>
+            </Animated.ScrollView>
           </Animated.View>
         );
       default:
@@ -394,14 +418,14 @@ export default function SettingsScreen({ onBack, onNavigate }: SettingsScreenPro
           </View>
         </View>
 
-        <ScrollView 
+        <Animated.ScrollView layout={LinearTransition.springify().damping(16).stiffness(120)} 
           contentContainerStyle={[styles.mainScrollStackContainer, { paddingBottom: insets.bottom + 60 }]}
           showsVerticalScrollIndicator={false}
         >
           {/* User Card Dashboard Banner Frame */}
           <View style={styles.userIdentitySummaryDeckBannerCard}>
             <View style={styles.userAvatarCircularGlowBorderCard}>
-              <Image source={{ uri: currentUser.avatar }} style={styles.userCardAvatarNativeImg} />
+              <ContactAvatar src={currentUser.avatar} name={currentUser.displayName || currentUser.name || currentUser.username} style={styles.userCardAvatarNativeImg} />
             </View>
             <View style={styles.userCardMetadataTextContentColumn}>
               <Text style={styles.userCardDisplayNameTextLabel} numberOfLines={1}>{currentUser.name}</Text>
@@ -439,6 +463,17 @@ export default function SettingsScreen({ onBack, onNavigate }: SettingsScreenPro
                   </View>
                 </View>
               </TouchableOpacity>
+              <TouchableOpacity onPress={handleCheckForUpdates} style={styles.settingItemRowTouch} activeOpacity={0.7}>
+                <View style={styles.settingItemContentLeft}>
+                  <View style={[styles.settingItemIconSquareFrame, { backgroundColor: 'rgba(16, 185, 129, 0.06)' }]}>
+                    <RefreshCw size={20} color="#10b981" />
+                  </View>
+                  <View style={styles.settingItemTextColumn}>
+                    <Text style={styles.settingItemLabelTypography}>Check for Updates</Text>
+                    <Text style={styles.settingItemSubtextTypography}>Download the latest Aqualyn features</Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
             </View>
 
             {/* Systematic Destruction Exit Flow Trigger Action Link Button */}
@@ -451,7 +486,7 @@ export default function SettingsScreen({ onBack, onNavigate }: SettingsScreenPro
               <Text style={styles.systemLogoutDestructiveActionButtonCardLabel}>Log Out</Text>
             </TouchableOpacity>
           </View>
-        </ScrollView>
+        </Animated.ScrollView>
       </Animated.View>
 
       {/* Conditionally Rendered Subview Absolute Slider Stack Modules */}

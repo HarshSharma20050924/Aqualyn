@@ -6,12 +6,13 @@ import {
   TouchableOpacity,
   TextInput,
   ScrollView,
-  Image,
   Modal,
   Platform,
 } from 'react-native';
-import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown, ZoomIn, ZoomOut } from 'react-native-reanimated';
-import { X, FolderPlus, Check, ArrowLeft, Search, Plus } from 'lucide-react-native';
+import Animated, { FadeIn, FadeOut, ZoomIn } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { X, FolderPlus, Search, Check } from 'lucide-react-native';
+import ContactAvatar from '../ui/ContactAvatar';
 
 interface NewFolderModalProps {
   isOpen: boolean;
@@ -153,12 +154,7 @@ export default function NewFolderModal({ isOpen, onClose, appContext }: NewFolde
                       activeOpacity={0.7}
                     >
                       <View style={styles.avatarShellWrapperFrameAnchorSquare}>
-                        <Image source={{ uri: chat.avatar }} style={styles.targetImageAvatarProfileGraphicContent} />
-                        {isSelected && (
-                          <View style={styles.selectionAbsoluteCheckmarkIndicatorBadgeCircle}>
-                            <Check size={10} color="#ffffff" strokeWidth={3} />
-                          </View>
-                        )}
+                        <ContactAvatar name={chat.name} src={chat.avatar} style={styles.targetImageAvatarProfileGraphicContent} />
                       </View>
                       <View style={styles.chatMetadataDetailsLayoutColumnCellBox}>
                         <Text style={styles.chatProfileHeadingTitleNameTypography}>{chat.name}</Text>

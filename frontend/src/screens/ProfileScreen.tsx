@@ -8,6 +8,7 @@ import StoryCreator from '../components/stories/StoryCreator';
 import PostCreator from '../components/posts/PostCreator';
 import PostViewer from '../components/posts/PostViewer';
 import UserListModal from '../components/social/UserListModal';
+import ContactAvatar from '../components/ui/ContactAvatar';
 import { apiFetch } from '../utils/fetcher';
 import { ENDPOINTS } from '../config/api';
 
@@ -69,7 +70,7 @@ export default function ProfileScreen({ onNavigate, isSidebar = false }: { onNav
           </div>
           <div className="flex items-center gap-4">
             <div className="w-10 h-10 rounded-full border-2 border-secondary-fixed aqua-glow overflow-hidden">
-              <img src={currentUser.avatar} alt="Profile" className="w-full h-full object-cover" />
+              <ContactAvatar src={currentUser.avatar} name={currentUser.displayName || currentUser.name || currentUser.username} />
             </div>
           </div>
         </header>
@@ -79,7 +80,7 @@ export default function ProfileScreen({ onNavigate, isSidebar = false }: { onNav
         <section className="relative flex flex-col items-center gap-4">
           <div className="relative group">
             <div className={`${isSidebar ? 'w-24 h-24' : 'w-40 h-40 md:w-48 md:h-48'} rounded-full border-[6px] border-white aqua-glow overflow-hidden bg-surface-container shadow-xl`}>
-              <img src={currentUser.largeAvatar} alt="Large Profile" className="w-full h-full object-cover" />
+              <ContactAvatar src={currentUser.largeAvatar || currentUser.avatar} name={currentUser.displayName || currentUser.name || currentUser.username} />
             </div>
             <button onClick={() => onNavigate('edit-profile')} className="absolute bottom-1 right-1 bg-secondary text-on-secondary w-8 h-8 rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform active:scale-90">
               <Pen className="w-4 h-4 fill-on-secondary" />

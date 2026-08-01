@@ -5,6 +5,7 @@ import { useAppContext } from '../../context/AppContext';
 import AddContactModal from '../modals/AddContactModal';
 import { ENDPOINTS } from '../../config/api';
 import { apiFetch } from '../../utils/fetcher';
+import ContactAvatar from '../ui/ContactAvatar';
 
 interface NewChatModalProps {
   isOpen: boolean;
@@ -66,7 +67,7 @@ export default function NewChatModal({ isOpen, onClose, onNavigate }: NewChatMod
       .map(u => ({
         id: u.id,
         name: u.displayName || u.username || 'Aqualyn User',
-        avatar: u.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${u.username || 'U'}`,
+        avatar: u.avatar || undefined,
         role: u.bio || 'Aqualyn User',
         isContact: false
       }))
@@ -228,7 +229,9 @@ export default function NewChatModal({ isOpen, onClose, onNavigate }: NewChatMod
                                 className="flex flex-col items-center gap-1 w-14 shrink-0"
                               >
                                 <div className="relative">
-                                  <img src={c.avatar} alt={c.name} className="w-14 h-14 rounded-full object-cover border-2 border-transparent" />
+                                  <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-transparent">
+                                    <ContactAvatar src={c.avatar} name={c.name} />
+                                  </div>
                                   <button
                                     onClick={() => toggleContact(id)}
                                     className="absolute -top-1 -right-1 bg-surface-container-highest border-2 border-surface rounded-full p-0.5 text-on-surface-variant hover:text-white hover:bg-red-500 transition-colors z-10"
@@ -318,7 +321,7 @@ export default function NewChatModal({ isOpen, onClose, onNavigate }: NewChatMod
                           >
                             <div className="relative">
                               <div className="w-12 h-12 rounded-full overflow-hidden">
-                                <img src={contact.avatar} alt={contact.name} className="w-full h-full object-cover" />
+                                <ContactAvatar src={contact.avatar} name={contact.name} />
                               </div>
                               {mode === 'group-select' && selectedContacts.includes(contact.id) && (
                                 <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-secondary rounded-full border-2 border-surface flex items-center justify-center">
@@ -392,7 +395,9 @@ export default function NewChatModal({ isOpen, onClose, onNavigate }: NewChatMod
                       <div className="space-y-4">
                         {/* Current User as Admin */}
                         <div className="flex items-center gap-4">
-                          <img src={currentUser?.avatar} className="w-12 h-12 rounded-full" />
+                          <div className="w-12 h-12 rounded-full overflow-hidden">
+                            <ContactAvatar src={currentUser?.avatar} name={currentUser?.displayName || currentUser?.username || 'You'} />
+                          </div>
                           <div className="flex-1">
                             <h4 className="font-semibold text-on-surface">You</h4>
                             <p className="text-xs text-secondary">Group Admin</p>
@@ -404,7 +409,9 @@ export default function NewChatModal({ isOpen, onClose, onNavigate }: NewChatMod
                           if (!c) return null;
                           return (
                             <div key={id} className="flex items-center gap-4">
-                              <img src={c.avatar} className="w-12 h-12 rounded-full" />
+                              <div className="w-12 h-12 rounded-full overflow-hidden">
+                                <ContactAvatar src={c.avatar} name={c.name} />
+                              </div>
                               <div className="flex-1">
                                 <h4 className="font-semibold text-on-surface">{c.name}</h4>
                                 <p className="text-xs text-on-surface-variant">{c.role}</p>

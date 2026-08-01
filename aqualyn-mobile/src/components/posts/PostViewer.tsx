@@ -15,6 +15,7 @@ import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-nati
 import { X, Heart, MessageCircle, Share2, MoreHorizontal, Send, Bookmark, Pin, Archive, FolderPlus, Link as LinkIcon, Trash2 } from 'lucide-react-native';
 import { Post } from '../../types';
 import { useAppContext } from '../../context/AppContext';
+import ContactAvatar from '../ui/ContactAvatar';
 
 interface PostViewerProps {
   post: Post;
@@ -64,9 +65,10 @@ export default function PostViewer({ post, isOpen, onClose }: PostViewerProps) {
               <X size={24} color="#ffffff" />
             </TouchableOpacity>
             <View style={styles.headerUserMetaDetailsBadge}>
-              <Image 
-                source={{ uri: post.userAvatar || `https://ui-avatars.com/api/?name=${post.userName}&background=random` }} 
-                style={styles.headerAvatarProfileImageGraphic} 
+              <ContactAvatar 
+                src={post.userAvatar}
+                name={post.userName}
+                style={styles.headerAvatarProfileImageGraphic}
               />
               <Text style={styles.headerProfileUsernameTypographyText}>{post.userName}</Text>
             </View>
@@ -163,7 +165,7 @@ export default function PostViewer({ post, isOpen, onClose }: PostViewerProps) {
               <ScrollView style={styles.chatPickerItemsVerticalScrollSurface}>
                 {chats.map((c: any) => (
                   <TouchableOpacity key={c.id} onPress={() => handleShareToChat(c.id)} style={styles.chatPickerItemInteractiveRowCellField}>
-                    <Image source={{ uri: c.avatar || `https://ui-avatars.com/api/?name=${c.name}` }} style={styles.chatPickerRowItemAvatarImage} />
+                    <ContactAvatar src={c.avatar} name={c.name} style={styles.chatPickerRowItemAvatarImage} />
                     <Text style={styles.chatPickerRowItemClientNameTypographyText} numberOfLines={1}>{c.name}</Text>
                   </TouchableOpacity>
                 ))}
@@ -194,7 +196,7 @@ export default function PostViewer({ post, isOpen, onClose }: PostViewerProps) {
                       onPress={() => pressedCommentId === comment.id && setPressedCommentId(null)}
                       style={styles.commentRowItemLayoutFlexibleCellBlock}
                     >
-                      <Image source={{ uri: comment.userAvatar }} style={styles.commentRowItemAvatarImageCircle} />
+                      <ContactAvatar src={comment.userAvatar} name={comment.userName} style={styles.commentRowItemAvatarImageCircle} />
                       <View style={styles.commentRowItemTextContentFlexibleColumn}>
                         <View style={styles.commentRowItemAuthorMetadataLineGroup}>
                           <Text style={styles.commentRowAuthorUsernameLabelText}>{comment.userName}</Text>

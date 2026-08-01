@@ -1,4 +1,4 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Storage } from '../utils/storage';
 import { Platform } from 'react-native';
 
 const SUPABASE_URL = 'https://uuuidxafgdldgrkhvbdp.supabase.co';

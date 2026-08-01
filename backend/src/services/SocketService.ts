@@ -411,6 +411,7 @@ export class SocketService {
 
             socket.emit('message_sent_ack', {
                 ...message,
+                tempId: data.tempId,  // echo back so client can match the exact optimistic message
                 sender: sender,
                 timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             });

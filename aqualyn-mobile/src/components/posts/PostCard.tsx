@@ -17,6 +17,7 @@ import Animated, {
 import { Heart, MessageCircle, Send, Bookmark, MoreHorizontal, Volume2, VolumeX } from 'lucide-react-native';
 import { Post } from '../../types';
 import { useAppContext } from '../../context/AppContext';
+import ContactAvatar from '../ui/ContactAvatar';
 
 interface PostCardProps {
   post: Post;
@@ -92,8 +93,9 @@ export default function PostCard({ post, onViewPost }: PostCardProps) {
           activeOpacity={0.7}
         >
           <View style={styles.avatarGradientBorderRing}>
-            <Image 
-              source={{ uri: post.userAvatar || `https://ui-avatars.com/api/?name=${post.userName}&background=random` }} 
+            <ContactAvatar 
+              src={post.userAvatar}
+              name={post.userName}
               style={styles.avatarImageRenderElement}
             />
           </View>

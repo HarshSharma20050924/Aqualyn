@@ -16,6 +16,7 @@ import { X, Image as ImageIcon, Video, Check, MapPin, Tag, Music } from 'lucide-
 import * as ImagePicker from 'expo-image-picker';
 import { useAppContext } from '../../context/AppContext';
 import { uploadFile } from '../../utils/uploads';
+import ContactAvatar from '../ui/ContactAvatar';
 
 interface PostCreatorProps {
   isOpen: boolean;
@@ -130,7 +131,7 @@ export default function PostCreator({ isOpen, onClose }: PostCreatorProps) {
           >
             {/* Context User Author Row Layout */}
             <View style={styles.authorSectionFlexHorizontalRow}>
-              <Image source={{ uri: currentUser?.avatar }} style={styles.authorAvatarProfileGraphicFrame} />
+              <ContactAvatar name={currentUser?.displayName || currentUser?.name} src={currentUser?.avatar} style={styles.authorAvatarProfileGraphicFrame} />
               <TextInput
                 value={caption}
                 onChangeText={setCaption}

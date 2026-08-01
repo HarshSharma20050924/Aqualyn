@@ -2,6 +2,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Phone, PhoneOff, Video, VideoOff, Mic, MicOff, Volume2 } from 'lucide-react';
 import { useCall } from '../context/CallContext';
+import ContactAvatar from './ui/ContactAvatar';
 
 const formatDuration = (seconds: number) => {
   const m = Math.floor(seconds / 60);
@@ -45,22 +46,19 @@ export const CallOverlay: React.FC = () => {
           className="fixed top-0 left-1/2 -translate-x-1/2 z-[300] w-[92%] max-w-sm rounded-3xl overflow-hidden shadow-2xl"
           style={{ background: 'rgba(10,15,18,0.95)', backdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.1)' }}
         >
-          {/* blurred avatar bg */}
-          <div className="absolute inset-0 -z-10">
-            <img
-              src={incomingCall.callerAvatar || `https://api.dicebear.com/7.x/initials/svg?seed=${incomingCall.callerName}`}
-              alt=""
+          <div className="absolute inset-0 -z-10 overflow-hidden">
+            <ContactAvatar
+              src={incomingCall.callerAvatar}
+              name={incomingCall.callerName}
               className="w-full h-full object-cover opacity-10 blur-2xl scale-110"
             />
           </div>
 
           <div className="flex items-center gap-4 p-4">
             <div className="relative">
-              <img
-                src={incomingCall.callerAvatar || `https://api.dicebear.com/7.x/initials/svg?seed=${incomingCall.callerName}`}
-                alt={incomingCall.callerName}
-                className="w-14 h-14 rounded-full object-cover border-2 border-white/20"
-              />
+              <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-white/20">
+                <ContactAvatar src={incomingCall.callerAvatar} name={incomingCall.callerName} />
+              </div>
               <motion.div
                 animate={{ scale: [1, 1.3, 1] }}
                 transition={{ repeat: Infinity, duration: 1.5 }}
@@ -135,10 +133,10 @@ export const CallOverlay: React.FC = () => {
             </div>
           ) : (
             /* Voice call avatar bg */
-            <div className="absolute inset-0 z-0">
-              <img
-                src={currentCall.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${currentCall.userName}`}
-                alt=""
+            <div className="absolute inset-0 z-0 overflow-hidden">
+              <ContactAvatar
+                src={currentCall.avatar}
+                name={currentCall.userName}
                 className="w-full h-full object-cover opacity-15 blur-3xl scale-110"
               />
               <div className="absolute inset-0 bg-gradient-to-b from-slate-950/60 via-slate-950/80 to-slate-950" />
@@ -152,11 +150,9 @@ export const CallOverlay: React.FC = () => {
               transition={{ repeat: Infinity, duration: 2 }}
               className="relative mb-4"
             >
-              <img
-                src={currentCall.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${currentCall.userName}`}
-                alt={currentCall.userName}
-                className={`rounded-full border-4 object-cover shadow-2xl ${isVideo ? 'w-20 h-20 border-white/20' : 'w-32 h-32 border-secondary/40'}`}
-              />
+              <div className={`rounded-full overflow-hidden border-4 shadow-2xl ${isVideo ? 'w-20 h-20 border-white/20' : 'w-32 h-32 border-secondary/40'}`}>
+                <ContactAvatar src={currentCall.avatar} name={currentCall.userName} />
+              </div>
               {remoteStream && (
                 <motion.div
                   animate={{ scale: [1, 1.15, 1], opacity: [0.6, 0.2, 0.6] }}

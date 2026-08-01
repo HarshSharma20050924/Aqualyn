@@ -19,7 +19,7 @@ export default function AddContactModal({ isOpen, onClose }: AddContactModalProp
         newContactName, 
         newContactPhone, 
         `local_${Date.now()}`, 
-        `https://api.dicebear.com/7.x/initials/svg?seed=${newContactName}`
+        undefined
       );
       setNewContactName('');
       setNewContactPhone('');

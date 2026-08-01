@@ -10,7 +10,6 @@ import {
   View, 
   Text, 
   ActivityIndicator, 
-  SafeAreaView, 
   StatusBar,
   useColorScheme 
 } from 'react-native';
@@ -42,7 +41,7 @@ import { CallOverlay } from './components/CallOverlay';
 import BubbleLoader from './components/ui/BubbleLoader';
 
 export default function App() {
-  const { currentUser, isLoading, isAppLocked, appLockPin, theme, aquaIntensity } = useAppContext();
+  const { currentUser, isLoading, isAppLocked, appLockPin, theme, aquaIntensity, setActiveChatId } = useAppContext();
   const [currentScreen, setCurrentScreen] = useState<string>('login');
   const systemColorScheme = useColorScheme();
 
@@ -85,10 +84,10 @@ export default function App() {
   // Guard Render Loop when Device Passcode Lock is turned on
   if (appLockPin && isAppLocked) {
     return (
-      <SafeAreaView style={[styles.rootContainer, { backgroundColor: activeColors.background }]}>
+      <View style={[styles.rootContainer, { backgroundColor: activeColors.background }]}>
         <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
         <AppLockScreen />
-      </SafeAreaView>
+      </View>
     );
   }
 
@@ -106,7 +105,7 @@ export default function App() {
        case 'chats':
          return <ChatListScreen onNavigate={setCurrentScreen} />;
        case 'chat-detail':
-         return <ChatDetailScreen onBack={() => setCurrentScreen('chats')} onNavigate={setCurrentScreen} />;
+         return <ChatDetailScreen onBack={() => { setActiveChatId(null); setCurrentScreen('chats'); }} onNavigate={setCurrentScreen} />;
        case 'profile':
          return <ProfileScreen onNavigate={setCurrentScreen} />;
        case 'settings':
@@ -137,8 +136,8 @@ const shouldShowBottomNav =
   currentScreen !== 'notifications';
 
   return (
-    <SafeAreaView style={[styles.rootContainer, { backgroundColor: activeColors.background }]}>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+    <View style={[styles.rootContainer, { backgroundColor: activeColors.background }]}>
+      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} translucent backgroundColor="transparent" />
       
       {/* Global Context Engine Overlays */}
       <ToastContainer />
@@ -153,7 +152,7 @@ const shouldShowBottomNav =
       {shouldShowBottomNav && (
         <BottomNav currentScreen={currentScreen} onNavigate={setCurrentScreen} />
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 

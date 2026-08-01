@@ -11,7 +11,9 @@ import {
   Platform,
   KeyboardAvoidingView
 } from 'react-native';
-import Animated, { FadeIn, FadeOut, SlideInDown } from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
+import { BlurView } from 'expo-blur';
+import Animated, { FadeIn, FadeOut, SlideInDown, LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Search,
@@ -27,11 +29,12 @@ import {
   Hash,
   X
 } from 'lucide-react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Storage } from '../utils/storage';
 import { useAppContext } from '../context/AppContext';
 import { apiFetch } from '../utils/fetcher';
 import { ENDPOINTS } from '../config/api';
 import BubbleLoader from '../components/ui/BubbleLoader';
+import ContactAvatar from '../components/ui/ContactAvatar';
 
 const { width: W } = Dimensions.get('window');
 
@@ -67,18 +70,19 @@ export default function ExploreScreen({ onBack, onNavigate }: { onBack: () => vo
   const [isInputFocused, setIsInputFocused] = useState(false);
 
   useEffect(() => {
-    AsyncStorage.getItem(HISTORY_KEY).then(val => {
+    try {
+      const val = Storage.getItem(HISTORY_KEY);
       if (val) {
-        try { setSearchHistory(JSON.parse(val)); } catch (e) {}
+        setSearchHistory(JSON.parse(val));
       }
-    });
+    } catch (e) {}
   }, []);
 
   const saveToHistory = async (q: string) => {
     if (!q.trim() || q === 'AI_RECOMMENDED_PEOPLE') return;
     setSearchHistory(prev => {
       const updated = [q, ...prev.filter(h => h !== q)].slice(0, 10);
-      AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
+      Storage.setItem(HISTORY_KEY, JSON.stringify(updated));
       return updated;
     });
   };
@@ -86,18 +90,19 @@ export default function ExploreScreen({ onBack, onNavigate }: { onBack: () => vo
   const removeFromHistory = async (q: string) => {
     setSearchHistory(prev => {
       const updated = prev.filter(h => h !== q);
-      AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
+      Storage.setItem(HISTORY_KEY, JSON.stringify(updated));
       return updated;
     });
   };
 
   const clearHistory = async () => {
     setSearchHistory([]);
-    await AsyncStorage.removeItem(HISTORY_KEY);
+    Storage.removeItem(HISTORY_KEY);
   };
 
   useEffect(() => {
-    AsyncStorage.getItem('exploreQuery').then(initialQuery => {
+    try {
+      const initialQuery = Storage.getItem('exploreQuery');
       if (initialQuery) {
         setQuery(initialQuery);
         if (initialQuery === 'AI_RECOMMENDED_PEOPLE') {
@@ -105,9 +110,9 @@ export default function ExploreScreen({ onBack, onNavigate }: { onBack: () => vo
         } else {
           setActiveTab('channels');
         }
-        AsyncStorage.removeItem('exploreQuery');
+        Storage.removeItem('exploreQuery');
       }
-    });
+    } catch (e) {}
   }, []);
 
   useEffect(() => {
@@ -216,7 +221,7 @@ export default function ExploreScreen({ onBack, onNavigate }: { onBack: () => vo
               placeholderTextColor="#94a3b8"
               value={query}
               onChangeText={setQuery}
-              onFocus={() => setIsInputFocused(true)}
+              onFocus={() => { setIsInputFocused(true); setActiveTab('people'); }}
               onBlur={() => setTimeout(() => setIsInputFocused(false), 150)}
               onSubmitEditing={() => { if (query.trim()) saveToHistory(query.trim()); }}
             />
@@ -240,7 +245,7 @@ export default function ExploreScreen({ onBack, onNavigate }: { onBack: () => vo
                 <Text style={styles.historyClear}>Clear All</Text>
               </TouchableOpacity>
             </View>
-            <ScrollView style={{ maxHeight: 200 }}>
+            <Animated.ScrollView layout={LinearTransition.springify().damping(16).stiffness(120)} style={{ maxHeight: 200 }}>
               {searchHistory.map(h => (
                 <TouchableOpacity
                   key={h}
@@ -254,7 +259,7 @@ export default function ExploreScreen({ onBack, onNavigate }: { onBack: () => vo
                   </TouchableOpacity>
                 </TouchableOpacity>
               ))}
-            </ScrollView>
+            </Animated.ScrollView>
           </View>
         )}
 
@@ -277,7 +282,7 @@ export default function ExploreScreen({ onBack, onNavigate }: { onBack: () => vo
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 20 }]} showsVerticalScrollIndicator={false}>
+      <Animated.ScrollView layout={LinearTransition.springify().damping(16).stiffness(120)} contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 20 }]} showsVerticalScrollIndicator={false}>
         {/* POSTS TAB */}
         {activeTab === 'posts' && (
           <Animated.View entering={FadeIn}>
@@ -310,7 +315,7 @@ export default function ExploreScreen({ onBack, onNavigate }: { onBack: () => vo
         {/* CHANNELS TAB */}
         {activeTab === 'channels' && (
           <Animated.View entering={FadeIn} style={{ paddingHorizontal: 16, paddingTop: 16 }}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
+            <Animated.ScrollView layout={LinearTransition.springify().damping(16).stiffness(120)} horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
               {CATEGORIES.map(cat => (
                 <TouchableOpacity
                   key={cat}
@@ -320,7 +325,7 @@ export default function ExploreScreen({ onBack, onNavigate }: { onBack: () => vo
                   <Text style={[styles.catChipTxt, activeCategory === cat && styles.catChipTxtActive]}>{cat}</Text>
                 </TouchableOpacity>
               ))}
-            </ScrollView>
+            </Animated.ScrollView>
 
             {isLoadingChannels ? (
               <View style={{ alignItems: 'center', marginTop: 40 }}><BubbleLoader size={30} /></View>
@@ -447,13 +452,7 @@ export default function ExploreScreen({ onBack, onNavigate }: { onBack: () => vo
                   return (
                     <View key={user.id} style={styles.userCard}>
                       <TouchableOpacity onPress={() => { setActiveContactId(user.id); onNavigate('contact-profile'); }}>
-                        {user.avatar ? (
-                          <Image source={{ uri: user.avatar }} style={styles.userAvatar} />
-                        ) : (
-                          <View style={styles.userAvatarPlaceholder}>
-                            <Image source={{ uri: `https://ui-avatars.com/api/?background=random&format=png&name=${encodeURIComponent(user.displayName || user.name || 'U')}` }} style={styles.userAvatar} />
-                          </View>
-                        )}
+                        <ContactAvatar src={user.avatar} name={user.displayName || user.name || user.username || 'U'} style={styles.userAvatar} />
                       </TouchableOpacity>
                       <View style={styles.userInfo}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
@@ -503,7 +502,7 @@ export default function ExploreScreen({ onBack, onNavigate }: { onBack: () => vo
             </View>
           </Animated.View>
         )}
-      </ScrollView>
+      </Animated.ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -521,7 +520,7 @@ const styles = StyleSheet.create({
   backBtn: { padding: 8, marginLeft: -8 },
   searchContainer: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#f1f5f9', borderRadius: 20, height: 40, paddingHorizontal: 12 },
   searchIcon: { marginRight: 8 },
-  searchInput: { flex: 1, fontSize: 14, color: '#0f172a' },
+  searchInput: { flex: 1, fontSize: 14, color: '#0f172a', outlineWidth: 0, outlineStyle: 'none' } as any,
   clearBtn: { padding: 4 },
   compassContainer: { width: 36, height: 36, borderRadius: 12, backgroundColor: 'rgba(0,87,189,0.1)', alignItems: 'center', justifyContent: 'center' },
   historyDropdown: { position: 'absolute', top: 96, left: 16, right: 16, backgroundColor: '#fff', borderRadius: 16, padding: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 20, elevation: 10, zIndex: 60, borderWidth: 1, borderColor: '#e2e8f0' },

@@ -12,7 +12,9 @@ import {
   Switch,
   Platform
 } from 'react-native';
-import Animated, { FadeIn } from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
+import { BlurView } from 'expo-blur';
+import Animated, { FadeIn, LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ArrowLeft,
@@ -37,6 +39,7 @@ import { ENDPOINTS } from '../config/api';
 import { apiFetch } from '../utils/fetcher';
 import { User } from '../types';
 import UserListModal from '../components/social/UserListModal';
+import ContactAvatar from '../components/ui/ContactAvatar';
 
 const { width: WINDOW_WIDTH } = Dimensions.get('window');
 
@@ -240,19 +243,11 @@ export default function ContactProfileScreen({ onBack, onNavigate }: Props) {
         <Text style={styles.headerTitle}>Contact Info</Text>
       </View>
 
-      <ScrollView contentContainerStyle={[styles.mainScrollArea, { paddingBottom: insets.bottom + 40 }]}>
+      <Animated.ScrollView layout={LinearTransition.springify().damping(16).stiffness(120)} contentContainerStyle={[styles.mainScrollArea, { paddingBottom: insets.bottom + 40 }]}>
         {/* Profile Card & Avatar Assembly */}
         <View style={styles.avatarCardCenter}>
           <View style={styles.avatarContainerOuter}>
-            {avatarUrl ? (
-              <Image source={{ uri: avatarUrl }} style={styles.avatarMainImage} />
-            ) : (
-              <View style={styles.fallbackAvatarBox}>
-                <Text style={styles.fallbackAvatarInitials}>
-                  {displayName.charAt(0).toUpperCase()}
-                </Text>
-              </View>
-            )}
+            <ContactAvatar name={displayName} src={avatarUrl} style={styles.avatarMainImage} />
             {contact.isPrivate && (
               <View style={styles.privateLockBadge}>
                 <Lock size={14} color="#64748b" />
@@ -393,7 +388,7 @@ export default function ContactProfileScreen({ onBack, onNavigate }: Props) {
                   )}
                 </View>
               ) : (
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.highlightsHorizontalTrack}>
+                <Animated.ScrollView layout={LinearTransition.springify().damping(16).stiffness(120)} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.highlightsHorizontalTrack}>
                   {userStoriesData.length > 0 ? (
                     userStoriesData.map((story: any, i) => (
                       <View key={story.id || i} style={styles.highlightTrackItemCircle}>
@@ -412,7 +407,7 @@ export default function ContactProfileScreen({ onBack, onNavigate }: Props) {
                       <Text style={styles.emptyMatrixFallbackText}>No highlights yet</Text>
                     </View>
                   )}
-                </ScrollView>
+                </Animated.ScrollView>
               )}
             </View>
           </>
@@ -485,7 +480,7 @@ export default function ContactProfileScreen({ onBack, onNavigate }: Props) {
             </View>
           </TouchableOpacity>
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
 
       {/* Shared Followers Overlay Module Integration */}
       <UserListModal 

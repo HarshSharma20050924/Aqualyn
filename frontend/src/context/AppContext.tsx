@@ -208,7 +208,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             const newChat: Chat = {
               id: msg.chatId,
               name: chatData?.name || sender?.displayName || sender?.username || 'User',
-              avatar: chatData?.avatar || sender?.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${msg.senderId}`,
+              avatar: chatData?.avatar || sender?.avatar || undefined,
               lastMessage: msg.text, lastMessageTime: msg.timestamp || 'Just now', unreadCount: 1,
               isGroup: chatData?.isGroup || false,
               isSecret: chatData?.isSecret || false,
@@ -258,12 +258,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
       newSocket.on('message_sent_ack', (msg: Message) => {
         setMessages(prev => {
           const list = prev[msg.chatId] || [];
-          const idx = list.findLastIndex(m => m.id.startsWith('temp-'));
+          // Match by echoed tempId first (precise), fallback to last temp-
+          const tempId = (msg as any).tempId;
+          const idx = tempId
+            ? list.findIndex(m => m.id === tempId)
+            : list.findLastIndex(m => m.id.startsWith('temp-'));
           if (idx !== -1) {
             const newList = [...list];
-            newList[idx] = msg;
+            newList[idx] = { ...msg, id: msg.id }; // replace with real id+status
             return { ...prev, [msg.chatId]: newList };
           }
+          // Avoid duplicate: if real message already in list, skip
+          if (list.some(m => m.id === msg.id)) return prev;
           return { ...prev, [msg.chatId]: [...list, msg] };
         });
         setChats(prev => prev.map(c => c.id === msg.chatId ? { ...c, lastMessage: msg.text, lastMessageTime: msg.timestamp } : c));
@@ -318,7 +324,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         addToast(`${data.inviterName} invited you to join a chat!`, 'info');
         setNotifications(prev => [{
           id: `inv-${Date.now()}`, userId: currentUser.id, actorId: data.inviterId, sourceUserId: data.inviterId,
-          sourceUserName: data.inviterName, sourceUserAvatar: `https://api.dicebear.com/7.x/initials/svg?seed=${data.inviterName}`,
+          sourceUserName: data.inviterName, sourceUserAvatar: undefined,
           type: 'chat_invitation', targetId: data.chatId, text: `${data.inviterName} invited you to a chat. Join to create a temporary group.`,
           isRead: false, read: false, createdAt: new Date().toISOString()
         }, ...prev]);

@@ -5,7 +5,7 @@
  */
 
 import { API_BASE_URL } from '../config/api';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Storage } from '../utils/storage';
 
 /**
  * A robust fetch wrapper tailored for React Native environments.
@@ -36,7 +36,7 @@ export async function apiFetch(url: string, options: RequestInit & { cache?: boo
     // Handle persistent caching for GET requests
     if (useCache && !options.skipCacheRead) {
         try {
-            const cachedStr = await AsyncStorage.getItem(cacheKey);
+            const cachedStr = Storage.getItem(cacheKey);
             if (cachedStr) {
                 const cached = JSON.parse(cachedStr);
                 if (Date.now() - cached.timestamp < CACHE_TTL) {
@@ -53,7 +53,7 @@ export async function apiFetch(url: string, options: RequestInit & { cache?: boo
 
     if (!headers['Authorization']) {
         try {
-            const token = await AsyncStorage.getItem('auth_token');
+            const token = Storage.getItem('auth_token');
             if (token) {
                 headers['Authorization'] = `Bearer ${token}`;
             }
@@ -71,7 +71,7 @@ export async function apiFetch(url: string, options: RequestInit & { cache?: boo
     if (response.status === 401) {
         console.warn('[apiFetch] Unauthorised 401 response detected.');
         try {
-            await AsyncStorage.removeItem('auth_token');
+            Storage.removeItem('auth_token');
         } catch (e) {
             console.error('[apiFetch] Error clearing auth token on 401:', e);
         }
@@ -82,7 +82,7 @@ export async function apiFetch(url: string, options: RequestInit & { cache?: boo
         try {
             const clone = response.clone();
             const data = await clone.json();
-            await AsyncStorage.setItem(cacheKey, JSON.stringify({ data, timestamp: Date.now() }));
+            Storage.setItem(cacheKey, JSON.stringify({ data, timestamp: Date.now() }));
         } catch (e) {
             console.error('[apiFetch] Error saving to cache:', e);
         }

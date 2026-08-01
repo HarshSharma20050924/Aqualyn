@@ -6,6 +6,7 @@ import AddContactModal from '../components/modals/AddContactModal';
 import { apiFetch } from '../utils/fetcher';
 import { ENDPOINTS } from '../config/api';
 import BubbleLoader from '../components/ui/BubbleLoader';
+import ContactAvatar from '../components/ui/ContactAvatar';
 
 export default function ContactsScreen({ onNavigate }: { onNavigate: (s: string) => void }) {
   const { 
@@ -282,7 +283,7 @@ export default function ContactsScreen({ onNavigate }: { onNavigate: (s: string)
                       className="w-14 h-14 rounded-full overflow-hidden shadow-sm cursor-pointer"
                       onClick={() => { setActiveContactId(user.id); onNavigate('contact-profile'); }}
                     >
-                      <img src={user.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${user.username}`} alt={user.name} className="w-full h-full object-cover" />
+                      <ContactAvatar src={user.avatar} name={user.displayName || user.name || user.username} />
                     </div>
                     <div className="flex-1 min-w-0 border-b border-surface-container pb-2" onClick={() => { setActiveContactId(user.id); onNavigate('contact-profile'); }}>
                       <div className="flex items-center gap-1">
@@ -334,7 +335,7 @@ export default function ContactsScreen({ onNavigate }: { onNavigate: (s: string)
                 className="p-4 rounded-2xl flex items-center gap-4 cursor-pointer hover:bg-white/40 transition-all border border-transparent hover:border-white/20 shadow-sm bg-white/20"
               >
                 <div className="w-14 h-14 rounded-full overflow-hidden shadow-sm">
-                  <img src={contact.avatar} alt={contact.name} className="w-full h-full object-cover" />
+                  <ContactAvatar src={contact.avatar} name={contact.name} />
                 </div>
                 <div className="flex-1 min-w-0 border-b border-surface-container pb-2">
                   <h3 className="font-headline font-semibold text-on-surface truncate">{contact.name}</h3>

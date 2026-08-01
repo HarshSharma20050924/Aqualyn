@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
+import ContactAvatar from './ContactAvatar';
 
 export default function ToastContainer() {
   const { toasts, removeToast } = useAppContext();
@@ -22,7 +23,7 @@ export default function ToastContainer() {
             }`}
           >
             {toast.avatar ? (
-              <img src={toast.avatar} alt={toast.title} className="w-10 h-10 rounded-full object-cover shrink-0" />
+              <ContactAvatar src={toast.avatar} name={toast.title} className="w-10 h-10 rounded-full object-cover shrink-0" />
             ) : (
               <>
                 {toast.type === 'success' && <CheckCircle2 className="w-5 h-5 shrink-0" />}

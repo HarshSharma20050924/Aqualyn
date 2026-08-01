@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Play, Pause, FileText, Download, MapPin, CheckCheck, Reply, Copy, Trash2, Smile, Timer, Edit2, Wallet, ArrowRight, ShieldAlert, Clock } from 'lucide-react';
 import { Message } from '../../types';
 import { useAppContext } from '../../context/AppContext';
+import ContactAvatar from '../ui/ContactAvatar';
 
 interface MessageBubbleProps {
   msg: Message;
@@ -427,7 +428,7 @@ const MessageBubbleComponent = ({ msg, isMe, onReply, onEdit, replyMessage, onMe
           {msg.contact && (
             <div className={`flex items-center gap-3 p-3 rounded-2xl mb-1 border ${isMe ? 'bg-blue-500/10 border-blue-500/20' : 'bg-blue-500/5 border-blue-500/20'}`}>
               <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-white/50 shadow-sm">
-                <img src={msg.contact.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${msg.contact.name}`} alt="" className="w-full h-full object-cover" />
+                <ContactAvatar src={msg.contact.avatar} name={msg.contact.name} />
               </div>
               <div className="flex-1 min-w-0 mr-4">
                 <p className="font-bold text-sm truncate">{msg.contact.name}</p>

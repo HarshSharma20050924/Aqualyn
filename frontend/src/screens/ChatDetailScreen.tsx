@@ -13,6 +13,7 @@ import CameraUI from '../components/chat/CameraUI';
 import MessageBubble from '../components/chat/MessageBubble';
 import MediaGallery from '../components/chat/MediaGallery';
 import GroupInfoScreen from './GroupInfoScreen';
+import ContactAvatar from '../components/ui/ContactAvatar';
 import SecretChatInfoScreen from './SecretChatInfoScreen';
 import ShareContactModal from '../components/chat/ShareContactModal';
 import LynPanel from '../components/ai/LynPanel';
@@ -162,6 +163,9 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
   const [isFetchingMore, setIsFetchingMore] = useState(false);
   const [hideSmartReplies, setHideSmartReplies] = useState(false);
 
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const imageInputRef = React.useRef<HTMLInputElement>(null);
+
   const triggerScreenshotAlert = () => {
     const settings = (chat as any)?.settings || {};
     if (settings.screenshotProtection === false) return; // don't trigger if disabled
@@ -173,14 +177,6 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
     }
     setTimeout(() => setScreenshotAlert(false), 2500);
   };
-
-  if (!chat) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-surface">
-        <BubbleLoader />
-      </div>
-    );
-  }
 
   useEffect(() => {
     if (!chat || !chat.isSecret) return;
@@ -200,8 +196,6 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [chat?.isSecret, activeChatId, (chat as any)?.settings?.screenshotProtection]);
-
-  if (!chat) return null;
 
   useEffect(() => {
     needsScrollRestoreRef.current = true;
@@ -318,7 +312,15 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
     }
   }, [text, activeChatId, setTyping]);
 
-  if (!chat) return null;
+  // Must be here (before early return) — useMemo is a hook
+  const filteredMessages = useMemo(
+    () => chatMessages.filter(m =>
+      !searchQuery || m.text?.toLowerCase().includes(searchQuery.toLowerCase())
+    ),
+    [chatMessages, searchQuery]
+  );
+
+  if (!chat) return <div className="min-h-screen flex items-center justify-center bg-surface"><BubbleLoader /></div>;
 
   const targetUserId = !chat.isGroup ? chat.participantIds?.find(id => id !== currentUser?.id) : null;
   const targetUser = targetUserId ? globalUsers.find(u => u.id === targetUserId) : null;
@@ -377,8 +379,6 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
     setShowSchedulePicker(false);
   };
 
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
-  const imageInputRef = React.useRef<HTMLInputElement>(null);
 
   const handleAttachmentSelect = (type: string) => {
     switch (type) {
@@ -514,12 +514,6 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
     setShowHeaderMenu(false);
   };
 
-  const filteredMessages = useMemo(
-    () => chatMessages.filter(m =>
-      !searchQuery || m.text?.toLowerCase().includes(searchQuery.toLowerCase())
-    ),
-    [chatMessages, searchQuery]
-  );
 
   return (
     <motion.div
@@ -585,7 +579,7 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
                   <Users className="w-6 h-6 fill-current" />
                 </div>
               ) : (
-                <img src={chat.avatar} alt={chat.name} className={`w-10 h-10 rounded-full border-2 shadow-sm ${chat.isSecret ? 'border-slate-700' : 'border-white'}`} />
+                <ContactAvatar src={chat.avatar} name={chat.name} className={`w-10 h-10 rounded-full border-2 shadow-sm object-cover ${chat.isSecret ? 'border-slate-700' : 'border-white'}`} />
               )}
               <div className={`absolute bottom-0 right-0 w-3 h-3 border-2 rounded-full ${chat.isSecret ? 'bg-blue-500 border-[#0a0f14] shadow-[0_0_8px_#3b82f6]' : 'bg-secondary-fixed border-white shadow-[0_0_8px_#0bfbff]'}`}></div>
             </div>

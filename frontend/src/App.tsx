@@ -17,6 +17,7 @@ import ToastContainer from './components/ui/ToastContainer';
 import AppLockScreen from './components/AppLockScreen';
 import { useAppContext } from './context/AppContext';
 import { CallOverlay } from './components/CallOverlay';
+import ContactAvatar from './components/ui/ContactAvatar';
 import { ENDPOINTS } from './config/api';
 import { getRedirectResult } from 'firebase/auth';
 import { auth } from './config/firebase';
@@ -26,7 +27,7 @@ export default function App() {
   const [currentScreen, setCurrentScreen] = useState('login');
   // Always tracks the screen we were on BEFORE the current one
   const [previousScreen, setPreviousScreen] = useState('chats');
-  const { isAppLocked, appLockPin, theme, aquaIntensity, currentUser, isLoading } = useAppContext();
+  const { isAppLocked, appLockPin, theme, aquaIntensity, currentUser, isLoading, setActiveChatId } = useAppContext();
   const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 768);
   const [leftWidth, setLeftWidth] = useState(420);
   const isDragging = useRef(false);
@@ -149,7 +150,7 @@ export default function App() {
       case 'feed': return <FeedScreen key="feed" onNavigate={navigateTo} />;
       case 'explore': return <ExploreScreen key="explore" onBack={() => navigateTo(previousScreen || 'chats')} onNavigate={navigateTo} />;
       case 'chats': return <ChatListScreen key="chats" onNavigate={navigateTo} compact={sidebar && leftWidth < 220} onExpand={() => setLeftWidth(380)} />;
-      case 'chat-detail': return <ChatDetailScreen key="chat-detail" onBack={() => isDesktop ? navigateTo('chats') : navigateTo('chats')} onNavigate={navigateTo} />;
+      case 'chat-detail': return <ChatDetailScreen key="chat-detail" onBack={() => { setActiveChatId(null); navigateTo('chats'); }} onNavigate={navigateTo} />;
       case 'profile': return <ProfileScreen key="profile" onNavigate={navigateTo} isSidebar={sidebar} />;
       case 'settings': return <SettingsScreen key="settings" onBack={() => navigateTo('profile')} onNavigate={navigateTo} />;
       case 'contacts': return <ContactsScreen key="contacts" onNavigate={navigateTo} />;
@@ -218,6 +219,9 @@ export default function App() {
                     if (['chat-detail', 'contact-profile', 'settings', 'edit-profile'].includes(item.id)) {
                       navigateTo(item.id);
                     } else {
+                      if (item.id === 'chats' && currentScreen !== 'chats') {
+                        setActiveChatId(null);
+                      }
                       setCurrentScreen(item.id);
                     }
                   }}
@@ -237,7 +241,7 @@ export default function App() {
             onClick={() => navigateTo('profile')}
             className="w-10 h-10 rounded-full border-2 border-transparent hover:border-cyan-500 transition-colors overflow-hidden mt-auto cursor-pointer"
           >
-            <img src={currentUser?.avatar || "https://ui-avatars.com/api/?name=User"} alt="Profile" className="w-full h-full object-cover" />
+            <ContactAvatar src={currentUser?.avatar} name={currentUser?.displayName || currentUser?.name || currentUser?.username || 'User'} />
           </button>
         </div>
 

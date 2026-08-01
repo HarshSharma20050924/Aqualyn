@@ -19,6 +19,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Phone, PhoneOff, Mic, MicOff, Video, VideoOff, Volume2, VolumeX } from 'lucide-react-native';
+import ContactAvatar from '../ui/ContactAvatar';
 
 interface CallScreenProps {
   callerName: string;
@@ -92,14 +93,14 @@ export default function CallScreen({
       <View style={styles.fullscreenCallViewportContainer}>
         {/* Layered Backdrop Blur Alternative */}
         <View style={StyleSheet.absoluteFill}>
-          <Image source={{ uri: callerAvatar }} style={styles.blurFallbackBackgroundFill} blurRadius={40} />
+          <ContactAvatar name={callerName} src={callerAvatar} style={styles.blurFallbackBackgroundFill} blurRadius={40} />
           <View style={styles.vignetteOverlayGradientWash} />
         </View>
 
         {/* Identity Headframe Area */}
         <View style={[styles.headerMetaClusterBlock, { paddingTop: insets.top + 40 }]}>
           <Animated.View style={[styles.avatarWrapperContainerCircle, animatedAvatarStyle]}>
-            <Image source={{ uri: callerAvatar }} style={styles.avatarNativeImageFrame} />
+            <ContactAvatar name={callerName} src={callerAvatar} style={styles.avatarNativeImageFrame} />
             {callState === 'active' && isVideoEnabled && <View style={styles.activeVideoPulseBorderShield} />}
           </Animated.View>
           

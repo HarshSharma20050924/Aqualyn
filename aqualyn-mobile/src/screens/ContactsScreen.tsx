@@ -26,6 +26,7 @@ import {
 
 import { useAppContext } from '../context/AppContext';
 import AddContactModal from '../components/modals/AddContactModal';
+import ContactAvatar from '../components/ui/ContactAvatar';
 
 interface Props {
   onNavigate: (screen: string) => void;
@@ -106,7 +107,7 @@ export default function ContactsScreen({ onNavigate }: Props) {
          .map(dc => ({
             id: `device-${dc.id}`,
             name: dc.name,
-            avatar: dc.imageAvailable && dc.image ? dc.image.uri : `https://ui-avatars.com/api/?background=random&name=${dc.name}`,
+            avatar: dc.imageAvailable && dc.image ? dc.image.uri : undefined,
             role: 'From Device Contacts',
             isDeviceOnly: true,
             phoneNumber: dc.phoneNumbers?.[0]?.number
@@ -122,7 +123,7 @@ export default function ContactsScreen({ onNavigate }: Props) {
         .map(u => ({
           id: u.id,
           name: u.displayName || u.username || 'Follower',
-          avatar: u.avatar || `https://ui-avatars.com/api/?background=random&name=${u.username || 'F'}`,
+          avatar: u.avatar,
           role: u.bio || 'Follower'
         }))
         .filter(c => c.name.toLowerCase().includes(query));
@@ -135,7 +136,7 @@ export default function ContactsScreen({ onNavigate }: Props) {
         .map(u => ({
           id: u.id,
           name: u.displayName || u.username || 'Following',
-          avatar: u.avatar || `https://ui-avatars.com/api/?background=random&name=${u.username || 'F'}`,
+          avatar: u.avatar,
           role: u.bio || 'Following'
         }))
         .filter(c => c.name.toLowerCase().includes(query));
@@ -266,7 +267,7 @@ export default function ContactsScreen({ onNavigate }: Props) {
                 style={styles.contactItemCardRow}
               >
                 <View style={styles.contactAvatarFrameBox}>
-                  <Image source={{ uri: contact.avatar }} style={styles.contactAvatarImage} />
+                  <ContactAvatar src={contact.avatar} name={contact.name || contact.displayName || contact.username} style={styles.contactAvatarImage} />
                 </View>
                 <View style={styles.contactMetaInfoBlock}>
                   <Text numberOfLines={1} style={styles.contactNameHeadlineText}>

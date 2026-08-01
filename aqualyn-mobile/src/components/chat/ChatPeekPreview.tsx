@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import Animated, { FadeIn, FadeOut, ZoomIn } from 'react-native-reanimated';
 import { CheckCheck, Lock, Pin, BellOff, Trash2, Archive, Maximize2, X } from 'lucide-react-native';
+import ContactAvatar from '../ui/ContactAvatar';
 
 interface ChatPeekPreviewProps {
   chat: any;
@@ -63,7 +64,7 @@ export const ChatPeekPreview: React.FC<ChatPeekPreviewProps> = ({
           {/* Header Row */}
           <View style={styles.cardHeaderFlexRowTrack}>
             <View style={styles.identityLeftClusterGroup}>
-              <Image source={{ uri: chat?.avatar }} style={styles.chatAvatarSquareFormMedia} />
+              <ContactAvatar name={chat?.name} src={chat?.avatar} style={styles.chatAvatarSquareFormMedia} />
               <View style={styles.nameHeaderTitleGroupColumn}>
                 <Text style={styles.chatNameHeadingTextLabel} numberOfLines={1}>
                   {chat?.isSecret && <Lock size={12} color="#10b981" />} {chat?.name}

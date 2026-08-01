@@ -213,4 +213,9 @@
   .animate-scanline {
     animation: scanline 6s linear infinite;
   }
+
+  @keyframes skeletonShimmer {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(200%); }
+  }
 }

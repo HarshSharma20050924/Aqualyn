@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Send, Heart, Share2, MoreHorizontal, MessageCircle, Star, Trash2, VolumeX } from 'lucide-react';
 import { useAppContext, Story } from '../context/AppContext';
+import ContactAvatar from './ui/ContactAvatar';
 
 interface StoryViewerProps {
   stories: Story[];
@@ -166,7 +167,7 @@ export default function StoryViewer({ stories, initialIndex, onClose }: StoryVie
           <div className="absolute top-8 left-6 right-6 z-20 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full border-2 border-white p-0.5">
-                <img src={currentStory.userAvatar} alt="" className="w-full h-full rounded-full object-cover" />
+                <ContactAvatar src={currentStory.userAvatar} name={currentStory.userName} className="w-full h-full rounded-full object-cover" />
               </div>
               <div className="flex flex-col">
                 <span className="text-sm font-black text-white drop-shadow-md">{currentStory.userName}</span>
@@ -307,7 +308,7 @@ export default function StoryViewer({ stories, initialIndex, onClose }: StoryVie
                     onClick={() => handleSendToChat(chat.id)}
                     className="w-full flex items-center gap-3 p-3 hover:bg-white/5 rounded-xl transition-colors"
                   >
-                    <img src={chat.avatar} alt={chat.name} className="w-12 h-12 rounded-full object-cover" />
+                    <ContactAvatar src={chat.avatar} name={chat.name} className="w-12 h-12 rounded-full object-cover" />
                     <span className="font-medium text-on-surface">{chat.name}</span>
                   </button>
                 ))}

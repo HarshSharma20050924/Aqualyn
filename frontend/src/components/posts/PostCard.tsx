@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Heart, MessageCircle, Share2, Bookmark, MoreHorizontal, Send, Play, Pause, Volume2, VolumeX } from 'lucide-react';
 import { Post } from '../../types';
 import { useAppContext } from '../../context/AppContext';
+import ContactAvatar from '../ui/ContactAvatar';
 
 interface PostCardProps {
   post: Post;
@@ -61,9 +62,9 @@ export default function PostCard({ post, onViewPost }: PostCardProps) {
       <div className="flex items-center justify-between p-5">
         <div className="flex items-center gap-3 cursor-pointer" onClick={() => onViewPost(post)}>
           <div className="w-11 h-11 rounded-full p-[2px] bg-gradient-to-tr from-cyan-500 to-blue-600">
-            <img 
-              src={post.userAvatar || `https://ui-avatars.com/api/?name=${post.userName}&background=random`} 
-              alt={post.userName} 
+            <ContactAvatar
+              src={post.userAvatar}
+              name={post.userName}
               className="w-full h-full rounded-full border-2 border-white dark:border-slate-900 object-cover"
             />
           </div>

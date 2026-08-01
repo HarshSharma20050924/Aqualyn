@@ -5,6 +5,7 @@ import { useAppContext } from '../context/AppContext';
 import { Post, User, Story } from '../types';
 import StoryViewer from '../components/StoryViewer';
 import StoryCreator from '../components/stories/StoryCreator';
+import ContactAvatar from '../components/ui/ContactAvatar';
 
 export default function FeedScreen({ onNavigate }: { onNavigate: (s: string) => void }) {
   const { posts, stories, globalUsers, currentUser, likePost, savePost, addToast, isFetchingData } = useAppContext();
@@ -32,7 +33,7 @@ export default function FeedScreen({ onNavigate }: { onNavigate: (s: string) => 
       id: first.userId,
       name: first.userName || 'User',
       username: first.userName || 'user',
-      avatar: first.userAvatar || `https://api.dicebear.com/7.x/initials/svg?seed=${first.userId}`
+      avatar: first.userAvatar || undefined
     } as any as User;
   });
 
@@ -98,9 +99,7 @@ export default function FeedScreen({ onNavigate }: { onNavigate: (s: string) => 
                 return (
                   <div key={i} className="flex items-start gap-3">
                     <div className="w-8 h-8 rounded-full overflow-hidden border border-surface-container shrink-0">
-                      {author?.avatar
-                        ? <img src={author.avatar} alt="" className="w-full h-full object-cover" />
-                        : <div className="w-full h-full bg-secondary/10 flex items-center justify-center text-secondary text-xs font-bold">{(author?.name || 'U')[0]}</div>}
+                      <ContactAvatar src={author?.avatar} name={author?.name || author?.username} />
                     </div>
                     <div className="flex-1">
                       <div className="bg-surface-container rounded-2xl px-3 py-2">
@@ -127,9 +126,7 @@ export default function FeedScreen({ onNavigate }: { onNavigate: (s: string) => 
           {/* Comment Input */}
           <form onSubmit={handleSubmit} className="px-4 py-3 border-t border-surface-container flex items-center gap-3">
             <div className="w-8 h-8 rounded-full overflow-hidden shrink-0 border border-surface-container">
-              {currentUser?.avatar
-                ? <img src={currentUser.avatar} alt="" className="w-full h-full object-cover" />
-                : <div className="w-full h-full bg-secondary/10 flex items-center justify-center text-secondary text-xs font-bold">{(currentUser?.name || 'U')[0]}</div>}
+              <ContactAvatar src={currentUser?.avatar} name={currentUser?.displayName || currentUser?.name || currentUser?.username || 'You'} />
             </div>
             <div className="flex-1 relative">
               <input
@@ -187,9 +184,7 @@ export default function FeedScreen({ onNavigate }: { onNavigate: (s: string) => 
         <div className="flex items-center justify-between p-3 sm:px-4">
           <div className="flex items-center gap-3 cursor-pointer">
             <div className="w-10 h-10 rounded-full overflow-hidden border border-surface-container">
-              {authorAvatar
-                ? <img src={authorAvatar} alt={authorName} className="w-full h-full object-cover" />
-                : <div className="w-full h-full bg-secondary/10 flex items-center justify-center text-secondary font-bold">{authorName[0]?.toUpperCase()}</div>}
+              <ContactAvatar src={authorAvatar} name={authorName} />
             </div>
             <div>
               <div className="font-headline font-bold text-sm tracking-tight">{authorName}</div>
@@ -359,7 +354,7 @@ export default function FeedScreen({ onNavigate }: { onNavigate: (s: string) => 
           }}>
             <div className="relative w-16 h-16 rounded-full p-[2px] bg-surface-container hover:scale-105 transition-transform duration-200">
               <div className="w-full h-full bg-surface rounded-full overflow-hidden border-2 border-surface">
-                <img src={currentUser?.avatar} alt="You" className="w-full h-full object-cover" />
+                <ContactAvatar src={currentUser?.avatar} name={currentUser?.displayName || currentUser?.name || currentUser?.username || 'You'} />
               </div>
               {!hasMyStory && (
                 <div className="absolute bottom-0 right-0 w-5 h-5 bg-cyan-500 rounded-full border-2 border-surface flex items-center justify-center">
@@ -379,7 +374,7 @@ export default function FeedScreen({ onNavigate }: { onNavigate: (s: string) => 
               }}>
                 <div className="relative w-16 h-16 rounded-full p-[2px] bg-gradient-to-tr from-cyan-500 to-purple-500 group-hover:scale-105 transition-transform duration-200">
                   <div className="w-full h-full bg-surface rounded-full overflow-hidden border-2 border-surface">
-                    <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
+                    <ContactAvatar src={user.avatar} name={user.name || user.username} />
                   </div>
                 </div>
                 <span className="text-[11px] text-on-surface font-medium truncate w-16 text-center">{user.username || user.name.split(' ')[0]}</span>
