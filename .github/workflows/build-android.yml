@@ -6,6 +6,11 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release tag (e.g. v1.0.0) — leave empty to skip release creation'
+        required: false
+        default: ''
 
 # GRANT WRITE PERMISSIONS FOR THE RUNNER TO CREATE RELEASES 👇
 permissions:
@@ -89,10 +94,10 @@ jobs:
       - name: 🚀 Create GitHub Release
         id: create_release
         uses: softprops/action-gh-release@v2 # Upgraded to v2 for full Node 22 compatibility
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && github.event.inputs.tag_name != '')
         with:
-          tag_name: ${{ github.ref_name }}
-          name: Release ${{ github.ref_name }}
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || github.event.inputs.tag_name }}
+          name: Release ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || github.event.inputs.tag_name }}
           files: aqualyn-mobile/android/app/build/outputs/apk/release/*.apk
           token: ${{ secrets.GITHUB_TOKEN }}
           generate_release_notes: true
