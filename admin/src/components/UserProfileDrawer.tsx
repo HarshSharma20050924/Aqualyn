@@ -1,11 +1,8 @@
-import { useEffect, useState } from 'react';
-import { X, MessageSquare, Loader2, Mail, Phone, Shield } from 'lucide-react';
+import { X, Mail, Phone, Shield } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import axios from 'axios';
-import { ADMIN_ENDPOINTS } from '../config/api';
 import type { User } from '../types';
 
-const getAuthHeaders = () => ({ Authorization: `Bearer ${localStorage.getItem('adminToken') || ''}` });
+
 
 interface Props {
   user: User | null;
@@ -13,19 +10,6 @@ interface Props {
 }
 
 export default function UserProfileDrawer({ user, onClose }: Props) {
-  const [chats, setChats] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (!user) return;
-    setChats([]);
-    setLoading(true);
-    axios
-      .get(ADMIN_ENDPOINTS.USER_CHATS(user.id), { headers: getAuthHeaders() })
-      .then(r => setChats(r.data.chats || []))
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, [user]);
 
   return (
     <AnimatePresence>
@@ -101,43 +85,7 @@ export default function UserProfileDrawer({ user, onClose }: Props) {
                 )}
               </div>
 
-              {/* Chats */}
-              <div>
-                <h4 className="text-xs font-black text-on-surface uppercase tracking-widest mb-3 flex items-center gap-2">
-                  <MessageSquare className="w-4 h-4 text-primary" />
-                  Conversations ({chats.length})
-                </h4>
 
-                {loading ? (
-                  <div className="flex justify-center py-6">
-                    <Loader2 className="w-6 h-6 text-primary animate-spin" />
-                  </div>
-                ) : chats.length === 0 ? (
-                  <p className="text-xs text-on-surface-variant text-center py-6">No chats found</p>
-                ) : (
-                  <div className="space-y-2">
-                    {chats.map((c: any) => (
-                      <div key={c.id} className="glass-card rounded-xl p-3 border border-white/30 dark:border-white/5 flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
-                          <MessageSquare className="w-4 h-4 text-primary" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-xs font-black text-on-surface truncate">{c.name || 'Direct Chat'}</p>
-                          <p className="text-[10px] text-on-surface-variant font-mono truncate">{c.id}</p>
-                          {c.messages?.[0]?.text && (
-                            <p className="text-[10px] text-on-surface-variant truncate italic mt-0.5">"{c.messages[0].text}"</p>
-                          )}
-                        </div>
-                        {c.isGroup && (
-                          <span className="text-[9px] bg-purple-500/10 text-purple-400 border border-purple-500/20 px-1.5 py-0.5 rounded-full font-bold shrink-0">
-                            Group
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
             </div>
           </motion.aside>
         </>
