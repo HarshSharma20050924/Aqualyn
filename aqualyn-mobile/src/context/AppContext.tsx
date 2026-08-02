@@ -1,6 +1,6 @@
 import React, { useState, ReactNode, useEffect, useRef } from 'react';
 import { Storage } from '../utils/storage';
-import { useRouter } from 'expo-router';
+
 import { User, Chat, Message, Folder, ThemeSettings, Post, Story, Notification } from '../types';
 import { io, Socket } from 'socket.io-client';
 import { API_BASE_URL, ENDPOINTS } from '../config/api';

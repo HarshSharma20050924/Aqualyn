@@ -3,7 +3,7 @@ import { ENDPOINTS, API_BASE_URL } from '../config/api';
 import { apiFetch } from '../utils/fetcher';
 import { Socket } from 'socket.io-client';
 import { ToastType, Toast } from './AppContextType';
-import { useRouter } from 'expo-router';
+
 import { Platform } from 'react-native';
 import { Storage } from '../utils/storage';
 
@@ -30,7 +30,7 @@ export const useAppActions = (
   setActiveChatId: (id: string | null) => void,
   activeChatId: string | null
 ) => {
-  const router = useRouter();
+
 
   const logout = async () => {
     // Step 1: Get the token BEFORE clearing it so we can send it for revocation
@@ -74,8 +74,9 @@ export const useAppActions = (
     setNotifications([]);
     setGlobalUsers([]);
 
-    // Step 5: Navigate to the login screen
-    router.replace('/login' as any);
+    // Step 5: Navigation to login is handled automatically by App.tsx
+    // The useEffect in App.tsx watches currentUser and navigates to 'login' when it becomes null.
+    // No manual router.replace needed here — calling useRouter() outside expo-router would crash the app.
   };
 
   const archiveChat = (chatId: string) => {
