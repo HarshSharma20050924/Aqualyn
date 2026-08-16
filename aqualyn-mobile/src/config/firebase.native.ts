@@ -14,9 +14,7 @@ const firebaseConfig = {
 export const getFirebaseAuth = async () => {
   // Native SDK imports
   const authModule = require('@react-native-firebase/auth').default;
-  const { GoogleAuthProvider } = require('@react-native-firebase/auth');
   const auth = authModule();
-  const googleProvider = new GoogleAuthProvider();
 
   const requestNativePhoneOtp = async (phoneNumber: string) => {
     try {
@@ -29,5 +27,5 @@ export const getFirebaseAuth = async () => {
     }
   };
 
-  return { auth, requestNativePhoneOtp, googleProvider };
+  return { auth, requestNativePhoneOtp };
 };
