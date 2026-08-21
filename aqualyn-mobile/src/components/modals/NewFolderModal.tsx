@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import Animated, { FadeIn, FadeOut, ZoomIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { X, FolderPlus, Search, Check } from 'lucide-react-native';
+import { X, FolderPlus, Search, Check, ArrowLeft, Plus } from 'lucide-react-native';
 import ContactAvatar from '../ui/ContactAvatar';
 
 interface NewFolderModalProps {

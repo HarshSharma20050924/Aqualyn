@@ -13,9 +13,7 @@ import {
   RefreshControl
 } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
-import * as Haptics from 'expo-haptics';
 import { BlurView } from 'expo-blur';
-import Animated, { FadeIn, FadeOut, LinearTransition, withSpring, useSharedValue, useAnimatedStyle, withSequence } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Heart,
@@ -59,42 +57,24 @@ const PostCard = ({ post }: { post: Post }) => {
   // Custom Double-Tap Multi-Platform Mechanics Engine Tracking
   let lastTapRef = useRef<number | null>(null);
   
-  const heartScale = useSharedValue(0);
-  const heartAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: heartScale.value }]
-  }));
 
   const handleImageTap = () => {
     const now = Date.now();
     const DOUBLE_TAP_DELAY = 300;
     if (lastTapRef.current && (now - lastTapRef.current < DOUBLE_TAP_DELAY)) {
       setShowHeartAnimation(true);
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-      
-      heartScale.value = withSequence(
-        withSpring(1.2, { damping: 12, stiffness: 150 }),
-        withSpring(1, { damping: 15, stiffness: 200 })
-      );
-      
-      if (!isLiked) {
-        likePost(post.id);
-      }
-      setTimeout(() => {
-        setShowHeartAnimation(false);
-        heartScale.value = 0;
-      }, 1000);
+      if (!isLiked) likePost(post.id);
+      setTimeout(() => setShowHeartAnimation(false), 800);
     } else {
       lastTapRef.current = now;
     }
   };
   
   const handleLikeToggle = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     likePost(post.id);
   };
 
   const handleSaveToggle = () => {
-    Haptics.selectionAsync();
     savePost(post.id);
     addToast(isSaved ? 'Removed from saved' : 'Saved to collection', 'success');
   };
@@ -117,7 +97,7 @@ const PostCard = ({ post }: { post: Post }) => {
   };
 
   return (
-    <Animated.View layout={LinearTransition.springify().damping(16).stiffness(120)} style={styles.postCardFrameContainer}>
+    <View style={styles.postCardFrameContainer}>
       {/* Post Header Element Structure */}
       <View style={styles.postHeaderRow}>
         <View style={styles.postHeaderProfileLeft}>
@@ -162,9 +142,9 @@ const PostCard = ({ post }: { post: Post }) => {
         )}
 
         {showHeartAnimation && (
-          <Animated.View style={[styles.absoluteDoubleTapHeartBadgeCenter, heartAnimatedStyle]}>
+          <View style={styles.absoluteDoubleTapHeartBadgeCenter}>
             <Heart size={80} color="#fff" fill="#fff" style={styles.doubleTapHeartDropShadow} />
-          </Animated.View>
+          </View>
         )}
       </TouchableOpacity>
 
@@ -235,7 +215,7 @@ const PostCard = ({ post }: { post: Post }) => {
           {new Date(post.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
         </Text>
       </View>
-    </Animated.View>
+    </View>
   );
 };
 
@@ -324,16 +304,16 @@ export default function FeedScreen({ onNavigate }: Props) {
   );
 
   return (
-    <Animated.View  style={styles.screenViewContainer}>
+    <View style={styles.screenViewContainer}>
       {/* Absolute Sticky Floating Navigation Deck Layer Top */}
       <BlurView intensity={80} tint="light" style={[styles.headerFloatingStickyNavbarBox, { paddingTop: insets.top }]}>
         <View style={styles.headerToolbarInteriorFlexRow}>
           <Text style={styles.headerAqualynBrandTypographyText}>Aqualyn</Text>
           <View style={styles.headerRightActionButtonsGroupRow}>
-            <TouchableOpacity onPress={() => { Haptics.selectionAsync(); onNavigate('notifications'); }} style={styles.headerCircleActionInteractiveBtn}>
+            <TouchableOpacity onPress={() => onNavigate('notifications')} style={styles.headerCircleActionInteractiveBtn}>
               <Heart size={22} color="#0f172a" />
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => { Haptics.selectionAsync(); onNavigate('chats'); }} style={styles.headerCircleActionInteractiveBtn}>
+            <TouchableOpacity onPress={() => onNavigate('chats')} style={styles.headerCircleActionInteractiveBtn}>
               <MessageCircle size={22} color="#0f172a" />
             </TouchableOpacity>
           </View>
@@ -350,6 +330,7 @@ export default function FeedScreen({ onNavigate }: Props) {
         <FlashList
           data={isFetchingData ? [] : feedPosts}
           keyExtractor={(item) => item.id}
+          // @ts-ignore - TS thinks estimatedItemSize doesn't exist but it does
           estimatedItemSize={450}
           refreshControl={
             <RefreshControl
@@ -448,7 +429,7 @@ export default function FeedScreen({ onNavigate }: Props) {
       {isCreatorOpen && (
         <StoryCreator onClose={() => Platform.OS === 'ios' ? setIsCreatorOpen(false) : setTimeout(() => setIsCreatorOpen(false), 50)} />
       )}
-    </Animated.View>
+    </View>
   );
 }
 

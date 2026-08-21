@@ -20,3 +20,53 @@ graphify-out/
 
 knowledge/
 .aider*
+
+# Expo & React Native
+.expo/
+aqualyn-mobile/.expo/
+web-build/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+
+# Android & iOS
+android/app/build/
+android/.gradle/
+android/local.properties
+android/build/
+android/app/src/main/assets/
+ios/Pods/
+ios/build/
+ios/*.xcworkspace/xcuserdata/
+ios/*.xcodeproj/xcuserdata/
+
+# IDE & OS
+.idea/
+.vscode/
+*.swp
+
+# AI Agents & Logs
+.agents/
+.gemini/
+brain/
+
+# Obsidian Vault & Notes
+obsidian-vault/
+
+# IDE Tools (Continue)
+.continue/
+
+# Logs & Dumps
+*crash*.txt
+crash_log.*
+
+# Local Scripts & Temp
+web2api/
+gemini_agent.py
+gemini_web2api.py
+generate_avatars.py
+crop_logo.py
+avatar.html

@@ -1,5 +1,6 @@
 import { Storage } from '../utils/storage';
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const SUPABASE_URL = 'https://uuuidxafgdldgrkhvbdp.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV1dWlkeGFmZ2RsZGdya2h2YmRwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3MDU1MzAsImV4cCI6MjA5NzI4MTUzMH0.Jyd0SYF7EbvNE-zW36XPc3X2cvk_ynsomUZAGwtZzsc';

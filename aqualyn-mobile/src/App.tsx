@@ -13,6 +13,7 @@ import {
   StatusBar,
   useColorScheme 
 } from 'react-native';
+import * as SplashScreen from 'expo-splash-screen';
 
 // State & Core Imports
 import { useAppContext } from './context/AppContext';
@@ -48,6 +49,13 @@ export default function App() {
   // Determine current active colors based on theme settings
   const isDarkMode = theme.mode === 'dark' || (theme.mode === 'system' && systemColorScheme === 'dark');
   const activeColors = isDarkMode ? Theme.darkColors : Theme.colors;
+
+  // Hide the native splash screen immediately on first mount.
+  // expo-router already calls preventAutoHideAsync, so we just need to hide it.
+  // The in-app BubbleLoader handles the "waiting for bootstrap" state visually.
+  useEffect(() => {
+    SplashScreen.hideAsync().catch(() => {});
+  }, []);
 
   // Authentication Synchronizer Loop
   useEffect(() => {

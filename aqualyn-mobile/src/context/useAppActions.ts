@@ -7,7 +7,7 @@ import { ToastType, Toast } from './AppContextType';
 import { Platform } from 'react-native';
 import { Storage } from '../utils/storage';
 
-import * as Contacts from 'expo-contacts';
+import * as Contacts from 'expo-contacts/legacy';
 
 export const useAppActions = (
   currentUser: User | null,
@@ -692,8 +692,8 @@ export const useAppActions = (
       phone,
       email: '',
       bio: 'Hey there! I am using Aqualyn.',
-      avatar: avatar || undefined,
-      largeAvatar: avatar || undefined
+      avatar: avatar || '',
+      largeAvatar: avatar || ''
     };
     setContacts(prev => [...prev, newContact]);
     addToast('Added to contacts!', 'success');
@@ -944,7 +944,14 @@ export const useAppActions = (
             setContacts(prev => {
               const existingIds = new Set(prev.map(c => c.id));
               const newOnes = matches.filter((m: any) => !existingIds.has(m.id));
-              return [...prev, ...newOnes];
+              const merged = [...prev, ...newOnes];
+              
+              // Cache contacts so they persist across app loads
+              import('@react-native-async-storage/async-storage').then(({ default: AsyncStorage }) => {
+                AsyncStorage.setItem('aqualyn_contacts_cache', JSON.stringify(merged));
+              });
+
+              return merged;
             });
             addToast(`Synced ${matches.length} matching friends!`, 'success');
           }

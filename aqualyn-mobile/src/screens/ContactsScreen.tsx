@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import * as Contacts from 'expo-contacts';
+import * as Contacts from 'expo-contacts/legacy';
 import * as SMS from 'expo-sms';
 import {
   StyleSheet,
@@ -27,6 +27,7 @@ import {
 import { useAppContext } from '../context/AppContext';
 import AddContactModal from '../components/modals/AddContactModal';
 import ContactAvatar from '../components/ui/ContactAvatar';
+import BubbleLoader from '../components/ui/BubbleLoader';
 
 interface Props {
   onNavigate: (screen: string) => void;
@@ -48,6 +49,7 @@ export default function ContactsScreen({ onNavigate }: Props) {
   const [activeTab, setActiveTab] = useState<'contacts' | 'followers' | 'following'>('contacts');
   const [searchQuery, setSearchQuery] = useState('');
   const [deviceContacts, setDeviceContacts] = useState<Contacts.Contact[]>([]);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -105,7 +107,7 @@ export default function ContactsScreen({ onNavigate }: Props) {
       const unmappedDeviceContacts = deviceContacts
          .filter(dc => dc.name && !appContactNames.has(dc.name.toLowerCase()))
          .map(dc => ({
-            id: `device-${dc.id}`,
+            id: `device-${(dc as any).id || (dc as any).lookupKey}`,
             name: dc.name,
             avatar: dc.imageAvailable && dc.image ? dc.image.uri : undefined,
             role: 'From Device Contacts',
@@ -165,7 +167,7 @@ export default function ContactsScreen({ onNavigate }: Props) {
         <View style={styles.headerToolbar}>
           <Text style={styles.headerTitleText}>Contacts</Text>
           <View style={styles.headerActionRow}>
-            <TouchableOpacity onPress={handleInvite} style={styles.headerIconBtn}>
+            <TouchableOpacity onPress={() => handleInvite()} style={styles.headerIconBtn}>
               <Share2 size={22} color="#0891b2" />
             </TouchableOpacity>
             <TouchableOpacity onPress={() => setIsAddContactOpen(true)} style={styles.headerIconBtn}>
@@ -182,16 +184,24 @@ export default function ContactsScreen({ onNavigate }: Props) {
       >
         {/* Invite & Sync Quick Actions Grid */}
         <View style={styles.actionsGridRow}>
-          <TouchableOpacity onPress={handleInvite} style={[styles.actionCard, styles.actionCardSecondary]}>
+          <TouchableOpacity onPress={() => handleInvite()} style={[styles.actionCard, styles.actionCardSecondary]}>
             <View style={[styles.actionIconBox, styles.actionIconBoxSecondary]}>
               <Share2 size={20} color="#0891b2" />
             </View>
             <Text style={[styles.actionCardLabelText, styles.textSecondary]}>Invite Friends</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={syncContacts} style={[styles.actionCard, styles.actionCardPrimary]}>
+          <TouchableOpacity 
+            onPress={async () => {
+              setIsSyncing(true);
+              await syncContacts();
+              setIsSyncing(false);
+            }} 
+            style={[styles.actionCard, styles.actionCardPrimary]}
+            disabled={isSyncing}
+          >
             <View style={[styles.actionIconBox, styles.actionIconBoxPrimary]}>
-              <RefreshCw size={20} color="#0057bd" />
+              {isSyncing ? <BubbleLoader size={20} /> : <RefreshCw size={20} color="#0057bd" />}
             </View>
             <Text style={[styles.actionCardLabelText, styles.textPrimary]}>Sync Contacts</Text>
           </TouchableOpacity>

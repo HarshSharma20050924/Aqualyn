@@ -3,7 +3,8 @@ import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native
 import { MessageCircle, Users, CircleDashed, Settings as SettingsIcon } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
-import Animated, { useAnimatedStyle, withSpring, useSharedValue, useEffect } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, withSpring, useSharedValue } from 'react-native-reanimated';
+import { useEffect } from 'react';
 
 export default function BottomNav({ currentScreen, onNavigate }: { currentScreen: string, onNavigate: (s: string) => void }) {
   const navItems = [
@@ -23,7 +24,6 @@ export default function BottomNav({ currentScreen, onNavigate }: { currentScreen
           <TouchableOpacity 
             key={item.id} 
             onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               onNavigate(item.id);
             }}
             style={styles.navItem}

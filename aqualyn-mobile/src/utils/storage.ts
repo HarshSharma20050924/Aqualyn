@@ -1,12 +1,40 @@
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { MMKV } from 'react-native-mmkv';
+import { createMMKV } from 'react-native-mmkv';
 
-// Instantiate the core C++ backed storage engine for native
-export const storage = Platform.OS !== 'web' ? new MMKV({
-  id: 'aqualyn-storage',
-  encryptionKey: 'aqualyn-secure-encryption-key-todo' 
-}) : null;
+// Instantiate the core C++ backed storage engine for native.
+// In Expo Go, createMMKV() doesn't throw — it returns a broken object with undefined methods.
+// So we validate the returned object actually has working methods before using it.
+let storage: ReturnType<typeof createMMKV> | null = null;
+try {
+  if (Platform.OS !== 'web') {
+    const mmkv = createMMKV({
+      id: 'aqualyn-storage',
+      encryptionKey: 'aqualyn-secure-encryption-key-todo'
+    });
+    // Validate the native module is fully functional (not a broken Expo Go stub)
+    // Expo Go returns a partial object where some methods exist but others (like delete) don't
+    if (
+      mmkv &&
+      typeof mmkv.set === 'function' &&
+      typeof mmkv.getString === 'function' &&
+      typeof (mmkv as any).delete === 'function' &&
+      typeof mmkv.clearAll === 'function' &&
+      typeof mmkv.contains === 'function'
+    ) {
+      storage = mmkv;
+    } else {
+      console.warn('[Storage] MMKV returned a broken object — running in Expo Go? Falling back to AsyncStorage.');
+    }
+  }
+} catch (e) {
+  console.warn('[Storage] MMKV not available, falling back to AsyncStorage.', e);
+}
+export { storage };
+
+// Helper: returns true only when MMKV is fully available
+const hasMMKV = () => storage !== null;
+
 
 /**
  * Storage Wrapper Interface
@@ -14,54 +42,51 @@ export const storage = Platform.OS !== 'web' ? new MMKV({
  */
 export const Storage = {
   setItem: (key: string, value: string) => {
-    if (Platform.OS === 'web') {
+    if (Platform.OS === 'web' || !storage) {
       AsyncStorage.setItem(key, value);
     } else {
-      storage?.set(key, value);
+      storage.set(key, value);
     }
   },
 
   getItem: (key: string): string | null => {
-    // Note: On Web this synchronous getter will not work for AsyncStorage
-    // For full web support, we'd need async methods, but for native performance
-    // we use synchronous. Web users will need async fallbacks in production.
-    if (Platform.OS === 'web') {
-       // Mock for now to prevent crashes on web simulator
-       return null; 
+    if (Platform.OS === 'web' || !storage) {
+      // MMKV unavailable (web or Expo Go) — synchronous read not possible
+      return null;
     }
-    return storage?.getString(key) ?? null;
+    return storage.getString(key) ?? null;
   },
 
   removeItem: (key: string) => {
-    if (Platform.OS === 'web') {
+    if (Platform.OS === 'web' || !storage) {
       AsyncStorage.removeItem(key);
     } else {
-      storage?.delete(key);
+      (storage as any).delete(key);
     }
   },
 
   multiRemove: (keys: string[]) => {
-    if (Platform.OS === 'web') {
+    if (Platform.OS === 'web' || !storage) {
       AsyncStorage.multiRemove(keys);
     } else {
-      keys.forEach(key => storage?.delete(key));
+      keys.forEach(key => (storage as any).delete(key));
     }
   },
 
   clear: () => {
-    if (Platform.OS === 'web') {
+    if (Platform.OS === 'web' || !storage) {
       AsyncStorage.clear();
     } else {
-      storage?.clearAll();
+      storage.clearAll();
     }
   },
 
   setObject: <T>(key: string, value: T) => {
     const val = JSON.stringify(value);
-    if (Platform.OS === 'web') {
+    if (Platform.OS === 'web' || !storage) {
       AsyncStorage.setItem(key, val);
     } else {
-      storage?.set(key, val);
+      storage.set(key, val);
     }
   },
 
@@ -77,16 +102,16 @@ export const Storage = {
   },
 
   setBoolean: (key: string, value: boolean) => {
-    if (Platform.OS === 'web') {
+    if (Platform.OS === 'web' || !storage) {
       AsyncStorage.setItem(key, value ? '1' : '0');
     } else {
-      storage?.set(key, value);
+      storage.set(key, value);
     }
   },
 
   getBoolean: (key: string): boolean | null => {
-    if (Platform.OS === 'web') return null;
-    if (!storage?.contains(key)) return null;
-    return storage.getBoolean(key);
+    if (Platform.OS === 'web' || !storage) return null;
+    if (!storage.contains(key)) return null;
+    return storage.getBoolean(key) ?? null;
   },
 };

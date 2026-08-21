@@ -202,11 +202,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
           return;
         }
 
+        // Load cached contacts
+        import('@react-native-async-storage/async-storage').then(({ default: AsyncStorage }) => {
+          AsyncStorage.getItem('aqualyn_contacts_cache').then(cached => {
+            if (cached && isMounted) {
+              try {
+                setContacts(JSON.parse(cached));
+              } catch (e) {}
+            }
+          });
+        });
+
         console.log("[Auth] Starting bootstrap sync...");
+        // Use AbortController to enforce an 8s timeout — prevents long splash on server cold-start (Render free tier)
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => {
+          controller.abort();
+          console.warn('[Auth] Bootstrap timed out after 8s — server may be cold-starting.');
+        }, 8000);
+
         const res = await apiFetch(ENDPOINTS.AUTH_SYNC, {
           method: 'POST',
-          body: JSON.stringify({})
-        });
+          body: JSON.stringify({}),
+          signal: controller.signal,
+        }).finally(() => clearTimeout(timeoutId));
 
         if (res.ok && isMounted) {
           const data = await res.json();

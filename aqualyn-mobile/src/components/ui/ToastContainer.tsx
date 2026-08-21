@@ -4,14 +4,8 @@ import {
   View,
   Text,
   TouchableOpacity,
-  Image,
   Platform,
 } from 'react-native';
-import Animated, { 
-  FadeIn,
-  FadeOut,
-  LinearTransition 
-} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react-native';
 import { useAppContext } from '../../context/AppContext';
@@ -24,15 +18,14 @@ export default function ToastContainer() {
   if (toasts.length === 0) return null;
 
   return (
-    <View 
-      style={[styles.globalToastAbsoluteHostFrame, { top: insets.top + 12 }]}
+    <View
+      style={[styles.container, { top: insets.top + 12 }]}
       pointerEvents="box-none"
     >
       {toasts.map((toast) => {
-        // Color profiling parsing engine mapping logic
         const isSuccess = toast.type === 'success';
         const isError = toast.type === 'error';
-        
+
         let themeBg = 'rgba(59, 130, 246, 0.06)';
         let themeBorder = 'rgba(59, 130, 246, 0.15)';
         let themeColor = '#2563eb';
@@ -48,45 +41,39 @@ export default function ToastContainer() {
         }
 
         return (
-          <Animated.View
+          <View
             key={toast.id}
-            entering={FadeIn.duration(250)}
-            exiting={FadeOut.duration(200)}
-            layout={LinearTransition.springify().damping(20)}
-            style={[
-              styles.toastNotificationCardTrack,
-              { backgroundColor: themeBg, borderColor: themeBorder }
-            ]}
+            style={[styles.card, { backgroundColor: themeBg, borderColor: themeBorder }]}
           >
             {toast.avatar ? (
-              <ContactAvatar name={toast.title} src={toast.avatar} style={styles.toastAvatarIconCircularMedia} />
+              <ContactAvatar name={toast.title} src={toast.avatar} style={styles.avatar} />
             ) : (
-              <View style={styles.toastDecorativeStaticIconBadge}>
+              <View style={styles.iconBox}>
                 {isSuccess && <CheckCircle2 size={18} color={themeColor} />}
                 {isError && <AlertCircle size={18} color={themeColor} />}
                 {!isSuccess && !isError && <Info size={18} color={themeColor} />}
               </View>
             )}
 
-            <View style={styles.toastTextContentColumnBlock}>
+            <View style={styles.textCol}>
               {toast.title && (
-                <Text style={[styles.toastHeadingLabelTypography, { color: themeColor }]} numberOfLines={1}>
+                <Text style={[styles.title, { color: themeColor }]} numberOfLines={1}>
                   {toast.title}
                 </Text>
               )}
-              <Text style={styles.toastMessageParagraphTypography} numberOfLines={2}>
+              <Text style={styles.message} numberOfLines={2}>
                 {toast.message}
               </Text>
             </View>
 
             <TouchableOpacity
               onPress={() => removeToast?.(toast.id)}
-              style={styles.toastDismissIconButtonTrigger}
+              style={styles.closeBtn}
               activeOpacity={0.6}
             >
               <X size={14} color="#94a3b8" />
             </TouchableOpacity>
-          </Animated.View>
+          </View>
         );
       })}
     </View>
@@ -94,7 +81,7 @@ export default function ToastContainer() {
 }
 
 const styles = StyleSheet.create({
-  globalToastAbsoluteHostFrame: {
+  container: {
     position: 'absolute',
     left: 0,
     right: 0,
@@ -103,7 +90,7 @@ const styles = StyleSheet.create({
     zIndex: 9999,
     gap: 8,
   },
-  toastNotificationCardTrack: {
+  card: {
     width: '100%',
     maxWidth: 360,
     flexDirection: 'row',
@@ -113,53 +100,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     backgroundColor: '#ffffff',
     ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.06,
-        shadowRadius: 10,
-      },
-      android: {
-        elevation: 3,
-      },
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 10 },
+      android: { elevation: 3 },
     }),
   },
-  toastAvatarIconCircularMedia: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    resizeMode: 'cover',
-    marginRight: 10,
-  },
-  toastDecorativeStaticIconBadge: {
-    width: 24,
-    height: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 6,
-  },
-  toastTextContentColumnBlock: {
-    flex: 1,
-    marginRight: 8,
-    gap: 1,
-  },
-  toastHeadingLabelTypography: {
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: -0.1,
-  },
-  toastMessageParagraphTypography: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#334155',
-    lineHeight: 17,
-  },
-  toastDismissIconButtonTrigger: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: 'rgba(15, 23, 42, 0.03)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  avatar: { width: 36, height: 36, borderRadius: 18, resizeMode: 'cover', marginRight: 10 },
+  iconBox: { width: 24, height: 24, justifyContent: 'center', alignItems: 'center', marginRight: 6 },
+  textCol: { flex: 1, marginRight: 8, gap: 1 },
+  title: { fontSize: 13, fontWeight: '700', letterSpacing: -0.1 },
+  message: { fontSize: 13, fontWeight: '600', color: '#334155', lineHeight: 17 },
+  closeBtn: { width: 26, height: 26, borderRadius: 13, backgroundColor: 'rgba(15,23,42,0.03)', justifyContent: 'center', alignItems: 'center' },
 });

@@ -11,7 +11,8 @@ import {
   StyleSheet 
 } from 'react-native';
 import { X, Send, Heart, Share2, MoreHorizontal, Star, Trash2, VolumeX } from 'lucide-react-native';
-import { useAppContext, Story } from '../context/AppContext';
+import { useAppContext } from '../context/AppContext';
+import { Story } from '../types';
 import ContactAvatar from './ui/ContactAvatar';
 
 interface StoryViewerProps {

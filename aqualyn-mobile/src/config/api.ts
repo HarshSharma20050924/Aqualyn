@@ -15,6 +15,7 @@ export const ENDPOINTS = {
     AUTH_SYNC_TOKEN: `${API_BASE_URL}/api/auth/sync-token`,
     AUTH_SEND_OTP: `${API_BASE_URL}/api/auth/send-otp`,
     AUTH_VERIFY_OTP: `${API_BASE_URL}/api/auth/verify-otp`,
+    AUTH_QR_LINK: `${API_BASE_URL}/api/auth/qr-link`,
 
     // User
     USER_PROFILE: (id: string) => `${API_BASE_URL}/api/user/profile/${id}`,
