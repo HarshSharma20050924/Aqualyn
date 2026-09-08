@@ -248,6 +248,7 @@ export const useAppActions = (
             contact: options?.contact,
             payment: options?.payment,
             replyToId: options?.replyToId,
+            call: (options as any)?.call,
             aiSettings: aiSettings
         });
         socket.emit('typing', { chatId, userId: currentUser?.id, userName: currentUser?.displayName || currentUser?.username, isTyping: false });

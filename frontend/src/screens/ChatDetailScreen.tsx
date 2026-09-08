@@ -603,10 +603,19 @@ export default function ChatDetailScreen({ onBack, onNavigate }: { onBack: () =>
             </div>
           </div>
           <div className="flex items-center gap-2 relative">
-            <button onClick={() => startCall(chat.id, chat.name, chat.avatar, 'VIDEO')} className={`p-2 rounded-full transition-colors active:scale-95 duration-200 ${chat.isSecret ? 'text-slate-400 hover:bg-slate-800/50' : 'text-cyan-600 hover:bg-white/20'}`}>
+            <button onClick={() => {
+              // Fix: pass the other participant's USER ID, not the chat ID
+              const otherUserId = chat.isGroup ? chat.id : (chat.participantIds?.find(id => id !== currentUser?.id) || chat.id);
+              const otherUser = globalUsers.find(u => u.id === otherUserId);
+              startCall(otherUserId, otherUser?.displayName || otherUser?.name || chat.name, otherUser?.avatar || chat.avatar, 'VIDEO');
+            }} className={`p-2 rounded-full transition-colors active:scale-95 duration-200 ${chat.isSecret ? 'text-slate-400 hover:bg-slate-800/50' : 'text-cyan-600 hover:bg-white/20'}`}>
               <Video className="w-5 h-5 fill-current" />
             </button>
-            <button onClick={() => startCall(chat.id, chat.name, chat.avatar, 'VOICE')} className={`p-2 rounded-full transition-colors active:scale-95 duration-200 ${chat.isSecret ? 'text-slate-400 hover:bg-slate-800/50' : 'text-cyan-600 hover:bg-white/20'}`}>
+            <button onClick={() => {
+              const otherUserId = chat.isGroup ? chat.id : (chat.participantIds?.find(id => id !== currentUser?.id) || chat.id);
+              const otherUser = globalUsers.find(u => u.id === otherUserId);
+              startCall(otherUserId, otherUser?.displayName || otherUser?.name || chat.name, otherUser?.avatar || chat.avatar, 'VOICE');
+            }} className={`p-2 rounded-full transition-colors active:scale-95 duration-200 ${chat.isSecret ? 'text-slate-400 hover:bg-slate-800/50' : 'text-cyan-600 hover:bg-white/20'}`}>
               <Phone className="w-5 h-5 fill-current" />
             </button>
             {/* Lyn AI Settings — only in the Lyn AI chat */}

@@ -137,6 +137,40 @@ export class SocialService {
         }
     }
 
+    static async getExplorePosts(limit: number = 30, cursor?: string) {
+        try {
+            const posts = await (prisma as any).post.findMany({
+                take: limit + 1, // fetch one extra to know if hasMore
+                ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+                orderBy: { createdAt: 'desc' },
+                include: {
+                    author: {
+                        select: { id: true, username: true, displayName: true, avatar: true }
+                    },
+                    likes: { select: { userId: true } },
+                    comments: {
+                        where: { parentId: null },
+                        include: {
+                            user: { select: { id: true, username: true, displayName: true, avatar: true } }
+                        },
+                        orderBy: { createdAt: 'asc' },
+                        take: 5
+                    },
+                    _count: { select: { likes: true, comments: true } }
+                }
+            });
+
+            const hasMore = posts.length > limit;
+            const page = hasMore ? posts.slice(0, limit) : posts;
+            const nextCursor = hasMore ? page[page.length - 1].id : null;
+
+            return { posts: page, nextCursor, hasMore };
+        } catch (error) {
+            console.error('[SocialService] getExplorePosts failed:', error);
+            return { posts: [], nextCursor: null, hasMore: false };
+        }
+    }
+
     static async createStory(userId: string, data: { mediaUrl: string, mediaType: string, content?: string }) {
         if (!userId || !data.mediaUrl) throw new Error('User ID and Media URL are required');
         

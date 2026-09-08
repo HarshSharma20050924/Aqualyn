@@ -341,6 +341,7 @@ export class SocketService {
                 payment: data.payment,
                 schedule: data.schedule,
                 wallet: data.wallet,
+                call: data.call || null,
                 replyToId: data.replyToId,
                 status: 'sent',
                 isRead: false

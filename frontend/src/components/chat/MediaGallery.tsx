@@ -48,7 +48,18 @@ export default function MediaGallery({ items, initialIndex, onClose }: MediaGall
             {currentIndex + 1} / {items.length}
           </div>
           <div className="flex items-center gap-4 text-white">
-            <button className="p-2 hover:bg-white/20 rounded-full transition-colors" onClick={(e) => e.stopPropagation()}>
+            <button 
+              className="p-2 hover:bg-white/20 rounded-full transition-colors" 
+              onClick={(e) => {
+                e.stopPropagation();
+                const a = document.createElement('a');
+                a.href = currentItem.url;
+                a.download = `media_${currentItem.id}`;
+                a.target = '_blank';
+                a.click();
+              }}
+              title="Download Media"
+            >
               <Download className="w-5 h-5" />
             </button>
             <button className="p-2 hover:bg-white/20 rounded-full transition-colors" onClick={onClose}>

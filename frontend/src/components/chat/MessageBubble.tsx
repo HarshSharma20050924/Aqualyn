@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Play, Pause, FileText, Download, MapPin, CheckCheck, Reply, Copy, Trash2, Smile, Timer, Edit2, Wallet, ArrowRight, ShieldAlert, Clock } from 'lucide-react';
+import { Play, Pause, FileText, Download, MapPin, CheckCheck, Reply, Copy, Trash2, Smile, Timer, Edit2, Wallet, ArrowRight, ShieldAlert, Clock, Phone, Video, PhoneOff } from 'lucide-react';
 import { Message } from '../../types';
 import { useAppContext } from '../../context/AppContext';
+import { useCall } from '../../context/CallContext';
 import ContactAvatar from '../ui/ContactAvatar';
 
 interface MessageBubbleProps {
@@ -85,6 +86,7 @@ const ScrambledText = ({ text, isSecret }: { text: string; isSecret?: boolean })
 
 const MessageBubbleComponent = ({ msg, isMe, onReply, onEdit, replyMessage, onMediaClick, isSecret, animateTyping }: MessageBubbleProps) => {
   const { deleteMessage, addReaction, currentUser, addToast, chats } = useAppContext();
+  const { startCall } = useCall();
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioProgress, setAudioProgress] = useState(0);
@@ -314,27 +316,87 @@ const MessageBubbleComponent = ({ msg, isMe, onReply, onEdit, replyMessage, onMe
 
         {/* Media Content */}
         <div className="px-3 py-2">
+          {/* 📞 Call Message Rendering */}
+          {(msg as any).call && (
+            <div className={`flex items-center gap-3 p-3 rounded-2xl mb-2 border ${
+              (msg as any).call.status === 'completed'
+                ? isMe ? 'bg-white/10 border-white/20 text-white' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                : 'bg-red-500/10 border-red-500/20 text-red-500'
+            }`}>
+              <div className={`p-2.5 rounded-full shrink-0 ${
+                (msg as any).call.status === 'completed' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'
+              }`}>
+                {(msg as any).call.type === 'VIDEO' ? <Video className="w-5 h-5" /> : <Phone className="w-5 h-5" />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-sm">
+                  {(msg as any).call.type === 'VIDEO' ? 'Video Call' : 'Audio Call'} {(msg as any).call.status === 'completed' ? 'Ended' : (msg as any).call.status === 'declined' ? 'Declined' : 'Missed'}
+                </p>
+                <p className="text-xs opacity-70">
+                  {(msg as any).call.status === 'completed'
+                    ? `Duration: ${Math.floor(((msg as any).call.duration || 0) / 60)}:${(((msg as any).call.duration || 0) % 60).toString().padStart(2, '0')}`
+                    : (msg as any).call.status === 'declined' ? 'Call was declined' : 'No answer'}
+                </p>
+              </div>
+            </div>
+          )}
+
           {msg.imageUrl && (
-            <img 
-              src={msg.imageUrl} 
-              alt="Attachment" 
-              className="w-full object-cover aspect-video rounded-xl mb-2 cursor-pointer" 
-              onClick={(e) => { e.stopPropagation(); onMediaClick?.(msg); }}
-              referrerPolicy="no-referrer"
-            />
+            <div className="relative group/media mb-2">
+              <img 
+                src={msg.imageUrl} 
+                alt="Attachment" 
+                className="w-full object-cover aspect-video rounded-xl cursor-pointer shadow-sm" 
+                onClick={(e) => { e.stopPropagation(); onMediaClick?.(msg); }}
+                referrerPolicy="no-referrer"
+              />
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const a = document.createElement('a');
+                  a.href = msg.imageUrl!;
+                  a.download = `photo_${msg.id}.jpg`;
+                  a.target = '_blank';
+                  a.click();
+                  addToast('Downloading image...', 'success');
+                }}
+                className="absolute top-2 right-2 p-2 rounded-full bg-black/60 hover:bg-black/80 text-white backdrop-blur-md opacity-0 group-hover/media:opacity-100 transition-opacity shadow-lg"
+                title="Download Image"
+              >
+                <Download className="w-4 h-4" />
+              </button>
+            </div>
           )}
           
           {msg.videoUrl && (
             <div 
-              className="relative w-full aspect-video rounded-xl overflow-hidden mb-2 bg-black/20 flex items-center justify-center cursor-pointer"
+              className="relative w-full aspect-video rounded-xl overflow-hidden mb-2 bg-black/20 flex items-center justify-center cursor-pointer group/vid"
               onClick={(e) => { e.stopPropagation(); onMediaClick?.(msg); }}
             >
-              <Play className="w-10 h-10 text-white opacity-80" />
+              <video src={msg.videoUrl} className="w-full h-full object-cover" muted playsInline />
+              <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                <Play className="w-10 h-10 text-white fill-white opacity-80" />
+              </div>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const a = document.createElement('a');
+                  a.href = msg.videoUrl!;
+                  a.download = `video_${msg.id}.mp4`;
+                  a.target = '_blank';
+                  a.click();
+                  addToast('Downloading video...', 'success');
+                }}
+                className="absolute top-2 right-2 p-2 rounded-full bg-black/60 hover:bg-black/80 text-white backdrop-blur-md opacity-0 group-hover/vid:opacity-100 transition-opacity shadow-lg"
+                title="Download Video"
+              >
+                <Download className="w-4 h-4" />
+              </button>
             </div>
           )}
 
           {msg.audioUrl && (
-            <div className="flex items-center gap-3 min-w-[200px] mb-1">
+            <div className="flex items-center gap-3 min-w-[220px] mb-1">
               <button 
                 onClick={toggleAudioPlayback}
                 className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isMe ? 'bg-white text-secondary' : 'bg-secondary text-white'}`}
@@ -349,6 +411,21 @@ const MessageBubbleComponent = ({ msg, isMe, onReply, onEdit, replyMessage, onMe
                   ? `${Math.floor(audioDuration / 60)}:${Math.floor(audioDuration % 60).toString().padStart(2, '0')}` 
                   : '0:00'}
               </span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const a = document.createElement('a');
+                  a.href = msg.audioUrl!;
+                  a.download = `audio_${msg.id}.mp3`;
+                  a.target = '_blank';
+                  a.click();
+                  addToast('Downloading audio...', 'success');
+                }}
+                className="p-1.5 text-on-surface-variant hover:text-on-surface rounded-full transition-colors"
+                title="Download Audio"
+              >
+                <Download className="w-4 h-4" />
+              </button>
             </div>
           )}
 
@@ -361,7 +438,19 @@ const MessageBubbleComponent = ({ msg, isMe, onReply, onEdit, replyMessage, onMe
                 <p className="font-semibold text-sm truncate">{msg.document.name}</p>
                 <p className="text-xs opacity-70">{msg.document.size}</p>
               </div>
-              <button className={`p-2 rounded-full hover:bg-black/10 transition-colors`}>
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const a = document.createElement('a');
+                  a.href = msg.document.url;
+                  a.download = msg.document.name || 'document';
+                  a.target = '_blank';
+                  a.click();
+                  addToast('Downloading document...', 'success');
+                }}
+                className={`p-2 rounded-full hover:bg-black/10 transition-colors`}
+                title="Download Document"
+              >
                 <Download className="w-5 h-5" />
               </button>
             </div>
@@ -369,12 +458,31 @@ const MessageBubbleComponent = ({ msg, isMe, onReply, onEdit, replyMessage, onMe
 
           {msg.location && (
             <div className="mb-2">
-              <div className="w-full h-32 bg-black/10 rounded-xl mb-2 relative overflow-hidden flex items-center justify-center">
-                <MapPin className="w-8 h-8 text-red-500 absolute z-10" />
-                {/* Mock map background */}
-                <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'radial-gradient(circle at center, transparent 0%, rgba(0,0,0,0.1) 100%), repeating-linear-gradient(45deg, rgba(0,0,0,0.05) 0px, rgba(0,0,0,0.05) 10px, transparent 10px, transparent 20px)' }} />
+              <div className="w-full h-36 bg-slate-900 rounded-xl mb-2 relative overflow-hidden flex flex-col items-center justify-center border border-white/10 shadow-inner group/map">
+                {/* Stylized Google Maps Preview Card */}
+                <div 
+                  className="absolute inset-0 opacity-40 bg-cover bg-center"
+                  style={{ backgroundImage: `url('https://maps.googleapis.com/maps/api/staticmap?center=${msg.location.lat},${msg.location.lng}&zoom=14&size=400x200&sensor=false')` }}
+                />
+                <div className="relative z-10 flex flex-col items-center gap-1.5 text-center p-3">
+                  <div className="w-10 h-10 rounded-full bg-red-500/20 border-2 border-red-500 flex items-center justify-center animate-bounce shadow-lg">
+                    <MapPin className="w-5 h-5 text-red-500 fill-red-500" />
+                  </div>
+                  <span className="text-xs font-mono font-bold text-white bg-black/60 backdrop-blur-md px-2 py-0.5 rounded-full border border-white/10">
+                    {msg.location.lat?.toFixed(4)}, {msg.location.lng?.toFixed(4)}
+                  </span>
+                </div>
               </div>
-              <p className="text-sm font-medium leading-tight">{msg.location.address}</p>
+              <p className="text-sm font-bold leading-tight mb-1">{msg.location.address || 'Shared Location'}</p>
+              <a
+                href={`https://www.google.com/maps?q=${msg.location.lat},${msg.location.lng}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={e => e.stopPropagation()}
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-sky-400 hover:text-sky-300 hover:underline transition-colors mt-0.5"
+              >
+                Open in Google Maps ↗
+              </a>
             </div>
           )}
 

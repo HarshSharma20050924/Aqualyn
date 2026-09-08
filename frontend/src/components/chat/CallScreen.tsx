@@ -1,37 +1,60 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Phone, PhoneOff, Mic, MicOff, Video, VideoOff, Volume2, VolumeX } from 'lucide-react';
+import { Phone, PhoneOff, Mic, MicOff, Video, VideoOff, Volume2, VolumeX, Minimize2 } from 'lucide-react';
 import ContactAvatar from '../ui/ContactAvatar';
 
 interface CallScreenProps {
   callerName: string;
-  callerAvatar: string;
+  callerAvatar?: string;
   isVideo: boolean;
   isIncoming: boolean;
+  callState: 'incoming' | 'outgoing' | 'active';
+  duration: number;
+  isMuted: boolean;
+  isVideoEnabled: boolean;
+  localStream: MediaStream | null;
+  remoteStream: MediaStream | null;
   onAccept: () => void;
   onDecline: () => void;
   onEnd: () => void;
+  onToggleMute: () => void;
+  onToggleVideo: () => void;
 }
 
-export default function CallScreen({ callerName, callerAvatar, isVideo, isIncoming, onAccept, onDecline, onEnd }: CallScreenProps) {
-  const [callState, setCallState] = useState<'incoming' | 'outgoing' | 'active'>(isIncoming ? 'incoming' : 'outgoing');
-  const [isMuted, setIsMuted] = useState(false);
-  const [isSpeaker, setIsSpeaker] = useState(false);
-  const [isVideoEnabled, setIsVideoEnabled] = useState(isVideo);
-  const [duration, setDuration] = useState(0);
+export default function CallScreen({
+  callerName,
+  callerAvatar,
+  isVideo,
+  isIncoming,
+  callState,
+  duration,
+  isMuted,
+  isVideoEnabled,
+  localStream,
+  remoteStream,
+  onAccept,
+  onDecline,
+  onEnd,
+  onToggleMute,
+  onToggleVideo,
+}: CallScreenProps) {
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const [isSpeaker, setIsSpeaker] = useState(true);
 
-  // Outgoing calls stay in 'outgoing' state until accepted via socket event or ended by user.
-  // Real call acceptance will be handled by WebRTC signaling in the future.
-
+  // Attach local stream to local video element
   useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (callState === 'active') {
-      interval = setInterval(() => {
-        setDuration(prev => prev + 1);
-      }, 1000);
+    if (localVideoRef.current && localStream) {
+      localVideoRef.current.srcObject = localStream;
     }
-    return () => clearInterval(interval);
-  }, [callState]);
+  }, [localStream]);
+
+  // Attach remote stream to remote video element
+  useEffect(() => {
+    if (remoteVideoRef.current && remoteStream) {
+      remoteVideoRef.current.srcObject = remoteStream;
+    }
+  }, [remoteStream]);
 
   const formatDuration = (seconds: number) => {
     const m = Math.floor(seconds / 60);
@@ -39,114 +62,171 @@ export default function CallScreen({ callerName, callerAvatar, isVideo, isIncomi
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
-  const handleAccept = () => {
-    setCallState('active');
-    onAccept();
-  };
-
   return (
     <AnimatePresence>
       <motion.div
-        initial={{ opacity: 0, y: '100%' }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: '100%' }}
-        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-        className="fixed inset-0 z-[200] bg-slate-900 text-white flex flex-col items-center justify-between py-16"
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        className="fixed inset-0 z-[200] bg-slate-950 text-white flex flex-col justify-between overflow-hidden"
       >
-        {/* Background Blur */}
-        <div className="absolute inset-0 -z-10 overflow-hidden">
-          <ContactAvatar src={callerAvatar} name={callerName} className="w-full h-full object-cover opacity-20 blur-3xl scale-110" />
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/80 to-transparent" />
-        </div>
+        {/* Remote Video Stream (Full Screen for Video Calls) */}
+        {isVideo && remoteStream ? (
+          <video
+            ref={remoteVideoRef}
+            autoPlay
+            playsInline
+            className="absolute inset-0 w-full h-full object-cover z-0"
+          />
+        ) : (
+          /* Background Blur for Audio Call or Outgoing */
+          <div className="absolute inset-0 z-0 overflow-hidden">
+            <ContactAvatar src={callerAvatar} name={callerName} className="w-full h-full object-cover opacity-25 blur-3xl scale-125" />
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/70 to-slate-950/30" />
+          </div>
+        )}
+
+        {/* Local Video Picture-in-Picture (Top-Right) */}
+        {isVideo && localStream && isVideoEnabled && (
+          <motion.div 
+            drag
+            dragConstraints={{ left: 0, right: 200, top: 0, bottom: 400 }}
+            className="absolute top-6 right-6 z-20 w-32 h-44 rounded-2xl overflow-hidden shadow-2xl border-2 border-white/20 bg-slate-900 cursor-grab active:cursor-grabbing"
+          >
+            <video
+              ref={localVideoRef}
+              autoPlay
+              playsInline
+              muted
+              className="w-full h-full object-cover transform -scale-x-100"
+            />
+          </motion.div>
+        )}
 
         {/* Header Info */}
-        <div className="flex flex-col items-center gap-6 mt-10">
-          <motion.div 
-            animate={callState === 'incoming' ? { scale: [1, 1.1, 1] } : {}}
-            transition={{ repeat: Infinity, duration: 2 }}
-            className="relative"
-          >
-            <ContactAvatar src={callerAvatar} name={callerName} className="w-32 h-32 rounded-full border-4 border-white/20 shadow-2xl object-cover" />
-            {callState === 'active' && isVideoEnabled && (
-              <div className="absolute inset-0 rounded-full border-2 border-green-500 animate-pulse" />
+        <div className="relative z-10 pt-16 flex flex-col items-center gap-4 text-center px-6">
+          <div className="relative">
+            <ContactAvatar
+              src={callerAvatar}
+              name={callerName}
+              className="w-28 h-28 rounded-full border-4 border-white/20 shadow-2xl object-cover"
+            />
+            {callState === 'active' && (
+              <span className="absolute bottom-1 right-1 w-5 h-5 bg-emerald-500 rounded-full border-2 border-slate-950 animate-pulse" />
             )}
-          </motion.div>
-          <div className="text-center space-y-2">
-            <h2 className="text-3xl font-bold tracking-tight">{callerName}</h2>
-            <p className="text-white/60 font-medium">
-              {callState === 'incoming' && `${isVideo ? 'Incoming Video Call' : 'Incoming Audio Call'}...`}
-              {callState === 'outgoing' && 'Calling...'}
-              {callState === 'active' && formatDuration(duration)}
+          </div>
+
+          <div className="space-y-1">
+            <h2 className="text-2xl font-bold tracking-tight text-white drop-shadow-md">{callerName}</h2>
+            <p className="text-sm font-medium text-emerald-400/90 drop-shadow">
+              {callState === 'incoming' && `${isVideo ? '📹 Incoming Video Call...' : '📞 Incoming Audio Call...'}`}
+              {callState === 'outgoing' && `${isVideo ? '📹 Video Calling...' : '📞 Audio Calling...'}`}
+              {callState === 'active' && (
+                <span className="flex items-center justify-center gap-2 text-white/80">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                  {formatDuration(duration)}
+                </span>
+              )}
             </p>
           </div>
         </div>
 
-        {/* Controls */}
-        <div className="w-full px-8 pb-8">
+        {/* Floating Audio Wave Visualizer during Active Voice Call */}
+        {callState === 'active' && !isVideo && (
+          <div className="relative z-10 flex items-center justify-center gap-1.5 my-auto">
+            {[40, 70, 30, 90, 50, 80, 40].map((h, i) => (
+              <motion.div
+                key={i}
+                animate={{ height: [h / 3, h, h / 3] }}
+                transition={{ repeat: Infinity, duration: 1 + i * 0.2, ease: "easeInOut" }}
+                className="w-1.5 bg-emerald-400/80 rounded-full shadow-lg"
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Bottom Control Bar */}
+        <div className="relative z-10 pb-12 px-6 w-full max-w-md mx-auto">
           {callState === 'active' ? (
-            <div className="flex flex-col gap-8">
-              <div className="flex justify-center gap-6">
-                <button 
-                  onClick={() => setIsMuted(!isMuted)}
-                  className={`p-4 rounded-full transition-colors ${isMuted ? 'bg-white text-slate-900' : 'bg-white/10 text-white hover:bg-white/20'}`}
+            <div className="flex flex-col items-center gap-6">
+              {/* Media Controls */}
+              <div className="flex items-center gap-4 bg-slate-900/80 backdrop-blur-xl p-3 rounded-full border border-white/10 shadow-2xl">
+                <button
+                  onClick={onToggleMute}
+                  className={`p-4 rounded-full transition-all active:scale-95 ${
+                    isMuted ? 'bg-red-500 text-white shadow-lg shadow-red-500/30' : 'bg-white/10 text-white hover:bg-white/20'
+                  }`}
+                  title={isMuted ? 'Unmute Microphone' : 'Mute Microphone'}
                 >
                   {isMuted ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
                 </button>
-                <button 
-                  onClick={() => setIsVideoEnabled(!isVideoEnabled)}
-                  className={`p-4 rounded-full transition-colors ${!isVideoEnabled ? 'bg-white text-slate-900' : 'bg-white/10 text-white hover:bg-white/20'}`}
+
+                <button
+                  onClick={onToggleVideo}
+                  className={`p-4 rounded-full transition-all active:scale-95 ${
+                    !isVideoEnabled ? 'bg-red-500 text-white shadow-lg shadow-red-500/30' : 'bg-white/10 text-white hover:bg-white/20'
+                  }`}
+                  title={isVideoEnabled ? 'Turn Off Camera' : 'Turn On Camera'}
                 >
                   {!isVideoEnabled ? <VideoOff className="w-6 h-6" /> : <Video className="w-6 h-6" />}
                 </button>
-                <button 
+
+                <button
                   onClick={() => setIsSpeaker(!isSpeaker)}
-                  className={`p-4 rounded-full transition-colors ${isSpeaker ? 'bg-white text-slate-900' : 'bg-white/10 text-white hover:bg-white/20'}`}
+                  className={`p-4 rounded-full transition-all active:scale-95 ${
+                    isSpeaker ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30' : 'bg-white/10 text-white hover:bg-white/20'
+                  }`}
+                  title="Toggle Speaker"
                 >
                   {isSpeaker ? <Volume2 className="w-6 h-6" /> : <VolumeX className="w-6 h-6" />}
                 </button>
               </div>
-              <div className="flex justify-center">
-                <button 
-                  onClick={onEnd}
-                  className="p-5 rounded-full bg-red-500 text-white hover:bg-red-600 transition-colors shadow-lg shadow-red-500/30"
-                >
-                  <PhoneOff className="w-8 h-8" />
-                </button>
-              </div>
+
+              {/* End Call Button */}
+              <button
+                onClick={onEnd}
+                className="w-16 h-16 rounded-full bg-red-600 hover:bg-red-700 text-white flex items-center justify-center shadow-xl shadow-red-600/40 transition-all active:scale-90"
+                title="End Call"
+              >
+                <PhoneOff className="w-7 h-7" />
+              </button>
             </div>
           ) : callState === 'incoming' ? (
-            <div className="flex justify-between px-8">
-              <motion.button 
-                animate={{ y: [0, -10, 0] }}
-                transition={{ repeat: Infinity, duration: 1.5, delay: 0.2 }}
-                onClick={onDecline}
-                className="flex flex-col items-center gap-2"
-              >
-                <div className="p-5 rounded-full bg-red-500 text-white shadow-lg shadow-red-500/30">
-                  <PhoneOff className="w-8 h-8" />
-                </div>
-                <span className="text-sm font-medium text-white/80">Decline</span>
-              </motion.button>
-              
-              <motion.button 
-                animate={{ y: [0, -10, 0] }}
+            /* Incoming Accept / Decline buttons */
+            <div className="flex items-center justify-around">
+              <motion.button
+                animate={{ y: [0, -8, 0] }}
                 transition={{ repeat: Infinity, duration: 1.5 }}
-                onClick={handleAccept}
-                className="flex flex-col items-center gap-2"
+                onClick={onDecline}
+                className="flex flex-col items-center gap-2 group"
               >
-                <div className="p-5 rounded-full bg-green-500 text-white shadow-lg shadow-green-500/30">
-                  {isVideo ? <Video className="w-8 h-8" /> : <Phone className="w-8 h-8" />}
+                <div className="w-16 h-16 rounded-full bg-red-600 hover:bg-red-700 text-white flex items-center justify-center shadow-xl shadow-red-600/40 transition-all active:scale-90">
+                  <PhoneOff className="w-7 h-7" />
                 </div>
-                <span className="text-sm font-medium text-white/80">Accept</span>
+                <span className="text-xs font-bold text-white/80 group-hover:text-white">Decline</span>
+              </motion.button>
+
+              <motion.button
+                animate={{ y: [0, -8, 0] }}
+                transition={{ repeat: Infinity, duration: 1.5, delay: 0.2 }}
+                onClick={onAccept}
+                className="flex flex-col items-center gap-2 group"
+              >
+                <div className="w-16 h-16 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center shadow-xl shadow-emerald-500/40 transition-all active:scale-90">
+                  {isVideo ? <Video className="w-7 h-7" /> : <Phone className="w-7 h-7" />}
+                </div>
+                <span className="text-xs font-bold text-white/80 group-hover:text-white">Accept</span>
               </motion.button>
             </div>
           ) : (
+            /* Outgoing Cancel button */
             <div className="flex justify-center">
-              <button 
+              <button
                 onClick={onEnd}
-                className="p-5 rounded-full bg-red-500 text-white hover:bg-red-600 transition-colors shadow-lg shadow-red-500/30"
+                className="w-16 h-16 rounded-full bg-red-600 hover:bg-red-700 text-white flex items-center justify-center shadow-xl shadow-red-600/40 transition-all active:scale-90"
+                title="Cancel Call"
               >
-                <PhoneOff className="w-8 h-8" />
+                <PhoneOff className="w-7 h-7" />
               </button>
             </div>
           )}

@@ -7,6 +7,8 @@
     "dev": "ts-node-dev src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
+    "seed:content": "node seed-content.js",
+    "seed:dbjson": "node seed-dbjson.js",
     "deploy": "npx prisma generate && npx prisma migrate resolve --rolled-back 20260624174211_ai_agents 2>/dev/null; npx prisma migrate deploy && node dist/server.js"
   },
   "keywords": [],

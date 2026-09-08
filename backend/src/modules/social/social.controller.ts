@@ -16,6 +16,13 @@ export const getFeed = catchAsync(async (req: any, res: Response, next: NextFunc
     res.json(feed);
 });
 
+export const getExplorePosts = catchAsync(async (req: any, res: Response, next: NextFunction) => {
+    const cursor = req.query.cursor as string | undefined;
+    const limit = Math.min(parseInt(req.query.limit as string) || 30, 60);
+    const result = await SocialService.getExplorePosts(limit, cursor);
+    res.json(result);
+});
+
 export const getActiveStories = catchAsync(async (req: any, res: Response, next: NextFunction) => {
     const stories = await SocialService.getActiveStories(req.user.id);
     res.json(stories);

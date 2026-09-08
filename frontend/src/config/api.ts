@@ -35,6 +35,7 @@ export const ENDPOINTS = {
     GROUP_SETTINGS: (id: string) => `${API_BASE_URL}/api/groups/${id}/settings`,
     USER_SEARCH: (q: string) => `${API_BASE_URL}/api/users/search?q=${encodeURIComponent(q)}`,
     FEED: `${API_BASE_URL}/api/social/feed`,
+    EXPLORE_POSTS: (cursor?: string) => `${API_BASE_URL}/api/social/explore${cursor ? `?cursor=${cursor}` : ''}`,
     STORIES: `${API_BASE_URL}/api/social/stories`,
     CREATE_POST: `${API_BASE_URL}/api/social/post`,
     DELETE_POST: (id: string) => `${API_BASE_URL}/api/social/post/${id}`,
