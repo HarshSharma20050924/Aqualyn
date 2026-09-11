@@ -298,8 +298,8 @@ export class SocketService {
         });
 
         // ── Anonymous Rooms ──────────────────────────────────────────────────────
-        socket.on('join_anon_room', (data: { token: string; guestId: string; guestName: string; isHost: boolean }) => {
-            const { token, guestId, guestName, isHost } = data;
+        socket.on('join_anon_room', (data: { token: string; guestId: string; guestName: string; isHost: boolean; alreadyJoined?: boolean }) => {
+            const { token, guestId, guestName, isHost, alreadyJoined } = data;
             const roomKey = `anon:${token}`;
 
             // Init room metadata if new
@@ -311,18 +311,27 @@ export class SocketService {
             if (isHost) {
                 room.hostSocketId = socket.id;
                 socket.join(roomKey);
-                room.participants.push({ guestId, guestName });
-                console.log(`[AnonRoom] Host ${guestName} created room ${token}`);
+                if (!room.participants.some(p => p.guestId === guestId)) {
+                    room.participants.push({ guestId, guestName });
+                }
+                console.log(`[AnonRoom] Host ${guestName} created/rejoined room ${token}`);
             } else {
-                // Check if room is private
-                if (room.isPrivate) {
-                    // Check if they are already a participant (e.g., reloading or returning from ChatList)
-                    if (room.participants.some(p => p.guestId === guestId)) {
-                        socket.join(roomKey);
-                        socket.emit('anon_room_joined', { token });
-                        return;
+                // Check if they are already a participant (in-memory) OR flagged as returning from localStorage
+                const isKnownParticipant = room.participants.some(p => p.guestId === guestId) || alreadyJoined;
+
+                if (isKnownParticipant) {
+                    // Returning guest — auto-approve regardless of room privacy
+                    if (!room.participants.some(p => p.guestId === guestId)) {
+                        room.participants.push({ guestId, guestName });
                     }
-                    
+                    socket.join(roomKey);
+                    socket.emit('anon_room_joined', { token });
+                    console.log(`[AnonRoom] ${guestName} rejoined room ${token} (returning guest)`);
+                    return;
+                }
+
+                // First-time joiner: check privacy
+                if (room.isPrivate) {
                     // Send join request to host
                     const requestId = `req-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
                     const request = { id: requestId, guestId, guestName, status: 'pending' };

@@ -41,7 +41,9 @@ export default function AnonymousChatroomScreen({
   const [requests, setRequests] = useState<RoomRequest[]>([]);
   // null = can chat, 'waiting' = pending approval, 'denied' = rejected
   const [joinState, setJoinState] = useState<null | 'waiting' | 'denied'>(() => {
+    // Host never waits
     if (isHost) return null;
+    // Check if we have previously joined this room (returning user)
     try {
       const stored = localStorage.getItem('anon_rooms');
       if (stored) {
@@ -49,6 +51,7 @@ export default function AnonymousChatroomScreen({
         if (existing.some((r: any) => r.token === roomToken)) return null;
       }
     } catch (e) {}
+    // First time joiner: private rooms wait, public join directly
     return isPrivate ? 'waiting' : null;
   });
   const [showMenu, setShowMenu] = useState(false);
@@ -132,11 +135,22 @@ export default function AnonymousChatroomScreen({
     socket.on('connect', () => {
       if (joinedRef.current) return;
       joinedRef.current = true;
+      // Pass `alreadyJoined` flag so server can skip approval for known guests
+      const alreadyJoined = (() => {
+        try {
+          const stored = localStorage.getItem('anon_rooms');
+          if (stored) {
+            return JSON.parse(stored).some((r: any) => r.token === roomToken);
+          }
+        } catch (e) {}
+        return false;
+      })();
       socket.emit('join_anon_room', {
         token: roomToken,
         guestId: guestUser.guestId,
         guestName: guestUser.displayName,
         isHost,
+        alreadyJoined,
       });
       if (isHost) {
         socket.emit('anon_room_set_private', { token: roomToken, isPrivate });
