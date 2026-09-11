@@ -1,19 +1,57 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Heart, MessageCircle, Send, Bookmark, MoreVertical, Plus, X, ArrowUp, Compass } from 'lucide-react';
+import { Heart, MessageCircle, Send, Bookmark, MoreVertical, Plus, X, ArrowUp, Compass, LogIn } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { Post, User, Story } from '../types';
 import StoryViewer from '../components/StoryViewer';
 import StoryCreator from '../components/stories/StoryCreator';
 import ContactAvatar from '../components/ui/ContactAvatar';
+import SignInGateOverlay from '../components/ui/SignInGateOverlay';
+import BubbleLoader from '../components/ui/BubbleLoader';
+
 
 export default function FeedScreen({ onNavigate }: { onNavigate: (s: string) => void }) {
-  const { posts, stories, globalUsers, currentUser, likePost, savePost, addToast, isFetchingData } = useAppContext();
+  const { posts, stories, globalUsers, currentUser, likePost, savePost, addToast, isFetchingData, isGuestMode, feedNextCursor, feedHasMore, isFetchingMoreFeed, fetchMoreFeedPosts } = useAppContext();
   const [doubleClickTarget, setDoubleClickTarget] = useState<string | null>(null);
   const [viewerStories, setViewerStories] = useState<Story[]>([]);
   const [activeStoryIndex, setActiveStoryIndex] = useState<number | null>(null);
   const [isCreatorOpen, setIsCreatorOpen] = useState(false);
   const [commentSheetPostId, setCommentSheetPostId] = useState<string | null>(null);
+  const [gateOpen, setGateOpen] = useState(false);
+  const [gateAction, setGateAction] = useState('interact');
+  const sentinelRef = React.useRef<HTMLDivElement>(null);
+  const isFetchingRef = React.useRef(false);
+
+  // Sync ref with context state to avoid stale closures in observer
+  React.useEffect(() => {
+    isFetchingRef.current = isFetchingMoreFeed;
+  }, [isFetchingMoreFeed]);
+
+  // IntersectionObserver for pagination
+  React.useEffect(() => {
+    if (!sentinelRef.current) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && feedHasMore && !isFetchingRef.current && feedNextCursor) {
+          fetchMoreFeedPosts();
+        }
+      },
+      { rootMargin: '200px' }
+    );
+    observer.observe(sentinelRef.current);
+    return () => observer.disconnect();
+  }, [feedHasMore, feedNextCursor, fetchMoreFeedPosts]);
+
+  // Guest guard — opens sign-in gate instead of performing action
+  const requireAuth = (action: string, fn: () => void) => {
+    if (isGuestMode) {
+      setGateAction(action);
+      setGateOpen(true);
+      return;
+    }
+    fn();
+  };
+
 
   const activeStories = stories.filter(s => {
     const createdAt = new Date(s.createdAt);
@@ -160,9 +198,12 @@ export default function FeedScreen({ onNavigate }: { onNavigate: (s: string) => 
 
     const handleDoubleTap = () => {
       setDoubleClickTarget(post.id);
-      if (!isLiked) likePost(post.id);
+      requireAuth('like posts', () => {
+        if (!isLiked) likePost(post.id);
+      });
       setTimeout(() => setDoubleClickTarget(null), 1000);
     };
+
 
     const handleDelete = async () => {
       if (window.confirm('Delete this post?')) {
@@ -247,12 +288,12 @@ export default function FeedScreen({ onNavigate }: { onNavigate: (s: string) => 
         <div className="p-3 sm:px-4">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-4">
-              <button onClick={() => likePost(post.id)} className="transition-transform active:scale-90">
+              <button onClick={() => requireAuth('like posts', () => likePost(post.id))} className="transition-transform active:scale-90">
                 <Heart className={`w-7 h-7 ${isLiked ? 'fill-red-500 text-red-500' : 'text-on-surface'}`} />
               </button>
               {/* Comment button opens sheet */}
               <button
-                onClick={() => setCommentSheetPostId(post.id)}
+                onClick={() => requireAuth('comment on posts', () => setCommentSheetPostId(post.id))}
                 className="transition-transform active:scale-90 text-on-surface"
               >
                 <MessageCircle className="w-7 h-7" />
@@ -261,7 +302,7 @@ export default function FeedScreen({ onNavigate }: { onNavigate: (s: string) => 
                 <Send className="w-7 h-7" />
               </button>
             </div>
-            <button onClick={() => { savePost(post.id); addToast(isSaved ? 'Removed from saved' : 'Saved to collection', 'success'); }}>
+            <button onClick={() => requireAuth('save posts', () => { savePost(post.id); addToast(isSaved ? 'Removed from saved' : 'Saved to collection', 'success'); })}>
               <Bookmark className={`w-7 h-7 ${isSaved ? 'fill-on-surface' : 'text-on-surface'}`} />
             </button>
           </div>
@@ -340,7 +381,22 @@ export default function FeedScreen({ onNavigate }: { onNavigate: (s: string) => 
         </div>
       </header>
 
-      {/* Main Feed */}
+      {/* Guest mode banner */}
+      {isGuestMode && (
+        <div className="sticky top-16 z-40 flex items-center justify-between px-4 py-2 bg-gradient-to-r from-secondary/10 to-primary/10 border-b border-secondary/20">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-secondary animate-pulse" />
+            <span className="text-xs font-medium text-on-surface-variant">Browsing as guest — <span className="font-bold text-secondary">read-only</span></span>
+          </div>
+          <button
+            onClick={() => { window.history.replaceState(null, '', window.location.pathname); window.location.reload(); }}
+            className="text-xs font-bold text-secondary flex items-center gap-1"
+          >
+            <LogIn className="w-3.5 h-3.5" /> Sign In
+          </button>
+        </div>
+      )}
+
       <main className="pt-16 max-w-lg mx-auto">
         {/* Stories Tray */}
         <div className="py-4 border-b border-surface-container overflow-x-auto scrollbar-hide flex items-center px-4 gap-4">
@@ -390,10 +446,20 @@ export default function FeedScreen({ onNavigate }: { onNavigate: (s: string) => 
           ) : feedPosts.length === 0 ? (
             <div className="text-center mt-20 opacity-60">
               <p className="text-on-surface-variant font-medium">No posts yet.</p>
-              <p className="text-sm mt-2">Follow some friends to see their updates here.</p>
+              {!isGuestMode && <p className="text-sm mt-2">Follow some friends to see their updates here.</p>}
             </div>
           ) : (
-            feedPosts.map(post => <PostCard key={post.id} post={post} />)
+            <>
+              {feedPosts.map(post => <PostCard key={post.id} post={post} />)}
+              
+              {/* Pagination Sentinel */}
+              <div ref={sentinelRef} className="h-20 flex items-center justify-center w-full">
+                {isFetchingMoreFeed && <BubbleLoader width={40} height={40} />}
+                {!feedHasMore && feedPosts.length > 0 && (
+                  <span className="text-xs text-on-surface-variant font-medium opacity-60">You've caught up!</span>
+                )}
+              </div>
+            </>
           )}
         </div>
       </main>
@@ -416,6 +482,20 @@ export default function FeedScreen({ onNavigate }: { onNavigate: (s: string) => 
           <CommentSheet post={commentSheetPost} />
         )}
       </AnimatePresence>
+
+      {/* Sign-In Gate for guest users */}
+      <SignInGateOverlay
+        isOpen={gateOpen}
+        action={gateAction}
+        onClose={() => setGateOpen(false)}
+        onSignIn={() => {
+          setGateOpen(false);
+          window.history.replaceState(null, '', window.location.pathname);
+          // Force reload to hit login screen cleanly
+          sessionStorage.removeItem('aqualyn_guest');
+          window.location.reload();
+        }}
+      />
     </motion.div>
   );
 }

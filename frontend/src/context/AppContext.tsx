@@ -1,5 +1,6 @@
 import React, { useState, ReactNode, useEffect, useRef } from 'react';
-import { User, Chat, Message, Folder, ThemeSettings, Post, Story, Notification } from '../types';
+import { User, Chat, Message, Folder, ThemeSettings, Post, Story, Notification, GuestUser } from '../types';
+
 export type { Story };
 import { io, Socket } from 'socket.io-client';
 import { API_BASE_URL, ENDPOINTS } from '../config/api';
@@ -30,12 +31,54 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [aquaIntensity, setAquaIntensity] = useState(50);
   const [stories, setStories] = useState<Story[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
+  const [feedNextCursor, setFeedNextCursor] = useState<string | null>(null);
+  const [feedHasMore, setFeedHasMore] = useState<boolean>(true);
+  const [isFetchingMoreFeed, setIsFetchingMoreFeed] = useState<boolean>(false);
+  const feedFetchingRef = useRef(false);
+  
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [globalUsers, setGlobalUsers] = useState<User[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [activeContactId, setActiveContactId] = useState<string | null>(null);
   // Store the ID of the chat from which we navigated to a contact profile
   const [originChatId, setOriginChatId] = useState<string | null>(null);
+
+  // ── Guest / Anonymous Mode ──
+  const [isGuestMode, setIsGuestModeState] = useState(false);
+  const [guestUser, setGuestUser] = useState<GuestUser | null>(() => {
+    try {
+      const stored = sessionStorage.getItem('aqualyn_guest');
+      return stored ? JSON.parse(stored) : null;
+    } catch { return null; }
+  });
+
+  const enterGuestMode = (): GuestUser => {
+    const num = Math.floor(1000 + Math.random() * 9000);
+    const uuid = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+    const guest: GuestUser = { guestId: `guest-${uuid}`, displayName: `Guest #${num}` };
+    sessionStorage.setItem('aqualyn_guest', JSON.stringify(guest));
+    setGuestUser(guest);
+    setIsGuestModeState(true);
+    return guest;
+  };
+
+  const exitGuestMode = () => {
+    sessionStorage.removeItem('aqualyn_guest');
+    setGuestUser(null);
+    setIsGuestModeState(false);
+  };
+
+  const setGuestMode = (val: boolean) => {
+    if (val) enterGuestMode();
+    else exitGuestMode();
+  };
+
+  // Restore guest mode on reload if sessionStorage has a guest session
+  useEffect(() => {
+    const stored = sessionStorage.getItem('aqualyn_guest');
+    if (stored) setIsGuestModeState(true);
+  }, []);
+
 
   const activeChatIdRef = useRef<string | null>(null);
   const currentUserRef = useRef<User | null>(null);
@@ -65,6 +108,60 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setActiveChatId, activeChatId
   );
 
+  const mapPost = (p: any): Post => ({
+    ...p,
+    userId: p.authorId || p.userId,
+    userName: p.author?.displayName || p.author?.username || p.userName || 'User',
+    userAvatar: p.author?.avatar || p.userAvatar,
+    caption: p.content || p.caption || '',
+    likes: p.likes?.map((l: any) => l.userId).filter(Boolean) || [],
+    comments: p.comments?.map((c: any) => ({
+      id: c.id, userId: c.userId,
+      userName: c.user?.displayName || c.user?.username || c.userName || 'User',
+      userAvatar: c.user?.avatar || c.userAvatar, text: c.content || c.text || '',
+      timestamp: c.createdAt ? new Date(c.createdAt).toLocaleString() : 'Just now'
+    })) || [],
+    timestamp: p.createdAt ? new Date(p.createdAt).toLocaleString() : 'Just now',
+    mediaUrl: p.mediaUrl || p.imageUrl || p.videoUrl,
+    imageUrl: p.mediaUrl || p.imageUrl,
+    videoUrl: p.videoUrl,
+  });
+
+  const fetchMoreFeedPosts = async () => {
+    if (feedFetchingRef.current || !feedHasMore) return;
+    feedFetchingRef.current = true;
+    setIsFetchingMoreFeed(true);
+    
+    try {
+      const endpoint = isGuestMode 
+        ? ENDPOINTS.EXPLORE_POSTS(feedNextCursor || undefined) 
+        : `${ENDPOINTS.FEED}${feedNextCursor ? `?cursor=${feedNextCursor}` : ''}`;
+        
+      const res = await apiFetch(endpoint);
+      if (res.ok) {
+        const data = await res.json();
+        const rawPosts = Array.isArray(data) ? data : (data.posts || []);
+        const nextCursor = data.nextCursor || null;
+        const hasMore = data.hasMore !== undefined ? data.hasMore : rawPosts.length > 0;
+        
+        const newPosts = rawPosts.map(mapPost);
+        
+        setPosts(prev => {
+          const prevIds = new Set(prev.map(p => p.id));
+          const uniqueNew = newPosts.filter((p: any) => !prevIds.has(p.id));
+          return [...prev, ...uniqueNew];
+        });
+        setFeedNextCursor(nextCursor);
+        setFeedHasMore(hasMore);
+      }
+    } catch (e) {
+      console.error("[Data] Fetch more feed posts failed:", e);
+    } finally {
+      setIsFetchingMoreFeed(false);
+      feedFetchingRef.current = false;
+    }
+  };
+
   const fetchInitialData = async () => {
     setIsFetchingData(true);
     try {
@@ -76,24 +173,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         apiFetch(ENDPOINTS.STORIES).catch(() => ({ ok: false }))
       ]);
 
-      const mapPost = (p: any): Post => ({
-        ...p,
-        userId: p.authorId || p.userId,
-        userName: p.author?.displayName || p.author?.username || p.userName || 'User',
-        userAvatar: p.author?.avatar || p.userAvatar,
-        caption: p.content || p.caption || '',
-        likes: p.likes?.map((l: any) => l.userId).filter(Boolean) || [],
-        comments: p.comments?.map((c: any) => ({
-          id: c.id, userId: c.userId,
-          userName: c.user?.displayName || c.user?.username || c.userName || 'User',
-          userAvatar: c.user?.avatar || c.userAvatar, text: c.content || c.text || '',
-          timestamp: c.createdAt ? new Date(c.createdAt).toLocaleString() : 'Just now'
-        })) || [],
-        timestamp: p.createdAt ? new Date(p.createdAt).toLocaleString() : 'Just now',
-        mediaUrl: p.mediaUrl || p.imageUrl || p.videoUrl,
-        imageUrl: p.mediaUrl || p.imageUrl,
-        videoUrl: p.videoUrl,
-      });
 
       if (notifRes.ok) {
         const nData = await (notifRes as Response).json();
@@ -105,7 +184,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       if (feedRes.ok) {
         const feedData = await (feedRes as Response).json();
-        if (Array.isArray(feedData)) setPosts(feedData.map(mapPost));
+        const rawPosts = Array.isArray(feedData) ? feedData : (feedData.posts || []);
+        if (rawPosts.length > 0) {
+           setPosts(rawPosts.map(mapPost));
+           setFeedNextCursor(feedData.nextCursor || null);
+           setFeedHasMore(feedData.hasMore !== undefined ? feedData.hasMore : rawPosts.length > 0);
+        }
       }
       if (storyRes.ok) {
         const storyData = await (storyRes as Response).json();
@@ -177,8 +261,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       dataFetchedRef.current = currentUser.id;
     } else if (!currentUser) {
       dataFetchedRef.current = null;
+      if (isGuestMode) {
+        // Guest mode — fetch explore posts for feed
+        setIsFetchingData(false);
+        if (posts.length === 0) fetchMoreFeedPosts();
+      } else {
+        // Not logged in — stop the skeleton immediately
+        setIsFetchingData(false);
+      }
     }
-  }, [currentUser]);
+  }, [currentUser, isGuestMode]);
+
 
   useEffect(() => {
     if (currentUser) {
@@ -408,8 +501,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       folders, setFolders, theme, setTheme, aquaIntensity, setAquaIntensity,
       appLockPin, setAppLockPin, archiveLockPin, setArchiveLockPin, isAppLocked, setIsAppLocked,
       stories, setStories, typingUsers, logout: actions.logout,
-      posts, setPosts, notifications, setNotifications, globalUsers, setGlobalUsers
+      posts, setPosts, feedNextCursor, feedHasMore, isFetchingMoreFeed, fetchMoreFeedPosts,
+      addPost: actions.addPost, deletePost: actions.deletePost,
+      likePost: actions.likePost, commentPost: actions.commentPost,
+      notifications, setNotifications, globalUsers, setGlobalUsers,
+      isGuestMode, guestUser, setGuestMode, enterGuestMode, exitGuestMode,
     }}>
+
       {children}
     </AppContext.Provider>
   );

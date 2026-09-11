@@ -47,7 +47,25 @@ export default function ProfileScreen({ onNavigate, isSidebar = false }: { onNav
     }
   };
 
-  if (!currentUser) return null;
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-surface flex flex-col items-center justify-center px-6 gap-6">
+        <div className="w-20 h-20 rounded-full bg-gradient-to-br from-secondary/20 to-primary/20 flex items-center justify-center">
+          <Camera className="w-9 h-9 text-secondary" />
+        </div>
+        <div className="text-center">
+          <h2 className="font-headline font-bold text-on-surface text-2xl mb-2">Your Profile</h2>
+          <p className="text-on-surface-variant text-sm max-w-xs">Create an account to build your profile, share posts and connect with others.</p>
+        </div>
+        <button
+          onClick={() => onNavigate('login')}
+          className="h-13 px-8 bg-gradient-to-br from-secondary to-primary text-white font-headline font-bold rounded-full shadow-lg hover:scale-105 transition-all"
+        >
+          Sign In / Create Account
+        </button>
+      </div>
+    );
+  }
 
   const myPosts = posts.filter(p => p.userId === currentUser.id && !p.isArchived);
   const archivedPosts = posts.filter(p => p.userId === currentUser.id && p.isArchived);

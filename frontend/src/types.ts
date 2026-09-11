@@ -8,6 +8,7 @@ export interface Post {
   mediaUrl?: string;
   mediaType?: 'image' | 'video';
   caption: string;
+  location?: string;
   text?: string;
   likes: string[];
   comments: { id: string; userId: string; userName: string; userAvatar: string; text: string; timestamp: string }[];
@@ -162,6 +163,33 @@ export interface ThemeSettings {
   wallpaper?: string;
   bubbleStyle: 'rounded' | 'sharp' | 'glass';
   fontSize: number;
+}
+
+// ── Anonymous Chatroom Types ──
+export interface Room {
+  id: string;
+  token: string;
+  name?: string;
+  isPrivate: boolean;
+  hostGuestId: string; // the ephemeral guest ID of the creator
+  createdAt: string;
+  participantCount?: number;
+}
+
+export interface RoomRequest {
+  id: string;
+  roomId: string;
+  guestId: string;
+  guestName: string;
+  guestAvatar?: string;
+  status: 'pending' | 'accepted' | 'denied';
+  createdAt: string;
+}
+
+export interface GuestUser {
+  guestId: string;  // ephemeral UUID stored in sessionStorage
+  displayName: string; // 'Guest #XXXX'
+  avatar?: string;
 }
 
 export interface CallSession {

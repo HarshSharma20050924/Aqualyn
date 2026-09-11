@@ -15,6 +15,8 @@ import { messageQueue } from '../workers/MessageQueue';
  */
 export class SocketService {
     private static io: Server;
+    // In-memory store for anonymous rooms: token → room metadata
+    private static anonRooms: Map<string, { isPrivate: boolean; hostSocketId: string; requests: any[]; participants: any[] }> = new Map();
 
     static emitToUser(userId: string, event: string, data: any) {
         if (this.io) {
@@ -294,7 +296,114 @@ export class SocketService {
                 } catch (e) { console.error('[Socket] end_call log error:', e); }
             }
         });
+
+        // ── Anonymous Rooms ──────────────────────────────────────────────────────
+        socket.on('join_anon_room', (data: { token: string; guestId: string; guestName: string; isHost: boolean }) => {
+            const { token, guestId, guestName, isHost } = data;
+            const roomKey = `anon:${token}`;
+
+            // Init room metadata if new
+            if (!SocketService.anonRooms.has(token)) {
+                SocketService.anonRooms.set(token, { isPrivate: false, hostSocketId: socket.id, requests: [], participants: [] });
+            }
+            const room = SocketService.anonRooms.get(token)!;
+
+            if (isHost) {
+                room.hostSocketId = socket.id;
+                socket.join(roomKey);
+                room.participants.push({ guestId, guestName });
+                console.log(`[AnonRoom] Host ${guestName} created room ${token}`);
+            } else {
+                // Check if room is private
+                if (room.isPrivate) {
+                    // Check if they are already a participant (e.g., reloading or returning from ChatList)
+                    if (room.participants.some(p => p.guestId === guestId)) {
+                        socket.join(roomKey);
+                        socket.emit('anon_room_joined', { token });
+                        return;
+                    }
+                    
+                    // Send join request to host
+                    const requestId = `req-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+                    const request = { id: requestId, guestId, guestName, status: 'pending' };
+                    room.requests.push(request);
+                    // Notify host
+                    this.io.to(room.hostSocketId).emit('anon_room_request', request);
+                    // Tell joiner they're waiting
+                    socket.emit('anon_room_waiting', { requestId });
+                    // Associate socket with this request for later
+                    socket.data.anonRequestId = requestId;
+                    socket.data.anonToken = token;
+                    console.log(`[AnonRoom] ${guestName} waiting for approval in ${token}`);
+                } else {
+                    // Public room — join directly
+                    socket.join(roomKey);
+                    room.participants.push({ guestId, guestName });
+                    // Notify all in room
+                    this.io.to(roomKey).emit('anon_room_participant_joined', { guestId, guestName });
+                    socket.emit('anon_room_joined', { token });
+                    console.log(`[AnonRoom] ${guestName} joined public room ${token}`);
+                }
+            }
+        });
+
+        socket.on('anon_room_set_private', (data: { token: string; isPrivate: boolean }) => {
+            const room = SocketService.anonRooms.get(data.token);
+            if (room && room.hostSocketId === socket.id) {
+                room.isPrivate = data.isPrivate;
+            }
+        });
+
+        socket.on('anon_room_message', (data: { token: string; message: any }) => {
+            const { token, message } = data;
+            const roomKey = `anon:${token}`;
+            // Broadcast to all in room (including sender so they get server timestamp)
+            socket.to(roomKey).emit('anon_room_message', message);
+        });
+
+        socket.on('anon_room_typing', (data: { token: string; guestName: string }) => {
+            const { token, guestName } = data;
+            socket.to(`anon:${token}`).emit('anon_room_user_typing', { guestName, isTyping: true });
+        });
+
+        socket.on('anon_room_stop_typing', (data: { token: string; guestName: string }) => {
+            const { token, guestName } = data;
+            socket.to(`anon:${token}`).emit('anon_room_user_typing', { guestName, isTyping: false });
+        });
+
+        socket.on('anon_room_delete_message', (data: { token: string; messageId: string }) => {
+            const { token, messageId } = data;
+            socket.to(`anon:${token}`).emit('anon_room_message_deleted', { messageId });
+        });
+
+        socket.on('anon_room_respond', (data: { token: string; requestId: string; action: 'accept' | 'deny'; guestName?: string }) => {
+            const { token, requestId, action } = data;
+            const room = SocketService.anonRooms.get(token);
+            if (!room) return;
+
+            const req = room.requests.find((r: any) => r.id === requestId);
+            if (!req) return;
+            req.status = action === 'accept' ? 'accepted' : 'denied';
+
+            // Find the waiting socket and notify them
+            const sockets = this.io.sockets.sockets;
+            for (const [, s] of sockets) {
+                if (s.data.anonRequestId === requestId && s.data.anonToken === token) {
+                    if (action === 'accept') {
+                        const roomKey = `anon:${token}`;
+                        s.join(roomKey);
+                        room.participants.push({ guestId: req.guestId, guestName: req.guestName });
+                        s.emit('anon_room_joined', { token });
+                        this.io.to(roomKey).emit('anon_room_participant_joined', { guestId: req.guestId, guestName: req.guestName });
+                    } else {
+                        s.emit('anon_room_denied', { requestId });
+                    }
+                    break;
+                }
+            }
+        });
     }
+
 
     private static async handleSendMessage(socket: Socket, data: any) {
         const { senderId, receiverId, chatId, text, imageUrl, videoUrl } = data;

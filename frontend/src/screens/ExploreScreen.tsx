@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, ArrowLeft, TrendingUp, Radio, Users, Play, Droplet, Check, Compass, Lock, Hash, X, Film, Heart, MessageCircle } from 'lucide-react';
+import { Search, ArrowLeft, TrendingUp, Radio, Users, Play, Droplet, Check, Compass, Lock, Hash, X, Film, Heart, MessageCircle, LogIn } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { apiFetch } from '../utils/fetcher';
 import { ENDPOINTS } from '../config/api';
 import PostViewer from '../components/posts/PostViewer';
 import ContactAvatar from '../components/ui/ContactAvatar';
 import BubbleLoader from '../components/ui/BubbleLoader';
+import SignInGateOverlay from '../components/ui/SignInGateOverlay';
+
 
 const CATEGORIES = ['All', 'Creative', 'Tech', 'Lifestyle', 'Design', 'Health'];
 
@@ -83,7 +85,7 @@ function saveCache(posts: any[]) {
 }
 
 export default function ExploreScreen({ onBack, onNavigate }: { onBack: () => void; onNavigate: (s: string) => void }) {
-  const { posts, currentUser, addToast, fetchInitialData, setActiveChatId, setActiveContactId, setGlobalUsers, followUser, startChatWithContact } = useAppContext();
+  const { posts, currentUser, addToast, fetchInitialData, setActiveChatId, setActiveContactId, setGlobalUsers, followUser, startChatWithContact, isGuestMode } = useAppContext();
 
   const [query, setQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
@@ -118,6 +120,15 @@ export default function ExploreScreen({ onBack, onNavigate }: { onBack: () => vo
     try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { return []; }
   });
   const [isInputFocused, setIsInputFocused] = useState(false);
+
+  // Guest gate
+  const [gateOpen, setGateOpen] = useState(false);
+  const [gateAction, setGateAction] = useState('interact');
+  const requireAuth = (action: string, fn: () => void) => {
+    if (isGuestMode) { setGateAction(action); setGateOpen(true); return; }
+    fn();
+  };
+
   const inputRef = useRef<HTMLInputElement>(null);
 
   const saveToHistory = (q: string) => {
@@ -713,7 +724,7 @@ export default function ExploreScreen({ onBack, onNavigate }: { onBack: () => vo
                         </button>
                       ) : (
                         <button
-                          onClick={() => followUser(user.id)}
+                          onClick={() => requireAuth('follow users', () => followUser(user.id))}
                           className="px-4 py-1.5 rounded-full liquid-gradient text-white font-bold text-[11px] active:scale-95 transition-all shadow-sm aqua-glow shrink-0"
                         >
                           Follow
@@ -735,6 +746,19 @@ export default function ExploreScreen({ onBack, onNavigate }: { onBack: () => vo
           <PostViewer post={selectedPost} onClose={() => setSelectedPost(null)} />
         )}
       </AnimatePresence>
+
+      {/* Sign-In Gate for guest users */}
+      <SignInGateOverlay
+        isOpen={gateOpen}
+        action={gateAction}
+        onClose={() => setGateOpen(false)}
+        onSignIn={() => {
+          setGateOpen(false);
+          sessionStorage.removeItem('aqualyn_guest');
+          window.history.replaceState(null, '', window.location.pathname);
+          window.location.reload();
+        }}
+      />
     </motion.div>
   );
 }

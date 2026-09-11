@@ -64,4 +64,12 @@ export const ENDPOINTS = {
     CHANNEL_LEAVE: (id: string) => `${API_BASE_URL}/api/channels/${id}/leave`,
     CHANNEL_INFO: (id: string) => `${API_BASE_URL}/api/channels/${id}`,
     CHANNEL_POSTS: (id: string) => `${API_BASE_URL}/api/channels/${id}/posts`,
+    // ── Anonymous Rooms ──
+    ROOM_CREATE: `${API_BASE_URL}/api/rooms/create`,
+    ROOM_INFO: (token: string) => `${API_BASE_URL}/api/rooms/${token}`,
+    ROOM_JOIN: (token: string) => `${API_BASE_URL}/api/rooms/${token}/join`,
+    ROOM_REQUESTS: (token: string) => `${API_BASE_URL}/api/rooms/${token}/requests`,
+    ROOM_RESPOND: (token: string) => `${API_BASE_URL}/api/rooms/${token}/respond`,
+    ROOM_MESSAGES: (token: string) => `${API_BASE_URL}/api/rooms/${token}/messages`,
 };
+

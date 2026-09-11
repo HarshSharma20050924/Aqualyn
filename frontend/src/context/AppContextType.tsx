@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect, useRef } from 'react';
-import { User, Chat, Message, Folder, ThemeSettings, Post, Collection, Story, Notification } from '../types';
+import { User, Chat, Message, Folder, ThemeSettings, Post, Collection, Story, Notification, GuestUser } from '../types';
+
 import { io, Socket } from 'socket.io-client';
 import { API_BASE_URL, ENDPOINTS } from '../config/api';
 
@@ -74,6 +75,10 @@ export interface AppContextType {
   createGroupChat: (name: string, members: string[], options?: { description?: string; adminOnly?: boolean; disappearingMessages?: boolean }) => void;
   posts: Post[];
   setPosts: React.Dispatch<React.SetStateAction<Post[]>>;
+  feedNextCursor: string | null;
+  feedHasMore: boolean;
+  isFetchingMoreFeed: boolean;
+  fetchMoreFeedPosts: () => Promise<void>;
   addPost: (post: Partial<Post>) => void;
   deletePost: (postId: string) => Promise<void>;
   likePost: (postId: string) => void;
@@ -102,7 +107,14 @@ export interface AppContextType {
   handleSecretChatInvitation: (chatId: string, action: 'accept' | 'decline') => Promise<void>;
   handleGroupInvitation: (chatId: string, action: 'accept' | 'decline') => Promise<void>;
   fetchInitialData: () => Promise<void>;
+  // ── Guest / Anonymous Mode ──
+  isGuestMode: boolean;
+  guestUser: GuestUser | null;
+  setGuestMode: (val: boolean) => void;
+  enterGuestMode: () => GuestUser;
+  exitGuestMode: () => void;
 }
+
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);
 

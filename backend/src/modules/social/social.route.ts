@@ -28,6 +28,9 @@ import {
 
 const router = Router();
 
+// Allow guests to explore public posts
+router.get('/explore', cacheResponse(15, false), getExplorePosts);
+
 router.use(verifyToken);
 router.use((req: any, res: any, next: any) => {
     if (!req.user?.id) return res.status(403).json({ error: 'Profile setup incomplete' });
@@ -39,7 +42,6 @@ router.use((req: any, res: any, next: any) => {
  */
 router.get('/search', cacheResponse(30, false), globalSearch); // Non-personalized global search caching
 router.get('/feed', cacheResponse(30), getFeed); // Cache personalized feed for 30s
-router.get('/explore', cacheResponse(15, false), getExplorePosts);
 router.get('/stories', cacheResponse(60), getActiveStories);
 router.get('/user/:userId/posts', cacheResponse(60), getUserPosts);
 router.get('/user/:userId/stories', cacheResponse(60), getUserStories);

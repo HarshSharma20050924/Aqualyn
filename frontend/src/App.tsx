@@ -12,6 +12,7 @@ import ContactProfileScreen from './screens/ContactProfileScreen';
 import NotificationsScreen from './screens/NotificationsScreen';
 import FeedScreen from './screens/FeedScreen';
 import ExploreScreen from './screens/ExploreScreen';
+import AnonymousChatroomScreen from './screens/AnonymousChatroomScreen';
 import BottomNav from './components/BottomNav';
 import ToastContainer from './components/ui/ToastContainer';
 import AppLockScreen from './components/AppLockScreen';
@@ -23,16 +24,24 @@ import { getRedirectResult } from 'firebase/auth';
 import { auth } from './config/firebase';
 import BubbleLoader from './components/ui/BubbleLoader';
 
+
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState('login');
   // Always tracks the screen we were on BEFORE the current one
   const [previousScreen, setPreviousScreen] = useState('chats');
-  const { isAppLocked, appLockPin, theme, aquaIntensity, currentUser, isLoading, setActiveChatId } = useAppContext();
+  const { isAppLocked, appLockPin, theme, aquaIntensity, currentUser, isLoading, setActiveChatId, isGuestMode, guestUser, enterGuestMode, exitGuestMode } = useAppContext();
   const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 768);
   const [leftWidth, setLeftWidth] = useState(420);
   const isDragging = useRef(false);
   const dragStartX = useRef(0);
   const dragStartWidth = useRef(420);
+
+  // ── Anonymous Room State ──
+  const [activeRoomToken, setActiveRoomToken] = useState<string | null>(null);
+  const [activeRoomIsPrivate, setActiveRoomIsPrivate] = useState(false);
+  const [activeRoomName, setActiveRoomName] = useState<string | undefined>(undefined);
+  const [isRoomHost, setIsRoomHost] = useState(false);
+
 
   const onDragStart = useCallback((e: React.MouseEvent) => {
     isDragging.current = true;
@@ -74,6 +83,64 @@ export default function App() {
   const navigateTo = (screen: string) => {
     setPreviousScreen(currentScreen);
     setCurrentScreen(screen);
+  };
+
+  // ── Hash-based room routing (#/room/<token>) ──
+  // Token prefix convention: 'prv-' = private, else public
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash;
+      const match = hash.match(/#\/room\/([^/?#&]+)/);
+      if (match) {
+        const rawToken = match[1];
+        const isPrivate = rawToken.startsWith('prv-');
+        const token = isPrivate ? rawToken.slice(4) : rawToken; // strip prefix for actual token
+        // Joiner flow — enter guest mode
+        enterGuestMode();
+        setActiveRoomToken(token);
+        setActiveRoomIsPrivate(isPrivate);
+        setActiveRoomName(undefined);
+        
+        let wasHost = false;
+        try {
+          const storedRaw = localStorage.getItem('anon_rooms');
+          if (storedRaw) {
+            const existing = JSON.parse(storedRaw);
+            const savedRoom = existing.find((r: any) => r.token === token);
+            if (savedRoom && savedRoom.isHost) wasHost = true;
+          }
+        } catch (e) {}
+        
+        setIsRoomHost(wasHost);
+        setCurrentScreen('anon-room');
+      }
+    };
+
+    // Check on mount
+    handleHashChange();
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  // ── Handle Guest Mode entry from LoginScreen ──
+  const handleGuestMode = (token: string, isPrivate: boolean, roomName?: string) => {
+    enterGuestMode();
+    setActiveRoomToken(token);
+    setActiveRoomIsPrivate(isPrivate);
+    setActiveRoomName(roomName);
+    setIsRoomHost(true);
+    // Encode privacy into the URL token: 'prv-<token>' for private
+    const urlToken = isPrivate ? `prv-${token}` : token;
+    window.history.replaceState(null, '', `${window.location.pathname}#/room/${urlToken}`);
+    setCurrentScreen('anon-room');
+  };
+
+  // ── Exit guest mode and go to login ──
+  const handleSignInFromGuest = () => {
+    exitGuestMode();
+    setActiveRoomToken(null);
+    window.history.replaceState(null, '', window.location.pathname);
+    setCurrentScreen('login');
   };
 
   useEffect(() => {
@@ -129,11 +196,11 @@ export default function App() {
     if (!isLoading) {
       if (currentUser?.id && currentScreen === 'login') {
         setCurrentScreen('chats');
-      } else if (!currentUser?.id && currentScreen !== 'login') {
+      } else if (!currentUser?.id && currentScreen !== 'login' && currentScreen !== 'anon-room' && !isGuestMode) {
         setCurrentScreen('login');
       }
     }
-  }, [currentUser, isLoading, currentScreen]);
+  }, [currentUser, isLoading, currentScreen, isGuestMode]);
 
   if (isLoading) {
     return (
@@ -146,7 +213,7 @@ export default function App() {
 
   const renderScreen = (screenId: string, sidebar = false) => {
     switch (screenId) {
-      case 'login': return <LoginScreen key="login" onLogin={() => navigateTo('chats')} />;
+      case 'login': return <LoginScreen key="login" onLogin={() => navigateTo('chats')} onGuestMode={handleGuestMode} />;
       case 'feed': return <FeedScreen key="feed" onNavigate={navigateTo} />;
       case 'explore': return <ExploreScreen key="explore" onBack={() => navigateTo(previousScreen || 'chats')} onNavigate={navigateTo} />;
       case 'chats': return <ChatListScreen key="chats" onNavigate={navigateTo} compact={sidebar && leftWidth < 220} onExpand={() => setLeftWidth(380)} />;
@@ -157,23 +224,60 @@ export default function App() {
       case 'edit-profile': return <EditProfileScreen key="edit-profile" onBack={() => navigateTo('profile')} />;
       case 'contact-profile': return <ContactProfileScreen key="contact-profile" onBack={() => setCurrentScreen(previousScreen)} onNavigate={navigateTo} />;
       case 'notifications': return <NotificationsScreen key="notifications" onBack={() => navigateTo('feed')} />;
+      case 'anon-room': return activeRoomToken && guestUser ? (
+        <AnonymousChatroomScreen
+          key={`anon-room-${activeRoomToken}`}
+          roomToken={activeRoomToken}
+          isPrivate={activeRoomIsPrivate}
+          roomName={activeRoomName}
+          guestUser={guestUser}
+          isHost={isRoomHost}
+          onBack={() => {
+            // After leaving room: enter guest browse mode
+            window.history.replaceState(null, '', window.location.pathname);
+            setCurrentScreen('feed');
+          }}
+          onSignIn={handleSignInFromGuest}
+        />
+      ) : null;
       default: return null;
     }
   };
+
 
   const renderMobileLayout = () => (
     <>
       <AnimatePresence mode="wait">
         {renderScreen(currentScreen)}
       </AnimatePresence>
-      {currentScreen !== 'login' && currentScreen !== 'chat-detail' && currentScreen !== 'contact-profile' && currentScreen !== 'edit-profile' && currentScreen !== 'notifications' && (
+      {currentScreen !== 'login' && currentScreen !== 'chat-detail' && currentScreen !== 'contact-profile' && currentScreen !== 'edit-profile' && currentScreen !== 'notifications' && currentScreen !== 'anon-room' && !isGuestMode && (
         <BottomNav currentScreen={currentScreen} onNavigate={navigateTo} />
+      )}
+      {/* Guest mode bottom nav — only Feed and Explore, plus Sign In button */}
+      {isGuestMode && currentScreen !== 'anon-room' && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around px-6 py-3 glass-card border-t border-white/20 shadow-lg">
+          <button onClick={() => navigateTo('feed')} className={`flex flex-col items-center gap-1 text-xs font-semibold ${currentScreen === 'feed' ? 'text-secondary' : 'text-on-surface-variant'}`}>
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h10" /></svg>
+            Feed
+          </button>
+          <button onClick={() => navigateTo('explore')} className={`flex flex-col items-center gap-1 text-xs font-semibold ${currentScreen === 'explore' ? 'text-secondary' : 'text-on-surface-variant'}`}>
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><circle cx="11" cy="11" r="8" /><path strokeLinecap="round" d="M21 21l-4.35-4.35" /></svg>
+            Explore
+          </button>
+          <button onClick={handleSignInFromGuest} className="flex flex-col items-center gap-1 text-xs font-bold text-secondary">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+            Sign In
+          </button>
+        </div>
       )}
     </>
   );
 
+
   const renderDesktopLayout = () => {
+    // Full-screen for login and anonymous room
     if (currentScreen === 'login') return renderScreen('login');
+    if (currentScreen === 'anon-room') return renderScreen('anon-room');
 
     let leftScreen = 'chats';
     let rightScreen = null;

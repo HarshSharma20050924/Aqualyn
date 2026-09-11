@@ -14,8 +14,19 @@ import ContactAvatar from '../components/ui/ContactAvatar';
 import { apiFetch } from '../utils/fetcher';
 
 export default function ChatListScreen({ onNavigate, compact = false, onExpand }: { onNavigate: (s: string) => void; compact?: boolean; onExpand?: () => void }) {
-  const { currentUser, chats, setChats, setActiveChatId, messages, isLoading, isFetchingData, folders, archiveChat, pinChat, muteChat, deleteChat, clearHistory, markAsRead, addChatToFolder, addToast, archiveLockPin, theme, setTheme, globalUsers, setGlobalUsers, followUser, startChatWithContact, setActiveContactId } = useAppContext();
+  const { currentUser, chats, setChats, setActiveChatId, messages, isLoading, isFetchingData, folders, archiveChat, pinChat, muteChat, deleteChat, clearHistory, markAsRead, addChatToFolder, addToast, archiveLockPin, theme, setTheme, globalUsers, setGlobalUsers, followUser, startChatWithContact, setActiveContactId, isGuestMode } = useAppContext();
   const [activeTab, setActiveTab] = useState<string>('all');
+  const [anonRooms, setAnonRooms] = useState<any[]>([]);
+
+  React.useEffect(() => {
+    if (isGuestMode) {
+      try {
+        const stored = localStorage.getItem('anon_rooms');
+        if (stored) setAnonRooms(JSON.parse(stored));
+      } catch (e) {}
+    }
+  }, [isGuestMode]);
+
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
   const [isLynLoading, setIsLynLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -37,6 +48,14 @@ export default function ChatListScreen({ onNavigate, compact = false, onExpand }
   const handleChatClick = (id: string) => {
     if (isSelectionMode) {
       toggleSelection(id);
+      return;
+    }
+    if (isGuestMode) {
+      const room = anonRooms.find(r => r.token === id);
+      if (room) {
+        const urlToken = room.isPrivate ? `prv-${room.token}` : room.token;
+        window.location.hash = `#/room/${urlToken}`;
+      }
       return;
     }
     setActiveChatId(id);
@@ -119,24 +138,38 @@ export default function ChatListScreen({ onNavigate, compact = false, onExpand }
     setShowFolderSubmenu(false);
   };
 
-  let filteredChats = chats;
+  let filteredChats = isGuestMode 
+    ? anonRooms.map(r => ({
+        id: r.token,
+        name: r.roomName || 'Anonymous Room',
+        avatar: '',
+        isGroup: false,
+        isChannel: false,
+        isArchived: false,
+        isPinned: false,
+        unreadCount: 0,
+        isSecret: r.isPrivate,
+      })) as any[]
+    : chats;
 
-  if (activeTab === 'unread') {
-    filteredChats = chats.filter(c => c.unreadCount && c.unreadCount > 0);
-  } else if (activeTab === 'groups') {
-    filteredChats = chats.filter(c => c.isGroup && !c.isChannel);
-  } else if (activeTab === 'channels') {
-    filteredChats = chats.filter(c => c.isChannel);
-  } else if (activeTab === 'personal') {
-    filteredChats = chats.filter(c => !c.isGroup && !c.id.startsWith('bot'));
-  } else if (activeTab === 'bots') {
-    filteredChats = chats.filter(c => c.id.startsWith('bot'));
-  } else if (activeTab === 'archived') {
-    filteredChats = chats.filter(c => c.isArchived);
-  } else {
-    const folder = folders.find(f => f.name.toLowerCase() === activeTab);
-    if (folder) {
-      filteredChats = chats.filter(c => folder.chatIds.includes(c.id));
+  if (!isGuestMode) {
+    if (activeTab === 'unread') {
+      filteredChats = chats.filter(c => c.unreadCount && c.unreadCount > 0);
+    } else if (activeTab === 'groups') {
+      filteredChats = chats.filter(c => c.isGroup && !c.isChannel);
+    } else if (activeTab === 'channels') {
+      filteredChats = chats.filter(c => c.isChannel);
+    } else if (activeTab === 'personal') {
+      filteredChats = chats.filter(c => !c.isGroup && !c.id.startsWith('bot'));
+    } else if (activeTab === 'bots') {
+      filteredChats = chats.filter(c => c.id.startsWith('bot'));
+    } else if (activeTab === 'archived') {
+      filteredChats = chats.filter(c => c.isArchived);
+    } else {
+      const folder = folders.find(f => f.name.toLowerCase() === activeTab);
+      if (folder) {
+        filteredChats = chats.filter(c => folder.chatIds.includes(c.id));
+      }
     }
   }
 
@@ -153,7 +186,14 @@ export default function ChatListScreen({ onNavigate, compact = false, onExpand }
   const pinnedChats = filteredChats.filter(c => c.isPinned);
   const recentChats = filteredChats.filter(c => !c.isPinned);
 
-  const getLastMessage = (chatId: string) => {
+  const getLastMessage = (chatId: string): any => {
+    if (isGuestMode) {
+      const room = anonRooms.find(r => r.token === chatId);
+      if (room && room.lastMessage) {
+        return { text: room.lastMessage, timestamp: room.joinedAt, senderId: '' };
+      }
+      return null;
+    }
     const chatMsgs = messages[chatId];
     if (chatMsgs && chatMsgs.length > 0) {
       return chatMsgs[chatMsgs.length - 1];
@@ -259,7 +299,11 @@ export default function ChatListScreen({ onNavigate, compact = false, onExpand }
             title={chat.name}
             className="relative shrink-0 w-12 h-12 rounded-full overflow-hidden hover:ring-2 hover:ring-cyan-500/60 transition-all active:scale-90 my-0.5"
           >
-            {chat.isGroup ? (
+            {isGuestMode ? (
+              <div className={`w-full h-full flex items-center justify-center ${chat.isSecret ? 'bg-violet-100 text-violet-600' : 'bg-emerald-100 text-emerald-600'}`}>
+                {chat.isSecret ? <Lock className="w-5 h-5" /> : <Globe className="w-5 h-5" />}
+              </div>
+            ) : chat.isGroup ? (
               <div className="w-full h-full bg-surface-container-highest flex items-center justify-center text-primary">
                 <Users className="w-6 h-6" />
               </div>
@@ -489,7 +533,11 @@ export default function ChatListScreen({ onNavigate, compact = false, onExpand }
                         className={`glass-card p-4 rounded-2xl flex items-center gap-4 border border-secondary-fixed/20 aqua-glow cursor-pointer hover:bg-white/60 transition-all ${selectedChats.has(chat.id) ? 'bg-secondary/20 border-secondary' : ''}`}
                       >
                         <div className="relative">
-                          {chat.isGroup ? (
+                          {isGuestMode ? (
+                            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center overflow-hidden ${chat.isSecret ? 'bg-violet-100 text-violet-600' : 'bg-emerald-100 text-emerald-600'}`}>
+                              {chat.isSecret ? <Lock className="w-8 h-8" /> : <Globe className="w-8 h-8" />}
+                            </div>
+                          ) : chat.isGroup ? (
                             <div className="w-14 h-14 rounded-2xl bg-surface-container-highest flex items-center justify-center text-primary overflow-hidden">
                               <Users className="w-8 h-8 fill-primary/20" />
                               {isSelectionMode && (
@@ -588,7 +636,11 @@ export default function ChatListScreen({ onNavigate, compact = false, onExpand }
                         onTouchMove={handleTouchEnd}
                         className={`p-4 rounded-2xl flex items-center gap-4 cursor-pointer hover:bg-white/40 transition-all ${selectedChats.has(chat.id) ? 'bg-secondary/20 border-secondary' : ''}`}
                       >
-                        {chat.isSystem ? (
+                        {isGuestMode ? (
+                          <div className={`w-14 h-14 rounded-full flex items-center justify-center overflow-hidden ${chat.isSecret ? 'bg-violet-100 text-violet-600' : 'bg-emerald-100 text-emerald-600'}`}>
+                            {chat.isSecret ? <Lock className="w-8 h-8" /> : <Globe className="w-8 h-8" />}
+                          </div>
+                        ) : chat.isSystem ? (
                           <div className="w-14 h-14 rounded-full bg-primary-container/20 flex items-center justify-center text-primary-dim">
                             <UserPlus className="w-6 h-6" />
                           </div>

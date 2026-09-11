@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowRight, Mail, Eye, EyeOff, Check, Shield, Globe, Headset, QrCode, RefreshCw, Smartphone } from 'lucide-react';
+import { ArrowRight, Mail, Eye, EyeOff, Check, Shield, Globe, Headset, QrCode, RefreshCw, Smartphone, MessageSquare, Lock, Copy } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+
 
 import GlassyDatePicker from '../components/GlassyDatePicker';
 import BubbleLoader from '../components/ui/BubbleLoader';
@@ -11,9 +12,14 @@ import { signInWithPopup, signInWithRedirect, getRedirectResult } from 'firebase
 import { useAppContext } from '../context/AppContext';
 import { ENDPOINTS } from '../config/api';
 
-export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
+export default function LoginScreen({ onLogin, onGuestMode }: { onLogin: () => void; onGuestMode?: (token: string, isPrivate: boolean, roomName?: string) => void }) {
   const { setCurrentUser, currentUser } = useAppContext() || { setCurrentUser: () => {}, currentUser: null };
   const [step, setStep] = useState<'intro' | 'email' | 'otp' | 'profile' | 'qr'>('intro');
+  const [showAnonPicker, setShowAnonPicker] = useState(false);
+  const [anonCreating, setAnonCreating] = useState(false);
+  const [generatedRoom, setGeneratedRoom] = useState<{ token: string; isPrivate: boolean; url: string } | null>(null);
+  const [copiedLink, setCopiedLink] = useState(false);
+
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [email, setEmail] = useState('');
@@ -373,7 +379,26 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
                   className="w-full h-12 sm:h-14 glass-card border border-white/30 text-on-surface font-headline font-semibold rounded-full hover:bg-white/40 active:scale-[0.98] transition-all flex items-center justify-center gap-3 text-sm sm:text-base">
                   <QrCode className="w-4 h-4 sm:w-5 sm:h-5 text-secondary" /> Scan QR Code from Mobile
                 </button>
+
+                {/* ── Chat Anonymously ── */}
+                <div className="relative flex items-center py-1">
+                  <div className="flex-grow border-t border-white/20" />
+                  <span className="flex-shrink-0 mx-3 text-on-surface-variant text-[11px] font-semibold uppercase tracking-wider">or</span>
+                  <div className="flex-grow border-t border-white/20" />
+                </div>
+
+                <button
+                  onClick={() => setShowAnonPicker(true)}
+                  className="w-full h-12 sm:h-13 group relative overflow-hidden border-2 border-secondary/40 hover:border-secondary text-on-surface font-headline font-semibold rounded-full active:scale-[0.98] transition-all flex items-center justify-center gap-3 text-sm sm:text-base bg-white/10 hover:bg-secondary/10"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-secondary/0 via-secondary/10 to-secondary/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+                  <MessageSquare className="w-4 h-4 text-secondary" />
+                  <span>Chat Anonymously</span>
+                  <span className="text-[10px] bg-secondary/20 text-secondary px-2 py-0.5 rounded-full font-bold">No account needed</span>
+                </button>
               </div>
+
+
             </motion.div>
           )}
 
@@ -630,6 +655,150 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
         </div>
 
       </div>
+
+      {/* ── Chat Anonymously Overlay Modal ── */}
+      <AnimatePresence>
+        {showAnonPicker && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-md"
+            onClick={() => {
+              if (!generatedRoom) setShowAnonPicker(false);
+            }}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              onClick={e => e.stopPropagation()}
+              className="w-full max-w-sm glass-card border border-white/30 rounded-3xl p-6 shadow-2xl relative overflow-hidden"
+            >
+              {/* Background glows */}
+              <div className="absolute -top-20 -left-20 w-40 h-40 bg-secondary/30 rounded-full blur-3xl" />
+              <div className="absolute -bottom-20 -right-20 w-40 h-40 bg-primary/30 rounded-full blur-3xl" />
+              
+              <div className="relative z-10">
+                {!generatedRoom ? (
+                  <>
+                    <div className="text-center mb-6">
+                      <div className="w-14 h-14 mx-auto bg-gradient-to-br from-secondary/20 to-primary/20 rounded-full flex items-center justify-center mb-4">
+                        <MessageSquare className="w-7 h-7 text-secondary" />
+                      </div>
+                      <h3 className="font-headline font-bold text-xl text-on-surface mb-1">Create Anonymous Room</h3>
+                      <p className="text-sm text-on-surface-variant">Choose your room's privacy setting to continue.</p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 mb-6">
+                      {[{type: 'public', icon: Globe, label: 'Public Room', desc: 'Anyone with the link joins instantly', color: 'emerald'},
+                        {type: 'private', icon: Lock, label: 'Private Room', desc: 'Joiners will need your approval', color: 'violet'}
+                      ].map(({ type, icon: Icon, label, desc, color }) => (
+                        <button
+                          key={type}
+                          disabled={anonCreating}
+                          onClick={() => {
+                            setAnonCreating(true);
+                            const token = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+                            const isPrivate = type === 'private';
+                            const urlToken = isPrivate ? `prv-${token}` : token;
+                            const roomUrl = `${window.location.origin}${window.location.pathname}#/room/${urlToken}`;
+                            setGeneratedRoom({ token, isPrivate, url: roomUrl });
+                            setAnonCreating(false);
+                          }}
+                          className={`flex flex-col items-center gap-3 p-4 rounded-2xl border-2 transition-all active:scale-95 group ${
+                            color === 'emerald'
+                              ? 'border-emerald-300/40 bg-emerald-50/50 hover:border-emerald-400 hover:bg-emerald-50 hover:shadow-lg hover:shadow-emerald-500/20'
+                              : 'border-violet-300/40 bg-violet-50/50 hover:border-violet-400 hover:bg-violet-50 hover:shadow-lg hover:shadow-violet-500/20'
+                          }`}
+                        >
+                          <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-transform group-hover:scale-110 ${
+                            color === 'emerald' ? 'bg-emerald-100' : 'bg-violet-100'
+                          }`}>
+                            <Icon className={`w-6 h-6 ${color === 'emerald' ? 'text-emerald-600' : 'text-violet-600'}`} />
+                          </div>
+                          <div className="text-center">
+                            <p className={`font-headline font-bold text-sm mb-1 ${color === 'emerald' ? 'text-emerald-700' : 'text-violet-700'}`}>{label}</p>
+                            <p className="text-[10px] text-on-surface-variant leading-tight">{desc}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+
+                    <button 
+                      onClick={() => setShowAnonPicker(false)}
+                      className="w-full py-3 rounded-xl border border-white/40 bg-white/20 text-on-surface font-semibold hover:bg-white/40 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
+                    <div className="text-center mb-6">
+                      <div className={`w-14 h-14 mx-auto rounded-full flex items-center justify-center mb-4 ${
+                        generatedRoom.isPrivate ? 'bg-violet-100' : 'bg-emerald-100'
+                      }`}>
+                        {generatedRoom.isPrivate 
+                          ? <Lock className="w-7 h-7 text-violet-600" />
+                          : <Globe className="w-7 h-7 text-emerald-600" />
+                        }
+                      </div>
+                      <h3 className="font-headline font-bold text-xl text-on-surface mb-1">Room Created!</h3>
+                      <p className="text-sm text-on-surface-variant">Copy the link below and share it with others.</p>
+                    </div>
+
+                    <div className="bg-black/5 dark:bg-white/10 rounded-xl p-3 flex items-center gap-3 mb-6">
+                      <div className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-sm text-on-surface font-mono">
+                        {generatedRoom.url}
+                      </div>
+                      <button
+                        onClick={async () => {
+                          await navigator.clipboard.writeText(generatedRoom.url).catch(() => {});
+                          setCopiedLink(true);
+                          setTimeout(() => setCopiedLink(false), 2500);
+                        }}
+                        className={`p-2 rounded-lg transition-colors ${
+                          copiedLink ? 'bg-emerald-100 text-emerald-700' : 'bg-white/50 dark:bg-black/20 hover:bg-white/80 dark:hover:bg-black/40 text-on-surface-variant'
+                        }`}
+                      >
+                        {copiedLink ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                      </button>
+                    </div>
+
+                    <div className="flex gap-3">
+                      <button 
+                        onClick={() => {
+                          setGeneratedRoom(null);
+                          setCopiedLink(false);
+                          setShowAnonPicker(false);
+                        }}
+                        className="flex-1 py-3 rounded-xl border border-white/40 bg-white/20 text-on-surface font-semibold hover:bg-white/40 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button 
+                        onClick={() => {
+                          setShowAnonPicker(false);
+                          onGuestMode?.(generatedRoom.token, generatedRoom.isPrivate);
+                          setTimeout(() => {
+                            setGeneratedRoom(null);
+                            setCopiedLink(false);
+                          }, 500);
+                        }}
+                        className="flex-1 py-3 rounded-xl bg-gradient-to-br from-secondary to-primary text-white font-semibold hover:shadow-lg hover:scale-[1.02] active:scale-95 transition-all"
+                      >
+                        Join Room
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </div>
+
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       </motion.div>
     );
 }
